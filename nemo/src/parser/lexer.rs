@@ -124,6 +124,13 @@ impl Lexer<'_> {
             }
             b':' => self.colon(start),
             b'!' => self.bang(start),
+            // A `?` directly after a name, without a name of its own,
+            // marks a column format that admits a missing value, as in `int?`.
+            b'?' if self.follows_name(start)
+                && NameKind::Marked.length(&self.source[start + 1..]) == 0 =>
+            {
+                self.single(TokenKind::MissingMarker);
+            }
             b'?' => {
                 self.position += 1;
                 self.marked_name(TokenKind::Variable(VariableKind::Universal), start);
@@ -343,6 +350,13 @@ impl Lexer<'_> {
         let length = kind.length(&self.source[self.position..]);
         self.position += length;
         length > 0
+    }
+
+    /// Returns whether the previous token is a name that ends directly before `start`.
+    fn follows_name(&self, start: usize) -> bool {
+        self.tokens.last().is_some_and(|token| {
+            token.kind == TokenKind::Ident && token.span.end as usize == self.offset + start
+        })
     }
 
     /// Returns whether the previous token is a string that ends directly before the byte

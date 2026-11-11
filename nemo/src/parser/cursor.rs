@@ -43,6 +43,8 @@ pub(super) struct Parser<'a> {
     diagnostics: Vec<Diagnostic>,
     /// The current nesting depth of terms.
     depth: usize,
+    /// Whether a name may carry the marker `?`, as the names of column formats may.
+    pub(super) markers: bool,
     /// The name of the end of the token buffer in messages, such as `the end of the input`.
     end: &'static str,
 }
@@ -64,6 +66,7 @@ impl<'a> Parser<'a> {
             position: 0,
             diagnostics: Vec::new(),
             depth,
+            markers: false,
             end,
         }
     }

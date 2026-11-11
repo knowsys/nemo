@@ -8,7 +8,7 @@ mod reader;
 mod run_pool;
 mod writer;
 
-pub(crate) use parsed::{DeferredReads, Parsed};
+pub(crate) use parsed::{Parsed, ResourceLoad};
 pub use reader::DsvReader;
 pub(crate) use run_pool::RunPool;
 pub use writer::DsvWriter;
@@ -17,17 +17,17 @@ use std::{io::Read, path::Path};
 
 use csv::ReaderBuilder;
 
-use nemo_physical::{diagnostics::Diagnostic, value::DataValue};
+use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
     AboutResource,
     compression::Compression,
     error::IoError,
     selection::{RowCondition, RowSelection},
-    value_format::ValueFormat,
+    value_format::{ColumnFormat, ValueFormat},
 };
 
-/// The options of a delimiter-separated resource, such as its delimiter and one [ValueFormat]
+/// The options of a delimiter-separated resource, such as its delimiter and one [ColumnFormat]
 /// per column.
 ///
 /// A [Skip](ValueFormat::Skip) column counts toward the width but not toward the arity.
@@ -36,7 +36,7 @@ pub struct DsvOptions {
     /// The delimiter between the cells of a record.
     pub delimiter: u8,
     /// The format of each column of the resource.
-    pub formats: Vec<ValueFormat>,
+    pub formats: Vec<ColumnFormat>,
     /// For each column of the resource, whether its cells are only checked.
     ///
     /// A column that is only checked is not delivered,
@@ -67,10 +67,10 @@ impl DsvOptions {
     ///
     /// The options have quoting on, no header, detected compression, no column that is only
     /// checked, no condition and no limit.
-    pub fn new(delimiter: u8, formats: Vec<ValueFormat>) -> Self {
+    pub fn new(delimiter: u8, formats: impl IntoIterator<Item = impl Into<ColumnFormat>>) -> Self {
         Self {
             delimiter,
-            formats,
+            formats: formats.into_iter().map(Into::into).collect(),
             checked_only: Vec::new(),
             quoting: true,
             ignore_headers: false,
@@ -81,12 +81,12 @@ impl DsvOptions {
     }
 
     /// Creates options for comma-separated columns with the given formats.
-    pub fn csv(formats: Vec<ValueFormat>) -> Self {
+    pub fn csv(formats: impl IntoIterator<Item = impl Into<ColumnFormat>>) -> Self {
         Self::new(b',', formats)
     }
 
     /// Creates options for tab-separated columns with the given formats.
-    pub fn tsv(formats: Vec<ValueFormat>) -> Self {
+    pub fn tsv(formats: impl IntoIterator<Item = impl Into<ColumnFormat>>) -> Self {
         Self::new(b'\t', formats)
     }
 
@@ -106,14 +106,14 @@ impl DsvOptions {
 
     /// Returns whether a column is delivered: neither skipped nor only checked.
     pub(crate) fn delivers(&self, column: usize) -> bool {
-        !matches!(self.formats[column], ValueFormat::Skip) && !self.checks_only(column)
+        self.formats[column].value != ValueFormat::Skip && !self.checks_only(column)
     }
 
     /// Returns whether a column's cells are only checked, not delivered.
     ///
     /// A skipped column's cells are not read, so they are never only checked.
     pub(crate) fn checks_only(&self, column: usize) -> bool {
-        !matches!(self.formats[column], ValueFormat::Skip)
+        self.formats[column].value != ValueFormat::Skip
             && self.checked_only.get(column).copied().unwrap_or(false)
     }
 
@@ -127,38 +127,6 @@ impl DsvOptions {
             columns: None,
             condition: self.condition.clone(),
         }
-    }
-
-    /// Parses a record's cells by their formats, appending the delivered values to `values`.
-    ///
-    /// Returns `false`, and leaves `values` as it was, for a record of the wrong width
-    /// or with a cell that its format rejects.
-    /// `null` returns the null that a label names in the resource.
-    fn parse_row(
-        &self,
-        cells: &csv::StringRecord,
-        values: &mut Vec<DataValue>,
-        null: &mut dyn FnMut(&str) -> DataValue,
-    ) -> bool {
-        let before = values.len();
-        let complete = cells.len() == self.formats.len()
-            && cells
-                .iter()
-                .zip(&self.formats)
-                .enumerate()
-                .all(|(column, (cell, format))| match format {
-                    ValueFormat::Skip => true,
-                    _ if self.checks_only(column) => format.parse_cell(cell, null).is_some(),
-                    _ => format.parse(cell, null).is_some_and(|value| {
-                        values.push(value);
-                        true
-                    }),
-                });
-        if !complete {
-            values.truncate(before);
-        }
-
-        complete
     }
 
     /// Returns the number of cells in the first record of a file, or `None` for an empty file.

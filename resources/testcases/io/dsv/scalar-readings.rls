@@ -1,9 +1,10 @@
-% Every declarable scalar type has a strict reading: a column declared
-% with a type reads its cells in the format of the same name, and a row
-% whose cell does not read is malformed. Line 3 holds no boolean, no
-% date, no number and no language-tagged string.
+% Every scalar type has a format of its name, which reads its cells
+% strictly: a row whose cell does not read is malformed. Line 3 holds no
+% boolean, no date, no number and no language-tagged string. The
+% declaration is checked against the formats, and chooses none of them.
 
 @declare reading(flag: bool, day: date, amount: number, greeting: langstring, span: daytimeduration) .
-@import reading from csv { resource = "sources/scalars.csv", quoting = false } .
+@import reading from csv { resource = "sources/scalars.csv", quoting = false,
+    format = (bool, date, number, langstring, daytimeduration) } .
 
 @output reading .

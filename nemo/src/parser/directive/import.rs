@@ -6,7 +6,8 @@ use nemo_physical::diagnostics::Diagnostic;
 use crate::{
     diagnostics::ParseError,
     model::{
-        Atom, ExportDirective, Identifier, ImportDirective, Literal, Operation, Term, VariableKind,
+        Atom, ExportDirective, Identifier, ImportDirective, Literal, Operation, Term, TermKind,
+        VariableKind,
     },
     parser::{cursor::Parser, lexer::TokenKind},
 };
@@ -95,8 +96,17 @@ impl Parser<'_> {
                     |parser| {
                         let key = parser.plain_term()?;
                         parser.expect(&TokenKind::Equal, "`=` between option key and value")?;
-                        let value = parser.plain_term()?;
-                        Ok((key, value))
+
+                        // Only the names of column formats carry the marker `?`,
+                        // as in `format = (int?, string)`.
+                        parser.markers = matches!(
+                            &key.kind,
+                            TermKind::Constant(Identifier::Bare(name)) if name == "format"
+                        );
+                        let value = parser.plain_term();
+                        parser.markers = false;
+
+                        Ok((key, value?))
                     },
                 )
             })?

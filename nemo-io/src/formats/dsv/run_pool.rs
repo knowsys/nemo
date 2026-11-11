@@ -2,8 +2,6 @@
 
 use std::sync::{Mutex, PoisonError};
 
-use nemo_physical::function::EvaluationContext;
-
 use crate::dsv::Parsed;
 
 /// A pool of runs that were interned and wait to be filled again.
@@ -13,26 +11,13 @@ use crate::dsv::Parsed;
 /// so after the first few runs the parse allocates nothing per run.
 /// This also keeps the heap from fragmenting
 /// into thousands of buffers allocated on one thread and freed on another.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct RunPool {
     /// The runs waiting to be reused.
     spare: Mutex<Vec<Parsed>>,
-    /// The evaluation context of the selection's condition, for every run.
-    context: EvaluationContext,
 }
 
 impl RunPool {
-    /// Creates an empty pool.
-    ///
-    /// `context` is the evaluation context of the selection's condition,
-    /// as for [Parsed::new], and every run of the pool uses it.
-    pub(crate) fn new(context: EvaluationContext) -> Self {
-        Self {
-            spare: Mutex::new(Vec::new()),
-            context,
-        }
-    }
-
     /// Returns an empty run of the given arity: a spare one if there is one, and a new one
     /// otherwise.
     pub(crate) fn take(&self, arity: usize) -> Parsed {
@@ -43,10 +28,10 @@ impl RunPool {
             .pop();
         match spare {
             Some(mut run) => {
-                run.reset(arity, self.context);
+                run.reset(arity);
                 run
             }
-            None => Parsed::new(arity, self.context),
+            None => Parsed::new(arity),
         }
     }
 

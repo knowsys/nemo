@@ -100,7 +100,7 @@ impl<'a> Translator<'a> {
             ),
         }
         .map_err(ImportFailure::Reading)?;
-        self.absorb(table, layout.delivered(), loaded, &resource);
+        self.absorb(table, layout.delivered(), loaded, &resource, false);
         Ok(())
     }
 }

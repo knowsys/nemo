@@ -364,16 +364,35 @@ fn reading_an_import_stored_partially_names_what_is_left_out() {
     assert_eq!(count(&mut engine, "p"), 2);
 }
 
-/// A declaration alone gives an import its column formats:
-/// each column is read in the format named like its declared type,
-/// and a cell that cannot be read in that format is malformed.
+/// A declaration chooses no format for an import.
+/// Without formats the import reads terms, which a narrower declaration refuses.
+/// With the formats stated, the declaration is proved,
+/// and a cell that its format does not read makes its row malformed.
 #[test]
-fn a_declaration_reads_its_import_in_its_formats() {
+fn a_declaration_chooses_no_format_for_its_import() {
+    let source = |format: &str| {
+        format!(
+            "@declare p(n: int, b: bool) .
+             @import p from csv {{ resource = \"data.csv\", quoting = false{format} }} ."
+        )
+    };
+
+    let (program, _) = Program::parse(&source(""));
+    let mut engine = Engine::new();
+    engine.add_resource("data.csv", b"1,true\n".to_vec());
+    let refusal = engine
+        .load(program)
+        .expect_err("terms are not all integers");
+    assert_eq!(
+        refusal.code(),
+        codes::IMPORT_OUTSIDE_DECLARATION,
+        "{refusal:?}"
+    );
+
     // Line 2 has no int in its first column, line 3 no bool in its second,
     // and line 4 has the wrong width.
     let mut engine = load_resources(
-        "@declare p(n: int, b: bool) .
-         @import p from csv { resource = \"data.csv\", quoting = false } .",
+        &source(", format = (int, bool)"),
         &[("data.csv", "1,true\nx,true\n2,7\n3\n")],
     );
     assert_eq!(
@@ -381,6 +400,7 @@ fn a_declaration_reads_its_import_in_its_formats() {
         vec![vec![DataValue::integer(1), DataValue::boolean(true)]]
     );
     assert_eq!(reported_count(&engine, codes::MALFORMED_ROWS), Some(3));
+
     // The formats give the stored column types.
     let types: Vec<String> = engine
         .column_types("p")
@@ -391,17 +411,17 @@ fn a_declaration_reads_its_import_in_its_formats() {
     assert_eq!(types, ["int", "bool"]);
 }
 
-/// A declaration refers to all of a predicate's columns, the ones no rule reads included:
-/// a row whose cell the declared type rejects is malformed whether or not a rule reads it,
+/// The formats of an import apply to all of its columns, the ones no rule reads included:
+/// a row whose cell its format rejects is malformed whether or not a rule reads the column,
 /// so pruning a column never changes which rows load.
 #[test]
-fn declarations_check_pruned_import_columns() {
+fn formats_check_pruned_import_columns() {
     for rule in ["q(?x) :- p(?x, ?y) .", "q(?y) :- p(?x, ?y) ."] {
         // The second column is read as `bool`, which neither cell is.
         let mut engine = load_resources(
             &format!(
                 "@declare p(x: int, y: bool) .
-                 @import p from csv {{ resource = \"data.csv\" }} .
+                 @import p from csv {{ resource = \"data.csv\", format = (int, bool) }} .
                  {rule}
                  @output q ."
             ),
@@ -416,17 +436,34 @@ fn declarations_check_pruned_import_columns() {
     }
 }
 
-/// With both a `format` and a declaration, `term` defers to the
-/// declaration on the columns it types, while a typed format is used as it is
-/// and must lie within the declaration.
+/// With both a `format` and a declaration, the format reads and the declaration checks.
+/// `term` reads values of every type, so a narrower declaration refuses it,
+/// as it refuses a typed format that reads values outside it.
 #[test]
-fn term_defers_to_the_declaration_and_typed_formats_must_fit_it() {
+fn a_format_must_lie_within_the_declaration() {
+    for (declared, format) in [("string", "term"), ("int", "decimal")] {
+        let (program, _) = Program::parse(&format!(
+            "@declare n(x: {declared}) .
+             @import n from csv {{ resource = \"n.csv\", format = ({format}) }} ."
+        ));
+        let mut engine = Engine::new();
+        engine.add_resource("n.csv", b"1\n".to_vec());
+        let refusal = engine
+            .load(program)
+            .expect_err("the format reads values outside the declaration");
+        assert_eq!(
+            refusal.code(),
+            codes::IMPORT_OUTSIDE_DECLARATION,
+            "{format} into {declared}: {refusal:?}"
+        );
+    }
+
+    // The `string` format reads `42` as a string, which the declaration admits.
     let mut engine = load_resources(
         "@declare s(x: string) .
-         @import s from csv { resource = \"s.csv\", format = (term) } .",
+         @import s from csv { resource = \"s.csv\", format = (string) } .",
         &[("s.csv", "42\nalice\n")],
     );
-    // `42` is read as a string rather than as an integer.
     let mut strings = engine.rows("s").expect("registered");
     strings.sort();
     assert_eq!(
@@ -436,21 +473,62 @@ fn term_defers_to_the_declaration_and_typed_formats_must_fit_it() {
             vec![DataValue::string("alice")]
         ]
     );
-    // The decimal format reads values outside `int`, so the import is refused.
-    let (program, _) = Program::parse(
-        "@declare n(x: int) .
-         @import n from csv { resource = \"n.csv\", format = (decimal) } .",
-    );
-    let mut engine = Engine::new();
-    engine.add_resource("n.csv", b"1\n".to_vec());
-    let refusal = engine
-        .load(program)
-        .expect_err("decimals are not all integers");
+}
+
+/// A row with a missing value in a column that does not admit one is dropped,
+/// with a warning of its own that says how to keep such rows.
+/// With the marker the row is kept, and the column's type gains `null`.
+#[test]
+fn rows_with_a_missing_value_are_reported_apart() {
+    let source = |format: &str| {
+        format!("@import p from csv {{ resource = \"data.csv\", format = (int, {format}) }} .")
+    };
+    let data = [("data.csv", "1,2\n3,\nx,4\n")];
+
+    let mut engine = load_resources(&source("int"), &data);
+    assert_eq!(engine.rows("p").expect("registered").len(), 1);
+    assert_eq!(reported_count(&engine, codes::MALFORMED_ROWS), Some(1));
+    assert_eq!(reported_count(&engine, codes::MISSING_VALUE_ROWS), Some(1));
+    let warning = engine
+        .reports()
+        .iter()
+        .find(|report| report.code() == codes::MISSING_VALUE_ROWS)
+        .expect("the missing value is reported");
+    assert_eq!(warning.notes(), ["the first one is on line 2"]);
+    assert!(warning.hints().iter().any(|hint| hint.contains("int?")));
+
+    let mut engine = load_resources(&source("int?"), &data);
+    assert_eq!(engine.rows("p").expect("registered").len(), 2);
+    assert_eq!(reported_count(&engine, codes::MISSING_VALUE_ROWS), None);
+    let types: Vec<String> = engine
+        .column_types("p")
+        .expect("registered")
+        .iter()
+        .map(|datatype| TypeSyntax::of(datatype).to_string())
+        .collect();
+    assert_eq!(types, ["int", "null | int"]);
+}
+
+/// The marker belongs to the formats that read cells:
+/// a column that is not read has no values to miss,
+/// and a source of terms, such as RDF, has no missing values.
+#[test]
+fn the_marker_is_refused_where_no_value_can_be_missing() {
+    let problems = check("@import p from csv { resource = \"p.csv\", format = (int, skip?) } .");
     assert_eq!(
-        refusal.code(),
-        codes::IMPORT_OUTSIDE_DECLARATION,
-        "{refusal:?}"
+        problems[0].code(),
+        codes::UNKNOWN_OPTION_VALUE,
+        "{problems:?}"
     );
+
+    let problems =
+        check("@import g from ntriples { resource = \"g.nt\", format = (term?, term, term) } .");
+    assert_eq!(
+        problems[0].code(),
+        codes::TERM_COLUMN_FORMAT,
+        "{problems:?}"
+    );
+    assert_eq!(problems[0].field("format"), Some("term?"));
 }
 
 /// A format that reads values its declared type does not contain is refused

@@ -47,6 +47,7 @@ impl Parser<'_> {
         }
 
         if self.eat(&TokenKind::ParenOpen).is_none() {
+            let identifier = self.marked(identifier)?;
             return Ok(self.spanned(start, TermKind::Constant(identifier)));
         }
         let (arguments, labels) = self.argument_list()?;
@@ -76,6 +77,26 @@ impl Parser<'_> {
                 labels,
             },
         ))
+    }
+
+    /// Returns a name with the marker `?` that directly follows it, if one does.
+    ///
+    /// The marker belongs to the names of column formats, such as `int?`,
+    /// and is part of the name that is returned.
+    /// Anywhere else, a `?` after a name is a variable without a name, which is an error.
+    fn marked(&mut self, identifier: Identifier) -> Result<Identifier, Diagnostic> {
+        if !self.at(&TokenKind::MissingMarker) {
+            return Ok(identifier);
+        }
+
+        match identifier {
+            Identifier::Bare(mut name) if self.markers => {
+                self.advance();
+                name.push('?');
+                Ok(Identifier::Bare(name))
+            }
+            _ => Err(ParseError::MarkerWithoutName.at(Some(self.peek_span()))),
+        }
     }
 
     /// Parses the arguments of a call through the closing `)`, and returns them with their

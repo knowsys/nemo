@@ -10,6 +10,8 @@
 //! The crate has three layers.
 //! At the top is the vocabulary that every format shares:
 //! - Cell [formats](mod@value_format) read the text of cells as values, and write values as cells.
+//!   A [column format](value_format::ColumnFormat) also says whether its column admits a
+//!   missing value.
 //! - A [file format](file_format::FileFormat) names a serialization and its metadata.
 //! - A [selection](selection::RowSelection) says which columns a reader delivers,
 //!   and its [condition](selection::RowCondition) says which rows it admits.

@@ -10,7 +10,7 @@ use nemo_io::{
     compression::Compression,
     file_format::{AcceptedOptions, FileFormat, RdfVariant},
     remote,
-    value_format::ValueFormat,
+    value_format::{ColumnFormat, ValueFormat},
 };
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -118,7 +118,7 @@ fn header(
 /// and `span` is the position of the `format` option's value.
 pub(super) fn term_columns(
     format: FileFormat,
-    formats: Option<&[ValueFormat]>,
+    formats: Option<&[ColumnFormat]>,
     columns: usize,
     span: Option<Span>,
 ) -> Result<Vec<bool>, Diagnostic> {
@@ -135,11 +135,11 @@ pub(super) fn term_columns(
     }
     formats
         .iter()
-        .map(|column| match column {
-            ValueFormat::Term => Ok(true),
-            ValueFormat::Skip => Ok(false),
-            other => Err(TranslationError::TermColumnFormat {
-                format: other.name().to_owned(),
+        .map(|column| match (column.value, column.optional) {
+            (ValueFormat::Term, false) => Ok(true),
+            (ValueFormat::Skip, _) => Ok(false),
+            _ => Err(TranslationError::TermColumnFormat {
+                format: column.to_string(),
             }
             .at(span)),
         })
@@ -260,7 +260,7 @@ pub(super) struct DsvDirectiveOptions {
     /// The resource, if given.
     pub(super) resource: Option<String>,
     /// The column formats of the `format` option, if given.
-    pub(super) formats: Option<Vec<ValueFormat>>,
+    pub(super) formats: Option<Vec<ColumnFormat>>,
     /// Whether `"` quotes fields.
     pub(super) quoting: bool,
     /// Whether the first record is skipped.
@@ -282,7 +282,7 @@ pub(super) struct PlainDirectiveOptions {
     /// The largest number of rows, if given and the format accepts a limit.
     pub(super) limit: Option<u64>,
     /// The column formats of the `format` option, if given and the format accepts them.
-    pub(super) formats: Option<Vec<ValueFormat>>,
+    pub(super) formats: Option<Vec<ColumnFormat>>,
     /// The position of the `format` option's value, if given.
     pub(super) formats_span: Option<Span>,
 }
@@ -551,12 +551,15 @@ impl<'a> Translator<'a> {
 
     /// Parses the value of a `format` option, which is a column format name or a tuple of
     /// them.
-    pub(super) fn column_formats(&self, value: &Term) -> Result<Vec<ValueFormat>, Diagnostic> {
-        let single = |term: &Term| -> Result<ValueFormat, Diagnostic> {
+    ///
+    /// A name with the marker `?`, as in `int?`, is the format of a column that admits a
+    /// missing value.
+    pub(super) fn column_formats(&self, value: &Term) -> Result<Vec<ColumnFormat>, Diagnostic> {
+        let single = |term: &Term| -> Result<ColumnFormat, Diagnostic> {
             let TermKind::Constant(Identifier::Bare(name)) = &term.kind else {
                 return Err(TranslationError::ColumnFormatNotName.at(term.span));
             };
-            ValueFormat::from_name(name).ok_or_else(|| {
+            ColumnFormat::from_name(name).ok_or_else(|| {
                 TranslationError::UnknownOptionValue {
                     option: String::from("column format"),
                     value: name.clone(),

@@ -9,7 +9,7 @@ use nemo_physical::{
 use crate::{
     AboutResource,
     error::IoError,
-    load::{BlankNodes, Loaded},
+    load::{BlankNodes, Loaded, RowIntake},
     selection::RowSelection,
 };
 
@@ -158,8 +158,7 @@ fn read_tsv(
     dictionary: &mut Dictionary,
     context: EvaluationContext,
 ) -> Result<Loaded, Diagnostic> {
-    let mut loaded = Loaded::new(selection.arity(width), context);
-    let mut row = Vec::with_capacity(width);
+    let mut intake = RowIntake::new(width, selection, context);
     let mut kept: Vec<DataValue> = Vec::with_capacity(width);
     let mut values: Vec<Option<DataValue>> = vec![None; width];
 
@@ -189,7 +188,7 @@ fn read_tsv(
         }
         let cells: Vec<&str> = line.split('\t').collect();
         if cells.len() != width {
-            loaded.count_malformed(number);
+            intake.count_malformed(number);
             continue;
         }
 
@@ -214,7 +213,7 @@ fn read_tsv(
         }
 
         if !complete {
-            loaded.count_malformed(number);
+            intake.count_malformed(number);
             continue;
         }
 
@@ -238,15 +237,12 @@ fn read_tsv(
             }
         }
 
-        loaded.take(&kept, selection, dictionary, &mut row, number);
+        intake.take(&kept, dictionary, number);
     }
 
-    tracing::debug!(
-        rows = loaded.rows.len(),
-        malformed = loaded.malformed,
-        excluded = loaded.excluded,
-        "read a SPARQL response"
-    );
+    let loaded = intake.finish();
+    tracing::debug!(rows = loaded.rows.len(), counts = ?loaded.counts, "read a SPARQL response");
+
     Ok(loaded)
 }
 

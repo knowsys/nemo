@@ -1,0 +1,10 @@
+% A condition on a column that admits a missing value gives the strict
+% table back: the rows without a phone are left out, without a warning,
+% and the column holds strings only, as the declaration requires.
+
+@declare phone(id: int, number: string) .
+@import phone(?id, ?name, ?number) from csv
+    { resource = "sources/phones.csv", format = (int, skip, string?) }
+    where ISSTRING(?number) .
+
+hasPhone(?id) :- phone(?id, _) .

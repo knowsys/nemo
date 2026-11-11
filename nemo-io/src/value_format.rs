@@ -1,4 +1,9 @@
 //! Cell formats: how the text of a cell is read as a value, and how a value is written as a cell.
+//!
+//! A [ValueFormat] reads and writes the cells that hold a value.
+//! A [ColumnFormat] is the format of one column:
+//! a value format, and whether the column admits a *missing value*,
+//! which is a place in a row where the resource has no value, such as an empty cell.
 
 use std::fmt::{self, Display, Formatter};
 
@@ -299,6 +304,138 @@ impl Display for ValueFormat {
     }
 }
 
+/// The format of one column: how its cells are read and written,
+/// and whether the column admits a missing value.
+///
+/// A column admits a missing value if its format has the marker `?`, as in `int?`.
+/// - Read under the marker, a missing value is a fresh null, so the column also holds nulls.
+///   Without the marker, a row with a missing value is dropped and counted.
+/// - Written under the marker, a null is a missing value,
+///   and a value whose cell would be empty has no form.
+///
+/// In delimiter-separated values the missing value is the empty cell.
+/// Without the marker, a format that reads the empty text, as `string` does,
+/// reads the empty cell as that value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColumnFormat {
+    /// How a cell that holds a value is read and written.
+    pub value: ValueFormat,
+    /// Whether the column admits a missing value.
+    pub optional: bool,
+}
+
+/// What a column's format reads from one cell.
+#[derive(Debug)]
+pub(crate) enum CellRead<'a> {
+    /// The value that the cell holds.
+    Value(ReadValue<'a>),
+    /// A missing value, which the column admits.
+    Missing,
+    /// A missing value, which the column does not admit.
+    Unadmitted,
+    /// A text that the column's format does not read.
+    Malformed,
+}
+
+impl ColumnFormat {
+    /// The marker of a column that admits a missing value, written after the format's name.
+    pub const MARKER: char = '?';
+
+    /// Creates the format of a column that admits no missing value.
+    pub const fn new(value: ValueFormat) -> Self {
+        Self {
+            value,
+            optional: false,
+        }
+    }
+
+    /// Creates the format of a column that admits a missing value.
+    pub const fn optional(value: ValueFormat) -> Self {
+        Self {
+            value,
+            optional: true,
+        }
+    }
+
+    /// Returns the format with the given name, such as `int` or `int?`,
+    /// or `None` for an unknown name.
+    ///
+    /// `skip?` names no format, since a column that is not read has no values to miss.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.strip_suffix(Self::MARKER) {
+            Some(name) => ValueFormat::from_name(name)
+                .filter(|&value| value != ValueFormat::Skip)
+                .map(Self::optional),
+            None => ValueFormat::from_name(name).map(Self::new),
+        }
+    }
+
+    /// Returns the domains of the values that the column holds when it is read:
+    /// those of its [value format](ValueFormat::domains), and the nulls if it admits a missing
+    /// value.
+    pub fn domains(&self) -> DomainSet {
+        if self.optional {
+            self.value.domains().union(DomainSet::NULL)
+        } else {
+            self.value.domains()
+        }
+    }
+
+    /// Reads one cell of a delimiter-separated resource.
+    ///
+    /// `null` returns the null that a label names in the resource, as for
+    /// [ValueFormat::parse].
+    pub(crate) fn read<'a>(
+        &self,
+        cell: &'a str,
+        null: &mut dyn FnMut(&str) -> DataValue,
+    ) -> CellRead<'a> {
+        if cell.is_empty() && self.optional {
+            return CellRead::Missing;
+        }
+
+        match self.value.parse_cell(cell, null) {
+            Some(value) => CellRead::Value(value),
+            None if cell.is_empty() => CellRead::Unadmitted,
+            None => CellRead::Malformed,
+        }
+    }
+
+    /// Returns the text of a value as a cell of a delimiter-separated resource,
+    /// or `None` if the value has no form in the column.
+    ///
+    /// A column that admits a missing value writes a null as the empty cell.
+    /// A value whose cell would be empty, such as the empty string under `string?`,
+    /// has no form there, since it would be read back as a missing value.
+    pub fn write(&self, value: ValueRef<'_>) -> Option<String> {
+        if !self.optional {
+            return self.value.write(value);
+        }
+        if matches!(value, ValueRef::Null(_)) {
+            return Some(String::new());
+        }
+
+        self.value.write(value).filter(|cell| !cell.is_empty())
+    }
+}
+
+impl From<ValueFormat> for ColumnFormat {
+    fn from(value: ValueFormat) -> Self {
+        Self::new(value)
+    }
+}
+
+impl Display for ColumnFormat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.value.name())?;
+        if self.optional {
+            write!(f, "{}", Self::MARKER)?;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use nemo_physical::value::TupleValue;
@@ -322,6 +459,29 @@ mod tests {
         assert_eq!(ValueFormat::from_name("any"), None);
         assert_eq!(ValueFormat::from_name("integer"), None);
         assert_eq!(ValueFormat::Integer.to_string(), "int");
+    }
+
+    /// A format's name with the marker names the format of a column that admits a missing
+    /// value, except for `skip`.
+    #[test]
+    fn the_marker_names_a_column_that_admits_a_missing_value() {
+        let optional = ColumnFormat::from_name("int?").expect("the format exists");
+        assert_eq!(optional, ColumnFormat::optional(ValueFormat::Integer));
+        assert_eq!(optional.to_string(), "int?");
+        assert!(optional.domains().contains(ValueDomain::Null));
+        assert!(
+            !ColumnFormat::new(ValueFormat::Integer)
+                .domains()
+                .contains(ValueDomain::Null)
+        );
+
+        assert_eq!(
+            ColumnFormat::from_name("int"),
+            Some(ValueFormat::Integer.into())
+        );
+        assert_eq!(ColumnFormat::from_name("skip?"), None);
+        assert_eq!(ColumnFormat::from_name("int??"), None);
+        assert_eq!(ColumnFormat::from_name("?"), None);
     }
 
     /// The term format writes a value in canonical term syntax and reads it back,

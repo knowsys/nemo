@@ -66,7 +66,7 @@ struct SparqlDirectiveOptions {
     /// The base IRI's source position, if given.
     base_span: Option<crate::model::Span>,
     /// The column formats of the `format` option, if given.
-    formats: Option<Vec<nemo_io::value_format::ValueFormat>>,
+    formats: Option<Vec<nemo_io::value_format::ColumnFormat>>,
     /// The column formats' source position, if given.
     formats_span: Option<crate::model::Span>,
     /// The largest number of rows of one atom that a request of a bound import sends.
@@ -148,7 +148,13 @@ impl<'a> Translator<'a> {
             .with_endpoint_blank_nodes()
             .read(&spec.endpoint, &bytes, self.dictionary, self.context)
             .map_err(ImportFailure::Reading)?;
-        self.absorb(table, spec.layout.delivered(), loaded, &spec.endpoint);
+        self.absorb(
+            table,
+            spec.layout.delivered(),
+            loaded,
+            &spec.endpoint,
+            false,
+        );
         Ok(())
     }
 

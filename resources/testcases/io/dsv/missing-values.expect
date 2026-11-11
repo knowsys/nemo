@@ -1,0 +1,9 @@
+complete(1, 10, "a") .
+complete(4, 10, "") .
+
+sameNumber(1, 4) .
+
+withGaps(1, 10, "a") .
+withGaps(2, _:0, "b") .
+withGaps(3, _:1, _:2) .
+withGaps(4, 10, _:3) .

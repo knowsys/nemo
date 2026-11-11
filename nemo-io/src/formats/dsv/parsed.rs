@@ -9,9 +9,9 @@ use nemo_physical::{
 
 use crate::{
     dsv::DsvOptions,
-    load::{BlankNodes, Loaded},
-    selection::RowSelection,
-    value_format::ValueFormat,
+    load::{BlankNodes, Loaded, RowCounts, RowIntake},
+    selection::ConditionBuffers,
+    value_format::{CellRead, ValueFormat},
 };
 
 /// The number of cells at which a run is full and is handed on for interning.
@@ -19,6 +19,13 @@ const RUN_CELLS: usize = 1 << 14;
 
 /// The number of bytes of text at which a run is full and is handed on for interning.
 const RUN_TEXT: usize = 1 << 20;
+
+/// The number of the null that stands for the missing value of the first column
+/// while a condition is evaluated on a row that is not interned yet.
+///
+/// The missing value of each further column has the next number,
+/// so the nulls of one row differ, as the fresh nulls that they are interned as do.
+const MISSING_NULL: u64 = u64::MAX - 0xFFFF_FFFF;
 
 /// One parsed cell, in the form from which the thread that owns the dictionary interns it.
 #[derive(Debug, Clone, Copy)]
@@ -41,6 +48,8 @@ enum ParsedCell {
     },
     /// Any other value, at this index of the run's owned values.
     Owned(u32),
+    /// A missing value that its column admits, which is interned as a fresh null.
+    Missing,
 }
 
 /// The lengths of a run's buffers before a row was added, for taking the row back.
@@ -65,70 +74,80 @@ struct DeferredRow {
     line: u64,
 }
 
-/// What reading the deferred rows of one resource needs: the resource's options,
-/// its selection, and the label scope of its nulls.
-///
-/// The scope is opened by the first row that holds a null.
+/// The load of one delimiter-separated resource while its runs are interned.
 #[derive(Debug)]
-pub(crate) struct DeferredReads<'a> {
+pub(crate) struct ResourceLoad<'a> {
     /// The options of the resource.
     options: &'a DsvOptions,
-    /// The selection of the options.
-    selection: RowSelection,
+    /// The intake of the resource's rows.
+    intake: RowIntake,
     /// The nulls of the resource, once a row has named one.
+    ///
+    /// The label scope is opened by the first row that holds a null.
     blanks: Option<BlankNodes>,
+    /// A scratch buffer for the values of a row that is read while its run is interned.
+    values: Vec<DataValue>,
+    /// A scratch buffer for the encoded values of a row.
+    row: Vec<StorageValue>,
 }
 
-impl<'a> DeferredReads<'a> {
-    /// Creates the state for a resource with the given options.
-    pub(crate) fn new(options: &'a DsvOptions) -> Self {
+impl<'a> ResourceLoad<'a> {
+    /// Creates the empty load of a resource with the given options.
+    ///
+    /// `context` is the evaluation context of the options' condition.
+    pub(crate) fn new(options: &'a DsvOptions, context: EvaluationContext) -> Self {
         Self {
             options,
-            selection: options.selection(),
+            intake: RowIntake::of_arity(options.arity(), options.selection(), context),
             blanks: None,
+            values: Vec::new(),
+            row: Vec::new(),
         }
     }
 
-    /// Ends the reads of the resource, which closes the label scope of its nulls.
-    pub(crate) fn close(self, dictionary: &mut Dictionary) {
+    /// Ends the load, which closes the label scope of the resource's nulls, and returns it.
+    pub(crate) fn finish(self, dictionary: &mut Dictionary) -> Loaded {
         if let Some(blanks) = self.blanks {
             blanks.close(dictionary);
         }
+
+        self.intake.finish()
     }
 
-    /// Reads one deferred row from the text of its cells, and takes it into `loaded`.
+    /// Reads one deferred row from the text of its cells, and takes it into the load.
     ///
-    /// `cells` has the byte range in `text` of each cell of the row.
-    /// `values` and `row` are scratch buffers, and `line` is the row's line.
-    #[allow(clippy::too_many_arguments)]
-    fn take(
+    /// `cells` has the byte range in `text` of each cell of the row, and `line` is the row's
+    /// line.
+    fn take_deferred(
         &mut self,
         cells: &[(usize, usize)],
         text: &str,
-        loaded: &mut Loaded,
         dictionary: &mut Dictionary,
-        values: &mut Vec<DataValue>,
-        row: &mut Vec<StorageValue>,
         line: u64,
     ) {
         let blanks = self
             .blanks
             .get_or_insert_with(|| BlankNodes::open(None, "document", dictionary));
 
-        values.clear();
+        self.values.clear();
         for (column, (&(start, end), format)) in cells.iter().zip(&self.options.formats).enumerate()
         {
-            if self.options.delivers(column) {
-                let value = format
-                    .parse(&text[start..end], &mut |label| {
-                        blanks.null(label, dictionary)
-                    })
-                    .expect("a deferred row is well-formed");
-                values.push(value);
+            if !self.options.delivers(column) {
+                continue;
             }
+
+            let mut null = |label: &str| blanks.null(label, dictionary);
+            let value = match format.read(&text[start..end], &mut null) {
+                CellRead::Value(value) => value.into_owned(),
+                CellRead::Missing => DataValue::null(dictionary.fresh_null()),
+                CellRead::Unadmitted | CellRead::Malformed => {
+                    unreachable!("a deferred row is well-formed")
+                }
+            };
+            self.values.push(value);
         }
 
-        loaded.take(values, &self.selection, dictionary, row, line);
+        self.intake.take(&self.values, dictionary, line);
     }
 }
 
@@ -143,14 +162,13 @@ impl<'a> DeferredReads<'a> {
 /// - A row that holds a null is kept as text, and read when the run is interned.
 #[derive(Debug)]
 pub(crate) struct Parsed {
+    /// The number of delivered columns.
+    arity: usize,
     /// The run's counts of well-formed and dropped rows.
-    ///
-    /// Its rows stay empty, since the run keeps its rows in [cells](Self::cells)
-    /// until they are [interned](Self::encode_into).
-    loaded: Loaded,
+    counts: RowCounts,
     /// The cells of the admitted rows, row by row, with as many cells per row as the arity.
     cells: Vec<ParsedCell>,
-    /// The text of the IRI and string cells.
+    /// The text of the IRI and string cells, and of the deferred rows.
     text: String,
     /// The values of the cells of other kinds.
     owned: Vec<DataValue>,
@@ -163,8 +181,8 @@ pub(crate) struct Parsed {
     /// The byte range in the run's text of each cell of the deferred rows,
     /// with one range per column of the resource.
     deferred_cells: Vec<(usize, usize)>,
-    /// A scratch buffer for the values of a record that the condition is evaluated on.
-    values: Vec<DataValue>,
+    /// The buffers of the condition's evaluations.
+    buffers: ConditionBuffers,
     /// The number of lines that the parse consumed, set on its last run only.
     ///
     /// It is the line number at which the text after the parsed part begins, less one.
@@ -173,28 +191,25 @@ pub(crate) struct Parsed {
 
 impl Parsed {
     /// Creates an empty run for rows of the given arity.
-    ///
-    /// `context` is the evaluation context of the selection's condition,
-    /// such as the instant its `NOW()` reads.
-    pub(crate) fn new(arity: usize, context: EvaluationContext) -> Self {
+    pub(crate) fn new(arity: usize) -> Self {
         Self {
-            loaded: Loaded::new(arity, context),
+            arity,
+            counts: RowCounts::default(),
             cells: Vec::new(),
             text: String::new(),
             owned: Vec::new(),
             lines: Vec::new(),
             deferred: Vec::new(),
             deferred_cells: Vec::new(),
-            values: Vec::new(),
+            buffers: ConditionBuffers::default(),
             consumed_lines: 0,
         }
     }
 
     /// Empties the run for rows of the given arity, keeping its buffers.
-    ///
-    /// `context` is the evaluation context of the selection's condition, as for [new](Self::new).
-    pub(crate) fn reset(&mut self, arity: usize, context: EvaluationContext) {
-        self.loaded = Loaded::new(arity, context);
+    pub(crate) fn reset(&mut self, arity: usize) {
+        self.arity = arity;
+        self.counts = RowCounts::default();
         self.cells.clear();
         self.text.clear();
         self.owned.clear();
@@ -206,7 +221,7 @@ impl Parsed {
 
     /// Returns the number of well-formed rows that the run has counted, admitted or not.
     pub(crate) fn well_formed(&self) -> u64 {
-        self.loaded.well_formed + self.deferred.len() as u64
+        self.counts.well_formed + self.deferred.len() as u64
     }
 
     /// Returns the size in bytes of the run's buffers, which a reused run keeps.
@@ -225,87 +240,108 @@ impl Parsed {
     }
 
     /// Adds one record, read with the given options,
-    /// if it is well-formed and the selection admits it.
+    /// if it is well-formed and the options' condition admits it.
     ///
-    /// Otherwise, the record is counted as malformed, as excluded,
-    /// or under the kind of the error that the condition raised on it.
+    /// Otherwise, the record is counted: as malformed, as a row with a missing value that its
+    /// column does not admit, as excluded, or under the kind of the error that the condition
+    /// raised on it.
     /// A well-formed record that holds a null is kept as text,
     /// and is read when the run is [interned](Self::encode_into).
+    /// `context` is the evaluation context of the condition.
     pub(crate) fn push_record(
         &mut self,
         options: &DsvOptions,
-        selection: &RowSelection,
+        context: EvaluationContext,
         record: &csv::StringRecord,
         line: u64,
     ) {
-        if options.condition.is_none() {
-            self.push_direct(options, record, line);
-        } else {
-            self.push_selected(options, selection, record, line);
+        if record.len() != options.formats.len() {
+            self.counts.count_malformed(line);
+            return;
         }
-    }
 
-    /// Adds a record when there is no condition to evaluate.
-    ///
-    /// Its cells go into the run as they are parsed, without first becoming owned values.
-    fn push_direct(&mut self, options: &DsvOptions, record: &csv::StringRecord, line: u64) {
+        // A cell that is not read ends the row, except for a missing value:
+        // the cells after it still decide whether the row is malformed.
         let start = self.row_start();
         let mut holds_null = false;
+        let mut unadmitted = false;
         let mut null = |_: &str| {
             holds_null = true;
             DataValue::null(0)
         };
-        let complete =
-            record.len() == options.formats.len()
-                && record.iter().zip(&options.formats).enumerate().all(
-                    |(column, (cell, &format))| {
-                        if options.checks_only(column) {
-                            format.parse_cell(cell, &mut null).is_some()
-                        } else {
-                            self.push_cell(format, cell, &mut null)
-                        }
-                    },
-                );
-        if !complete {
+        for (column, (cell, format)) in record.iter().zip(&options.formats).enumerate() {
+            if format.value == ValueFormat::Skip {
+                continue;
+            }
+
+            let delivered = !options.checks_only(column) && !unadmitted;
+            match format.read(cell, &mut null) {
+                CellRead::Value(value) if delivered => self.push_value(value),
+                CellRead::Missing if delivered => self.cells.push(ParsedCell::Missing),
+                CellRead::Value(_) | CellRead::Missing => {}
+                CellRead::Unadmitted => unadmitted = true,
+                CellRead::Malformed => {
+                    self.take_back(start);
+                    self.counts.count_malformed(line);
+                    return;
+                }
+            }
+        }
+
+        if unadmitted {
             self.take_back(start);
-            self.loaded.count_malformed(line);
+            self.counts.count_missing(line);
         } else if holds_null {
             self.take_back(start);
             self.defer(record, line);
         } else {
-            self.loaded.well_formed += 1;
-            self.lines.push(line);
+            self.counts.well_formed += 1;
+            if self.admits(options, context, start) {
+                self.lines.push(line);
+            } else {
+                self.take_back(start);
+            }
         }
     }
 
-    /// Adds a record if it is well-formed and the selection's condition admits its values.
-    fn push_selected(
+    /// Returns whether the options' condition admits the row whose cells were added last,
+    /// from `start` on, and counts the row if it does not.
+    fn admits(
         &mut self,
         options: &DsvOptions,
-        selection: &RowSelection,
-        record: &csv::StringRecord,
-        line: u64,
-    ) {
-        let mut values = std::mem::take(&mut self.values);
-        values.clear();
-        let mut holds_null = false;
-        let complete = options.parse_row(record, &mut values, &mut |_| {
-            holds_null = true;
-            DataValue::null(0)
-        });
-        if !complete {
-            self.loaded.count_malformed(line);
-        } else if holds_null {
-            self.defer(record, line);
-        } else if self.loaded.admit(selection, &values) {
-            for value in values.drain(..) {
-                self.push_value(value);
+        context: EvaluationContext,
+        start: RowStart,
+    ) -> bool {
+        let Some(condition) = &options.condition else {
+            return true;
+        };
+
+        let cells = &self.cells[start.cells..];
+        let admitted = condition.evaluate_with(context, &mut self.buffers, |position| match cells
+            [position]
+        {
+            ParsedCell::Inline(value) => value.to_value().expect("an inline value decodes"),
+            ParsedCell::Iri { start, end } => {
+                ValueRef::Iri(IriRef::new(&self.text[start as usize..end as usize]))
             }
+            ParsedCell::String { start, end } => {
+                ValueRef::String(&self.text[start as usize..end as usize])
+            }
+            ParsedCell::Owned(index) => self.owned[index as usize].as_ref(),
+            ParsedCell::Missing => ValueRef::Null(MISSING_NULL + position as u64),
+        });
 
-            self.lines.push(line);
+        match admitted {
+            Ok(true) => true,
+            Ok(false) => {
+                self.counts.excluded += 1;
+                false
+            }
+            Err(kind) => {
+                self.counts.errors.record(kind);
+                false
+            }
         }
-
-        self.values = values;
     }
 
     /// Keeps a well-formed record that holds a null as text.
@@ -322,7 +358,7 @@ impl Parsed {
     }
 
     /// Returns the current lengths of the run's buffers,
-    /// for taking back a row that turns out to be malformed.
+    /// for taking back a row that is not kept.
     fn row_start(&self) -> RowStart {
         RowStart {
             cells: self.cells.len(),
@@ -338,59 +374,40 @@ impl Parsed {
         self.owned.truncate(start.owned);
     }
 
-    /// Parses one cell by its format and adds it,
-    /// or returns `false` if the format rejects the cell.
+    /// Adds the cell of a value that was read.
     ///
-    /// An IRI or a string that appears in the cell unchanged goes into the run's text
+    /// An IRI or a string that appears in the resource unchanged goes into the run's text
     /// without becoming an owned value.
-    /// A skipped cell adds nothing.
-    /// `null` is called for each null that the cell holds.
-    fn push_cell(
-        &mut self,
-        format: ValueFormat,
-        cell: &str,
-        null: &mut dyn FnMut(&str) -> DataValue,
-    ) -> bool {
-        if format == ValueFormat::Skip {
-            return true;
-        }
-
-        match format.parse_cell(cell, null) {
-            Some(ReadValue::Iri(iri)) => self.push_text(iri, true),
-            Some(ReadValue::String(text)) => self.push_text(text, false),
-            Some(ReadValue::Value(value)) => self.push_value(value),
-            None => return false,
-        }
-
-        true
+    fn push_value(&mut self, value: ReadValue<'_>) {
+        let cell = match value {
+            ReadValue::Iri(iri) => self
+                .text_cell([iri, ""], true)
+                .unwrap_or_else(|| self.owned_cell(DataValue::iri(iri))),
+            ReadValue::String(text) => self
+                .text_cell([text, ""], false)
+                .unwrap_or_else(|| self.owned_cell(DataValue::string(text))),
+            ReadValue::Value(value) => self.value_cell(value),
+        };
+        self.cells.push(cell);
     }
 
-    /// Adds a parsed value.
+    /// Returns the cell of an owned value.
     ///
     /// The value is encoded if it has an inline encoding.
     /// Otherwise, an IRI or a string keeps its text in the run's text,
-    /// and any other value is kept as an owned value.
-    fn push_value(&mut self, value: DataValue) {
-        let cell = match StorageValue::from_value(value.as_ref()) {
-            Some(inline) => Some(ParsedCell::Inline(inline)),
-            None => match value.as_ref() {
-                ValueRef::Iri(iri) => self.text_cell([iri.namespace(), iri.local()], true),
-                ValueRef::String(text) => self.text_cell([text, ""], false),
-                _ => None,
-            },
-        };
-        let cell = cell.unwrap_or_else(|| self.owned_cell(value));
-        self.cells.push(cell);
-    }
+    /// and a value of another kind is kept as an owned value.
+    fn value_cell(&mut self, value: DataValue) -> ParsedCell {
+        if let Some(inline) = StorageValue::from_value(value.as_ref()) {
+            return ParsedCell::Inline(inline);
+        }
 
-    /// Adds the cell of an IRI if `iri` is true, or of a string otherwise, with the given text.
-    fn push_text(&mut self, text: &str, iri: bool) {
-        let cell = match self.text_cell([text, ""], iri) {
-            Some(cell) => cell,
-            None if iri => self.owned_cell(DataValue::iri(text)),
-            None => self.owned_cell(DataValue::string(text)),
+        let text = match value.as_ref() {
+            ValueRef::Iri(iri) => self.text_cell([iri.namespace(), iri.local()], true),
+            ValueRef::String(text) => self.text_cell([text, ""], false),
+            _ => None,
         };
-        self.cells.push(cell);
+
+        text.unwrap_or_else(|| self.owned_cell(value))
     }
 
     /// Appends a text, given in two parts, to the run's text,
@@ -414,50 +431,39 @@ impl Parsed {
     fn owned_cell(&mut self, value: DataValue) -> ParsedCell {
         let index = u32::try_from(self.owned.len()).expect("a run holds fewer than 2³² values");
         self.owned.push(value);
+
         ParsedCell::Owned(index)
     }
 
-    /// Interns the run's rows into `loaded`, the load being built, and adds the run's counts to
-    /// it.
+    /// Interns the run's rows into the load of their resource, and adds the run's counts to it.
     ///
     /// `base` is the number of lines that earlier windows of the same file consumed,
     /// and is added to the run's line numbers.
     /// A row with a value that the dictionary cannot hold is counted as malformed.
-    /// A row that holds a null is read here, with its nulls named in the label scope of
-    /// `reads`, and is admitted by the selection's condition like any other row.
+    /// A row that holds a null is read here, with its nulls named in the label scope of the
+    /// resource, and is admitted by the condition like any other row.
     pub(crate) fn encode_into(
         &self,
-        loaded: &mut Loaded,
-        reads: &mut DeferredReads<'_>,
+        load: &mut ResourceLoad<'_>,
         dictionary: &mut Dictionary,
         base: u64,
     ) {
         let shifted = |line: u64| if line > 0 { line + base } else { 0 };
 
-        // The rows are stored first, in line order, after the rows of every
-        // earlier run. The first malformed line of the parse is merged afterwards,
-        // since it may come before the line of a row that failed to encode.
-        let arity = self.loaded.rows.arity();
-        let mut row = Vec::with_capacity(arity);
-        let mut values = Vec::new();
+        // The rows are stored first, in line order, after the rows of every earlier run.
+        // The counts of the parse are merged afterwards,
+        // since its first malformed line may come before the line of a row that fails to encode.
+        let width = load.options.formats.len();
+        let mut row = std::mem::take(&mut load.row);
         let mut deferred = self.deferred.iter().enumerate().peekable();
         for (index, &line) in self.lines.iter().enumerate() {
             while let Some((number, later)) = deferred.next_if(|(_, row)| row.position <= index) {
-                let cells = self.deferred_cells(number, reads.options);
-                let line = shifted(later.line);
-                reads.take(
-                    cells,
-                    &self.text,
-                    loaded,
-                    dictionary,
-                    &mut values,
-                    &mut row,
-                    line,
-                );
+                let cells = &self.deferred_cells[number * width..(number + 1) * width];
+                load.take_deferred(cells, &self.text, dictionary, shifted(later.line));
             }
 
             row.clear();
-            let complete = self.cells[index * arity..(index + 1) * arity]
+            let complete = self.cells[index * self.arity..(index + 1) * self.arity]
                 .iter()
                 .all(|&cell| {
                     self.encode(cell, dictionary).is_some_and(|value| {
@@ -466,49 +472,19 @@ impl Parsed {
                     })
                 });
             if complete {
-                loaded.rows.push_row(&row);
+                load.intake.store(&row);
             } else {
-                loaded.count_malformed(shifted(line));
+                load.intake.count_malformed(shifted(line));
             }
         }
 
         for (number, later) in deferred {
-            let cells = self.deferred_cells(number, reads.options);
-            let line = shifted(later.line);
-            reads.take(
-                cells,
-                &self.text,
-                loaded,
-                dictionary,
-                &mut values,
-                &mut row,
-                line,
-            );
+            let cells = &self.deferred_cells[number * width..(number + 1) * width];
+            load.take_deferred(cells, &self.text, dictionary, shifted(later.line));
         }
 
-        loaded.malformed += self.loaded.malformed;
-        loaded.excluded += self.loaded.excluded;
-        loaded.well_formed += self.loaded.well_formed;
-        loaded.errors.absorb(&self.loaded.errors);
-        if let Some(first) = self
-            .loaded
-            .first_malformed
-            .map(shifted)
-            .filter(|&line| line > 0)
-        {
-            loaded.first_malformed = Some(
-                loaded
-                    .first_malformed
-                    .map_or(first, |known| known.min(first)),
-            );
-        }
-    }
-
-    /// Returns the byte ranges of the cells of the deferred row with the given number.
-    fn deferred_cells(&self, number: usize, options: &DsvOptions) -> &[(usize, usize)] {
-        let width = options.formats.len();
-
-        &self.deferred_cells[number * width..(number + 1) * width]
+        load.row = row;
+        load.intake.absorb(&self.counts, base);
     }
 
     /// Encodes one cell, or returns `None` if the dictionary cannot hold its value.
@@ -523,6 +499,10 @@ impl Parsed {
                 dictionary.encode(ValueRef::String(text(start, end)))
             }
             ParsedCell::Owned(index) => dictionary.encode(self.owned[index as usize].as_ref()),
+            ParsedCell::Missing => {
+                let null = dictionary.fresh_null();
+                dictionary.encode(ValueRef::Null(null))
+            }
         }
     }
 }

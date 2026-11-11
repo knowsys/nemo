@@ -15,12 +15,12 @@ use super::DsvOptions;
 
 /// A writer of delimiter-separated values.
 ///
-/// Each value is written as its column's format [writes](ValueFormat::write) it.
+/// Each value is written as its column's format [writes](crate::value_format::ColumnFormat::write) it.
 /// The resulting cell is quoted only if it contains the delimiter, a quote or a line break,
 /// and the quotes inside it are doubled.
 /// No header row is written.
 /// A [Skip](ValueFormat::Skip) column is left out of every record,
-/// and a row with a value that does not fit its column's format is dropped and counted.
+/// and a row with a value that has no form in its column's format is dropped and counted.
 #[derive(Debug, Clone)]
 pub struct DsvWriter {
     /// The options of the written resources.
@@ -53,7 +53,7 @@ impl Writer for DsvWriter {
         'rows: for row in rows {
             record.clear();
             for (value, format) in row.iter().zip(&self.options.formats) {
-                if matches!(format, ValueFormat::Skip) {
+                if format.value == ValueFormat::Skip {
                     continue;
                 }
 

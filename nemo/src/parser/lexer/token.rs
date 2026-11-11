@@ -83,6 +83,9 @@ pub(in crate::parser) enum TokenKind {
     Carets,
     /// A language tag like `@en`, directly after a string literal.
     LanguageTag,
+    /// A `?` directly after a name, which marks a column format that admits a missing value,
+    /// as in `int?`.
+    MissingMarker,
     /// A text that the lexer rejected and reported a diagnostic for.
     Error,
     /// The end of the input.

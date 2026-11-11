@@ -58,9 +58,11 @@ pub enum ExportFormat {
         delimiter: u8,
         /// The file extension that goes with the format's name, such as `csv`.
         extension: String,
-        /// The declared column formats, or `None` to write every column in the
+        /// The column formats, or `None` to write every column in the
         /// [Term](nemo_io::value_format::ValueFormat::Term) format.
-        formats: Option<Vec<nemo_io::value_format::ValueFormat>>,
+        ///
+        /// A column whose format admits a missing value writes a null as an empty cell.
+        formats: Option<Vec<nemo_io::value_format::ColumnFormat>>,
     },
     /// An RDF serialization.
     ///
@@ -318,7 +320,7 @@ impl Engine {
 
     /// Returns the configured writer of one export specification.
     fn export_writer(&self, spec: &ExportSpec) -> Result<ExportWriter, Diagnostic> {
-        use nemo_io::value_format::ValueFormat;
+        use nemo_io::value_format::{ColumnFormat, ValueFormat};
 
         Ok(match &spec.format {
             ExportFormat::Dsv {
@@ -327,7 +329,7 @@ impl Engine {
                 let arity = self.arity_of(&spec.predicate).unwrap_or(0);
                 let formats = formats
                     .clone()
-                    .unwrap_or_else(|| vec![ValueFormat::Term; arity]);
+                    .unwrap_or_else(|| vec![ColumnFormat::new(ValueFormat::Term); arity]);
                 let mut options = nemo_io::dsv::DsvOptions::new(*delimiter, formats);
                 options.compression = spec.compression;
                 ExportWriter::Dsv(nemo_io::dsv::DsvWriter::new(options))

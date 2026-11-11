@@ -23,7 +23,6 @@ mod proofs;
 
 use std::collections::{HashMap, HashSet};
 
-use nemo_io::value_format::ValueFormat;
 use nemo_physical::{
     diagnostics::Diagnostic,
     management::TableId,
@@ -120,21 +119,6 @@ fn written_column(plan: &ImportPlan, predicate: &str, arity: usize, position: us
     plan.stored_layout(predicate, arity)
         .kept_position(position)
         .unwrap_or(position)
-}
-
-/// Returns the column format in which a declared type is read:
-/// the format named like the type, which reads cells as exactly the type's values.
-///
-/// A type without such a format, such as a union or a structure, is read as terms,
-/// and the declaration then refuses them, since terms are not shown to fit it.
-pub(crate) fn declared_format(declared: &Type) -> ValueFormat {
-    if declared.tuple_shapes().is_some() || declared.map_shapes().is_some() {
-        return ValueFormat::Term;
-    }
-    ValueFormat::ALL
-        .into_iter()
-        .find(|format| *format != ValueFormat::Skip && format.domains() == declared.domains())
-        .unwrap_or(ValueFormat::Term)
 }
 
 /// What the analysis found.
@@ -341,32 +325,5 @@ fn grow_to_fixpoint(
         if !changed {
             break;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use nemo_physical::value::DomainSet;
-
-    use super::*;
-
-    /// Every declared type with a format of its own is read in that format,
-    /// and a union is read as terms.
-    #[test]
-    fn a_declared_type_reads_in_the_format_of_its_name() {
-        for format in ValueFormat::ALL {
-            if matches!(format, ValueFormat::Skip) {
-                continue;
-            }
-            assert_eq!(
-                declared_format(&Type::of_domains(format.domains())),
-                format,
-                "`{}` is not read by its own format",
-                format.name()
-            );
-        }
-        // A union has no format of its own.
-        let union = Type::of_domains(DomainSet::INTEGER | DomainSet::STRING);
-        assert_eq!(declared_format(&union), ValueFormat::Term);
     }
 }

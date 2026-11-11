@@ -32,7 +32,7 @@ fn tsv_cells_parse_as_turtle_terms() {
         true\t\"tab\\there\"\t\n";
     let mut dictionary = Dictionary::new();
     let loaded = read_response(body, 3, &mut dictionary);
-    assert_eq!((loaded.rows.len(), loaded.malformed), (4, 0));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (4, 0));
     let row = |index: usize| -> Vec<DataValue> {
         loaded
             .rows
@@ -80,11 +80,11 @@ fn tsv_cells_parse_as_turtle_terms() {
 fn an_unbound_solution_of_one_column_is_an_empty_line() {
     let read = |body: &str, width: usize| read_response(body, width, &mut Dictionary::new());
     let loaded = read("?c\n\n\"c2\"\r\n\n", 1);
-    assert_eq!((loaded.rows.len(), loaded.malformed), (3, 0));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (3, 0));
     let loaded = read("?c\n", 1);
     assert_eq!(loaded.rows.len(), 0, "a header alone holds no solution");
     let loaded = read("?a\t?b\n<http://e/a>\t1\n\n<http://e/b>\t2\n", 2);
-    assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (2, 0));
 }
 
 /// A cell that is not a term makes its row malformed, reported at its line.
@@ -92,8 +92,8 @@ fn an_unbound_solution_of_one_column_is_an_empty_line() {
 fn a_cell_that_is_no_term_makes_the_row_malformed() {
     let body = "?x\nnot a term\n<http://example.org/ok>\n";
     let loaded = read_response(body, 1, &mut Dictionary::new());
-    assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));
-    assert_eq!(loaded.first_malformed, Some(2));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (1, 1));
+    assert_eq!(loaded.counts.first_malformed, Some(2));
 }
 
 /// Responses read in the endpoint's scope agree on blank nodes,
@@ -173,7 +173,7 @@ fn a_reader_given_the_values_keeps_the_solutions_that_match_them() {
 
     // The first two are the integer 3 and the third is the double 2.5, however the endpoint
     // matched them. The double 3 is a different value for Nemo, and the last two match nothing.
-    assert_eq!((loaded.rows.len(), loaded.malformed), (3, 0));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (3, 0));
 }
 
 /// A bound cell that is not a term makes its row malformed,
@@ -198,8 +198,8 @@ fn a_malformed_bound_cell_is_counted() {
             EvaluationContext::now(),
         )
         .expect("the response reads");
-    assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));
-    assert_eq!(loaded.first_malformed, Some(3));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (1, 1));
+    assert_eq!(loaded.counts.first_malformed, Some(3));
 }
 
 /// A cell that is no term makes its solution malformed in a column that is not delivered too,
@@ -228,7 +228,7 @@ fn a_column_that_is_not_delivered_still_decides_whether_a_solution_is_well_forme
             EvaluationContext::now(),
         )
         .expect("the response reads");
-    assert_eq!((loaded.rows.len(), loaded.malformed), (3, 1));
-    assert_eq!(loaded.first_malformed, Some(3));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (3, 1));
+    assert_eq!(loaded.counts.first_malformed, Some(3));
     assert_eq!(loaded.rows.arity(), 1);
 }

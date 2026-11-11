@@ -4,15 +4,15 @@ use std::io::Cursor;
 
 use nemo_physical::{
     dictionary::Dictionary,
-    function::EvaluationContext,
-    value::{DataValue, TupleValue, ValueRef},
+    function::{EvaluationContext, OpCode, StackProgram},
+    value::{DataValue, DomainSet, TupleValue, ValueRef},
 };
 
 use crate::{
-    load::Reader,
+    load::{Reader, RowCounts},
     selection::RowCondition,
     testing::{TempDirectory, greater_than},
-    value_format::ValueFormat,
+    value_format::{ColumnFormat, ValueFormat},
     write::Writer,
 };
 
@@ -32,7 +32,7 @@ fn csv_rows_intern_and_round_trip() {
         )
         .expect("the source reads");
 
-    assert_eq!(loaded.malformed, 0);
+    assert_eq!(loaded.counts.malformed, 0);
     assert_eq!(
         loaded.decoded(&dictionary),
         vec![
@@ -70,8 +70,8 @@ fn malformed_rows_are_counted_never_silent() {
         .expect("the source reads");
 
     assert_eq!(loaded.rows.len(), 2);
-    assert_eq!(loaded.malformed, 2);
-    assert_eq!(loaded.first_malformed, Some(2));
+    assert_eq!(loaded.counts.malformed, 2);
+    assert_eq!(loaded.counts.first_malformed, Some(2));
 }
 
 /// A tab-separated resource is read with its own delimiter.
@@ -101,7 +101,7 @@ fn empty_sources_load_empty() {
         .read(Cursor::new(""), &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
     assert!(loaded.rows.is_empty());
-    assert_eq!(loaded.malformed, 0);
+    assert_eq!(loaded.counts.malformed, 0);
 }
 
 /// A writer writes cells in term syntax, quoting a cell as CSV requires.
@@ -126,7 +126,8 @@ fn writers_serialize_cells_in_the_term_format() {
 }
 
 /// A term cell that is not one constant makes its row malformed:
-/// a full IRI without brackets, a text without quotes, and an empty cell.
+/// a full IRI without brackets, and a text without quotes.
+/// An empty cell is a missing value, which is counted apart.
 #[test]
 fn a_cell_that_is_no_constant_makes_its_row_malformed() {
     let input = [
@@ -147,7 +148,9 @@ fn a_cell_that_is_no_constant_makes_its_row_malformed() {
         )
         .expect("the source reads");
 
-    assert_eq!((loaded.malformed, loaded.first_malformed), (3, Some(2)));
+    let counts = &loaded.counts;
+    assert_eq!((counts.malformed, counts.first_malformed), (2, Some(2)));
+    assert_eq!((counts.missing, counts.first_missing), (1, Some(4)));
     assert_eq!(
         loaded.decoded(&dictionary),
         vec![
@@ -157,6 +160,129 @@ fn a_cell_that_is_no_constant_makes_its_row_malformed() {
             ],
             vec![DataValue::string("Alice Smith"), DataValue::integer(5)],
         ]
+    );
+}
+
+/// Reads a CSV text with the given column formats.
+fn read_csv(formats: &[&str], input: &str) -> (Vec<Vec<DataValue>>, RowCounts) {
+    let formats = formats
+        .iter()
+        .map(|name| ColumnFormat::from_name(name).expect("the format exists"));
+    let mut dictionary = Dictionary::new();
+    let loaded = DsvReader::new(DsvOptions::csv(formats))
+        .read(
+            Cursor::new(input.to_owned()),
+            &mut dictionary,
+            EvaluationContext::now(),
+        )
+        .expect("the source reads");
+
+    (loaded.decoded(&dictionary), loaded.counts)
+}
+
+/// An empty cell is a missing value.
+/// A column with the marker reads it as a null of its own,
+/// and in any other column its row is dropped and counted apart from the malformed rows,
+/// unless the column's format reads the empty text.
+#[test]
+fn a_missing_value_is_a_fresh_null_where_the_column_admits_it() {
+    let input = "1,,\n2,,\n3,5,x\nfour,,\n";
+
+    // Without the marker, the rows with an empty `int` cell are dropped.
+    let (rows, counts) = read_csv(&["int", "int", "string"], input);
+    assert_eq!(rows.len(), 1);
+    assert_eq!((counts.missing, counts.first_missing), (2, Some(1)));
+
+    // A row that is malformed elsewhere is counted as malformed only.
+    assert_eq!((counts.malformed, counts.first_malformed), (1, Some(4)));
+
+    // With the marker, each empty cell is a null of its own.
+    let (rows, counts) = read_csv(&["int", "int?", "string?"], input);
+    assert_eq!((rows.len(), counts.missing, counts.malformed), (3, 0, 1));
+    let nulls = [&rows[0][1], &rows[0][2], &rows[1][1], &rows[1][2]];
+    for (index, null) in nulls.iter().enumerate() {
+        assert!(matches!(null.as_ref(), ValueRef::Null(_)), "{null}");
+        assert!(
+            !nulls[..index].contains(null),
+            "{null} is a null of its own"
+        );
+    }
+    assert_eq!(
+        rows[2][1..],
+        [DataValue::integer(5), DataValue::string("x")]
+    );
+
+    // The `string` format reads the empty text, so its empty cell is the empty string.
+    let (rows, counts) = read_csv(&["int", "int?", "string"], "1,,\n");
+    assert_eq!(rows[0][2], DataValue::string(""));
+    assert_eq!(counts.missing, 0);
+}
+
+/// A condition sees the null of a missing value,
+/// so it can keep only the rows that have the value, without a warning.
+#[test]
+fn a_condition_can_require_a_value_that_may_be_missing() {
+    let is_string = RowCondition::new(
+        vec![1],
+        StackProgram::new(
+            vec![OpCode::Input(0), OpCode::InDomains(DomainSet::STRING)],
+            Vec::new(),
+            1,
+        ),
+    );
+    let formats = ["int", "string?"].map(|name| ColumnFormat::from_name(name).expect("exists"));
+    let mut options = DsvOptions::csv(formats);
+    options.condition = Some(is_string);
+    let mut dictionary = Dictionary::new();
+    let loaded = DsvReader::new(options)
+        .read(
+            Cursor::new("1,a\n2,\n3,c\n"),
+            &mut dictionary,
+            EvaluationContext::now(),
+        )
+        .expect("the source reads");
+
+    assert_eq!((loaded.counts.excluded, loaded.counts.missing), (1, 0));
+    assert_eq!(
+        loaded.decoded(&dictionary),
+        vec![
+            vec![DataValue::integer(1), DataValue::string("a")],
+            vec![DataValue::integer(3), DataValue::string("c")],
+        ]
+    );
+}
+
+/// A column with the marker writes a null as an empty cell.
+/// A value whose cell would be empty has no form there, so its row is dropped.
+#[test]
+fn a_null_is_written_as_a_missing_value_where_the_column_admits_it() {
+    let rows: Vec<Vec<DataValue>> = vec![
+        vec![DataValue::integer(1), DataValue::string("a")],
+        vec![DataValue::null(7), DataValue::null(8)],
+        vec![DataValue::integer(3), DataValue::string("")],
+    ];
+    let write = |formats: [&str; 2]| {
+        let formats = formats.map(|name| ColumnFormat::from_name(name).expect("exists"));
+        let mut target = Vec::new();
+        let written = DsvWriter::new(DsvOptions::csv(formats))
+            .write(&mut target, rows.iter().map(Vec::as_slice))
+            .expect("the rows write");
+
+        (
+            String::from_utf8(target).expect("the output is text"),
+            written.dropped,
+        )
+    };
+
+    assert_eq!(write(["int?", "string?"]), (String::from("1,a\n,\n"), 1));
+
+    // Without the marker a null has no form, and the empty string is the empty cell.
+    assert_eq!(write(["int", "string"]), (String::from("1,a\n3,\n"), 1));
+
+    // A term column keeps the null, and its marker writes the null as a missing value.
+    assert_eq!(
+        write(["term", "term?"]),
+        (String::from("1,\"\"\"a\"\"\"\n_:7,\n3,\"\"\"\"\"\"\n"), 0)
     );
 }
 
@@ -174,7 +300,7 @@ fn a_null_is_a_null_of_its_resource() {
                 EvaluationContext::now(),
             )
             .expect("the source reads");
-        assert_eq!(loaded.malformed, 0);
+        assert_eq!(loaded.counts.malformed, 0);
 
         loaded.decoded(&dictionary)
     };
@@ -215,7 +341,7 @@ fn rows_with_nulls_meet_the_condition_and_the_limit() {
             .expect("the source reads");
         let rows = loaded.decoded(&dictionary);
 
-        (rows, loaded.excluded, loaded.malformed)
+        (rows, loaded.counts.excluded, loaded.counts.malformed)
     };
 
     let mut options = DsvOptions::csv_terms(2);
@@ -336,7 +462,7 @@ fn round_trip(rows: &[Vec<DataValue>]) -> Vec<Vec<DataValue>> {
     let loaded = DsvReader::new(DsvOptions::csv(vec![ValueFormat::Term; width]))
         .read(target.as_slice(), &mut dictionary, EvaluationContext::now())
         .expect("the output reads back");
-    assert_eq!(loaded.malformed, 0, "no row is malformed");
+    assert_eq!(loaded.counts.malformed, 0, "no row is malformed");
     loaded.decoded(&dictionary)
 }
 
@@ -374,7 +500,7 @@ fn the_limit_counts_rows_before_the_condition() {
             EvaluationContext::now(),
         )
         .expect("the source reads");
-    assert_eq!((loaded.rows.len(), loaded.excluded), (1, 2));
+    assert_eq!((loaded.rows.len(), loaded.counts.excluded), (1, 2));
     assert_eq!(
         dictionary.decode(loaded.rows.row(0)[0]).expect("decodes"),
         DataValue::integer(3).as_ref()

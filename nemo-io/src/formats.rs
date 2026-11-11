@@ -4,7 +4,7 @@
 //! Each module has a reader, which decodes resources into [loads](crate::load::Loaded).
 //! Every module except the SPARQL one also has a writer, which serializes rows.
 //!
-//! Every reader counts and admits its rows through the same methods of a load,
+//! Every reader passes its well-formed rows to the same intake of a load,
 //! so the selection's condition and the counts of dropped rows mean the same in every format.
 
 pub mod dsv;

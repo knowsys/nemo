@@ -286,7 +286,8 @@ diagnostic_kinds! {
                "expected a column format name, such as int, string, iri, term, or skip",
                explain "The `format` option contains something other than the names of \
                         column formats: a type named like a declarable scalar type, \
-                        `term`, or `skip`.";
+                        `term`, or `skip`. A `?` after a name, as in `int?`, makes the \
+                        column admit a missing value.";
         ReadOptionOnExport { option: String }
             => READ_OPTION_ON_EXPORT = 308, error, "option `{option}` only applies to imports",
                explain "An export was given an option that only affects reading, such as \
@@ -327,6 +328,13 @@ diagnostic_kinds! {
                explain "An import skipped rows that it could not read, for example rows \
                         with the wrong number of fields or with a value its column format \
                         does not accept.";
+        MissingValueRows { count: Count, resource: String }
+            => MISSING_VALUE_ROWS = 340, warning,
+               "skipped {count} row{count:#} with a missing value in `{resource}`",
+               explain "An import skipped rows that have no value in a column whose format \
+                        does not admit a missing value, such as an empty cell in an `int` \
+                        column. A `?` after the column's format, as in `int?`, reads a \
+                        missing value as a null and keeps the row.";
         InputUnsupplied { predicate: String }
             => INPUT_UNSUPPLIED = 315, warning,
                "input `{predicate}` is not bound by a `@use` in this run",

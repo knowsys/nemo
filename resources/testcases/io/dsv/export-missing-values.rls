@@ -1,0 +1,12 @@
+% A column whose format has the marker `?` writes a null as an empty
+% cell, which is read back as a missing value. The empty string has no
+% form in such a column, so its row is left out with a warning.
+
+named(1, "a") .
+named(3, "") .
+unnamed(2) .
+
+entry(?id, ?name) :- named(?id, ?name) .
+entry(?id, !name) :- unnamed(?id) .
+
+@export entry to csv { resource = "entries.csv", format = (int, string?) } .

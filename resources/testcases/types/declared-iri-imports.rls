@@ -1,8 +1,8 @@
-% Without formats of its own, an import takes them from the declaration:
-% an `iri` column reads each field as written as an IRI, numeric-looking
-% fields too.
+% An `iri` column reads each cell as written as an IRI, cells that look
+% like numbers too. The import states the format, and the declaration is
+% checked against it. A declaration alone chooses no format.
 
 @declare p(x: iri) .
-@import p from csv { resource = "sources/codes.csv" } .
+@import p from csv { resource = "sources/codes.csv", format = (iri) } .
 
 q(?x) :- p(?x) .

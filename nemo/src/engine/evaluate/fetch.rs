@@ -390,8 +390,8 @@ fn solutions(
                 });
             }
         };
-        fetched.malformed += loaded.malformed;
-        fetched.errors.absorb(&loaded.errors);
+        fetched.malformed += loaded.counts.malformed;
+        fetched.errors.absorb(&loaded.counts.errors);
         fetched.rows += loaded.rows.len() as u64;
         for index in 0..loaded.rows.len() {
             buffer.push_row(loaded.rows.row(index));

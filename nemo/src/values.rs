@@ -24,7 +24,7 @@ pub use type_syntax::TypeSyntax;
 pub use nemo_io::{
     compression::Compression,
     file_format::{FileFormat, RdfVariant},
-    value_format::ValueFormat,
+    value_format::{ColumnFormat, ValueFormat},
 };
 pub use nemo_physical::value::{
     DataValue, Date, DateTime, Decimal, DecimalRef, DomainSet, Double, Duration, Float, Iri,

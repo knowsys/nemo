@@ -150,7 +150,7 @@ impl Display for Term {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.kind {
             TermKind::Variable(variable) => write!(f, "{variable}"),
-            TermKind::Constant(name) => write!(f, "{name}"),
+            TermKind::Constant(name) => write!(f, "{}", name.as_constant()),
             TermKind::BlankNode(label) => write!(f, "_:{label}"),
             TermKind::String(string) => fmt_string(f, string),
             TermKind::LanguageString { text, language } => {

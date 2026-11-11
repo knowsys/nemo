@@ -1,0 +1,13 @@
+% An empty cell is a missing value. A column whose format has the marker
+% `?` reads it as a null of its own. In any other column the row is
+% dropped with a warning, unless the format reads the empty text, as
+% `string` does.
+
+@import strict from csv { resource = "sources/gaps.csv", format = (int, int, string) } .
+@import lenient from csv { resource = "sources/gaps.csv", format = (int, int?, string?) } .
+
+complete(?id, ?n, ?s) :- strict(?id, ?n, ?s) .
+withGaps(?id, ?n, ?s) :- lenient(?id, ?n, ?s) .
+
+% The nulls of two missing values differ, so rows do not join on them.
+sameNumber(?a, ?b) :- lenient(?a, ?n, _), lenient(?b, ?n, _), ?a < ?b .

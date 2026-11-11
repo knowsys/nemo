@@ -29,20 +29,20 @@ fn a_parse_error_points_at_its_source_and_fails() {
 }
 
 #[test]
-fn declared_columns_drop_rows_that_do_not_fit() {
+fn formats_drop_rows_that_do_not_fit() {
     let directory = workspace("declare");
     write(
         &directory,
         "program.rls",
         "@declare p(int) .\n\
-         @import p from csv { resource = \"data.csv\" } .\n\
+         @import p from csv { resource = \"data.csv\", format = (int) } .\n\
          q(?x) :- p(?x) .\n\
          @export q to csv {} .\n",
     );
     write(&directory, "data.csv", "1\nabc\n2\n");
 
     let outcome = run(&directory, &["program.rls", "-D", "out"]);
-    // The row outside the declared kind is dropped and warned about,
+    // The row that its column's format does not read is dropped and warned about,
     // never an error, and a warned run says so in its exit code.
     assert_eq!(outcome.status, Some(3), "{}", outcome.stderr);
     let written =
@@ -107,7 +107,7 @@ fn warnings_set_the_exit_code_unless_silenced() {
         &directory,
         "program.rls",
         "@declare p(int) .\n\
-         @import p from csv { resource = \"data.csv\" } .\n\
+         @import p from csv { resource = \"data.csv\", format = (int) } .\n\
          q(?x) :- p(?x) .\n\
          @output q .\n",
     );

@@ -23,7 +23,10 @@ use std::{
 };
 
 use nemo_io::{
-    compression::Compression, file_format::FileFormat, load::Loaded, selection::RowCondition,
+    compression::Compression,
+    file_format::FileFormat,
+    load::{Loaded, RowCounts},
+    selection::RowCondition,
     selection::RowSelection,
 };
 use nemo_physical::{diagnostics::Diagnostic, function::Outcome, management::TableId, value::Type};
@@ -71,33 +74,55 @@ pub(super) struct PendingImport {
     pub(super) rule_index: usize,
 }
 
-/// The malformed rows that a reader dropped from one resource,
-/// which are reported as a warning.
+/// The rows that a reader dropped from one resource, which are reported as warnings:
+/// one for the malformed rows, and one for the rows with a missing value.
 pub(crate) struct DroppedRows<'a> {
     /// The name of the resource.
     pub(crate) resource: &'a str,
-    /// The number of malformed rows.
-    pub(crate) malformed: u64,
-    /// The line of the first malformed row, if the reader knows it.
-    pub(crate) first_malformed: Option<u64>,
+    /// The counts of the load.
+    pub(crate) counts: &'a RowCounts,
+    /// Whether a marker on a column's format can admit the missing values.
+    pub(crate) marker: bool,
 }
 
 impl DroppedRows<'_> {
-    /// Reports the dropped rows to the pipeline as a warning, if there are any.
+    /// Reports the dropped rows to the pipeline, if there are any.
     pub(crate) fn report(&self, pipeline: &mut Pipeline) {
-        if self.malformed == 0 {
-            return;
+        let first = |line: Option<u64>| line.map(|line| format!("the first one is on line {line}"));
+
+        if self.counts.malformed > 0 {
+            let mut warning = TranslationError::MalformedRows {
+                count: self.counts.malformed.into(),
+                resource: self.resource.to_owned(),
+            }
+            .diagnostic()
+            .with_resource(self.resource.to_owned());
+            if let Some(note) = first(self.counts.first_malformed) {
+                warning = warning.with_note(note);
+            }
+
+            pipeline.report(warning);
         }
-        let mut warning = TranslationError::MalformedRows {
-            count: self.malformed.into(),
-            resource: self.resource.to_owned(),
+
+        if self.counts.missing > 0 {
+            let mut warning = TranslationError::MissingValueRows {
+                count: self.counts.missing.into(),
+                resource: self.resource.to_owned(),
+            }
+            .diagnostic()
+            .with_resource(self.resource.to_owned());
+            if let Some(note) = first(self.counts.first_missing) {
+                warning = warning.with_note(note);
+            }
+            if self.marker {
+                warning = warning.with_hint(
+                    "to read a missing value as a null, write a `?` after the column's format, \
+                     as in `format = (int?, string)`",
+                );
+            }
+
+            pipeline.report(warning);
         }
-        .diagnostic()
-        .with_resource(self.resource.to_owned());
-        if let Some(line) = self.first_malformed {
-            warning = warning.with_note(format!("the first one is on line {line}"));
-        }
-        pipeline.report(warning);
     }
 }
 
@@ -464,21 +489,25 @@ impl<'a> Translator<'a> {
     }
 
     /// Adds a load's rows to a table's fact buffer, and reports the rows that the load dropped.
-    fn absorb(&mut self, table: TableId, arity: usize, loaded: Loaded, resource: &str) {
+    ///
+    /// `marker` says whether a marker on a column's format can admit the resource's missing
+    /// values, which the warning about them then suggests.
+    fn absorb(
+        &mut self,
+        table: TableId,
+        arity: usize,
+        loaded: Loaded,
+        resource: &str,
+        marker: bool,
+    ) {
         DroppedRows {
             resource,
-            malformed: loaded.malformed,
-            first_malformed: loaded.first_malformed,
+            counts: &loaded.counts,
+            marker,
         }
         .report(self.pipeline);
-        self.errors.absorb(&loaded.errors);
-        tracing::debug!(
-            resource,
-            rows = loaded.rows.len(),
-            malformed = loaded.malformed,
-            excluded = loaded.excluded,
-            "import read"
-        );
+        self.errors.absorb(&loaded.counts.errors);
+        tracing::debug!(resource, rows = loaded.rows.len(), counts = ?loaded.counts, "import read");
         if self.telemetry.enabled() {
             self.telemetry
                 .record(&crate::telemetry::EngineEvent::Imported {

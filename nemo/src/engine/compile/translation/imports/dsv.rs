@@ -6,7 +6,7 @@ use std::sync::Arc;
 use nemo_io::{
     dsv::DsvOptions,
     load::{DsvResource, Resource, ResourceBatch},
-    value_format::ValueFormat,
+    value_format::{ColumnFormat, ValueFormat},
 };
 use nemo_physical::{diagnostics::Diagnostic, management::TableId, value::Type};
 
@@ -18,7 +18,6 @@ use crate::{
             imports::{ImportFailure, PendingImport, required_resource},
             options::DsvDirectiveOptions,
         },
-        compile::types,
         registered::Registered,
     },
 };
@@ -71,21 +70,19 @@ impl<'a> Translator<'a> {
         // The plan's positions are among the kept columns, which the directive does not skip.
         let kept = formats
             .iter()
-            .map(|format| !matches!(format, ValueFormat::Skip))
+            .map(|format| format.value != ValueFormat::Skip)
             .collect();
         let layout = self.plan.layout(&import.predicate, kept);
         let checked_only: Vec<bool> = formats
             .iter()
             .enumerate()
-            .map(|(column, format)| {
-                !matches!(format, ValueFormat::Skip) && !layout.delivers(column)
-            })
+            .map(|(column, format)| format.value != ValueFormat::Skip && !layout.delivers(column))
             .collect();
         // What the kept columns can hold follows from their formats
         // alone, so no file is read for it.
         let kept_types: Vec<Type> = formats
             .iter()
-            .filter(|format| !matches!(format, ValueFormat::Skip))
+            .filter(|format| format.value != ValueFormat::Skip)
             .map(|format| Type::of_domains(format.domains()))
             .collect();
         let table = self.register_import(import, kept_types, &layout)?;
@@ -121,63 +118,37 @@ impl<'a> Translator<'a> {
     /// Returns the column formats of a DSV import, one per source column,
     /// or `None` if nothing fixes the number of columns.
     ///
-    /// - The directive's `format` option fixes them,
-    ///   with each `term` replaced by the format of its column's declared type, if declared.
-    /// - Otherwise a `@declare` fixes them:
-    ///   each column is read in the format of its declared type.
+    /// - The directive's `format` option fixes them.
     /// - Otherwise the directive's column names fix the number of columns,
     ///   and every column is read as `term`.
-    /// - Otherwise the predicate's registration or the file gives the number of columns,
-    ///   and every column is read as `term`.
+    /// - Otherwise a `@declare`, the predicate's registration or the file gives the number of
+    ///   columns, and every column is read as `term`.
+    ///
+    /// A `@declare` chooses no format: it is checked against the types that the formats give.
     fn dsv_formats(
         &mut self,
         import: &PendingImport,
         directive: &DsvDirectiveOptions,
         resource: &str,
         fetched: Option<&Arc<[u8]>>,
-    ) -> Result<Option<Vec<ValueFormat>>, ImportFailure> {
+    ) -> Result<Option<Vec<ColumnFormat>>, ImportFailure> {
+        let terms = |columns: usize| vec![ColumnFormat::new(ValueFormat::Term); columns];
+
         if let Some(formats) = &directive.formats {
-            return Ok(Some(self.typed_formats(formats.clone(), &import.predicate)));
-        }
-        if let Some(declaration) = self.declarations.get(&import.predicate) {
-            return Ok(Some(
-                declaration
-                    .types
-                    .iter()
-                    .map(types::declared_format)
-                    .collect(),
-            ));
+            return Ok(Some(formats.clone()));
         }
         if !import.variables.is_empty() {
-            return Ok(Some(vec![ValueFormat::Term; import.variables.len()]));
+            return Ok(Some(terms(import.variables.len())));
         }
+        if let Some(declaration) = self.declarations.get(&import.predicate) {
+            return Ok(Some(terms(declaration.types.len())));
+        }
+
         let Some(kept) = self.dsv_width(import, directive, resource, fetched)? else {
             return Ok(None);
         };
-        Ok(Some(vec![ValueFormat::Term; kept]))
-    }
 
-    /// Returns the directive's column formats,
-    /// with each `term` replaced by the format of its column's declared type, if declared.
-    ///
-    /// The declaration's positions are among the kept columns.
-    fn typed_formats(&self, mut formats: Vec<ValueFormat>, predicate: &str) -> Vec<ValueFormat> {
-        let Some(declaration) = self.declarations.get(predicate) else {
-            return formats;
-        };
-        let mut column = 0;
-        for format in formats.iter_mut() {
-            if matches!(format, ValueFormat::Skip) {
-                continue;
-            }
-            if *format == ValueFormat::Term
-                && let Some(declared) = declaration.types.get(column)
-            {
-                *format = types::declared_format(declared);
-            }
-            column += 1;
-        }
-        formats
+        Ok(Some(terms(kept)))
     }
 
     /// Returns the number of kept columns of an import without formats or declaration,
@@ -250,7 +221,13 @@ impl<'a> Translator<'a> {
             .collect();
         let loaded = ResourceBatch::new(sources).load(self.dictionary, self.context)?;
         for (prepared, loaded) in batch.into_iter().zip(loaded) {
-            self.absorb(prepared.table, prepared.arity, loaded, &prepared.resource);
+            self.absorb(
+                prepared.table,
+                prepared.arity,
+                loaded,
+                &prepared.resource,
+                true,
+            );
         }
         Ok(())
     }

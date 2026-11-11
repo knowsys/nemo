@@ -20,7 +20,7 @@ use nemo_physical::{
 
 use crate::{
     AboutResource,
-    dsv::{DeferredReads, DsvReader, Parsed, RunPool},
+    dsv::{DsvReader, Parsed, ResourceLoad, RunPool},
     error::IoError,
     load::{DsvResource, Loaded, Resource},
 };
@@ -206,6 +206,7 @@ impl ResourceBatch {
         &self,
         window: &Window,
         runs: &RunPool,
+        context: EvaluationContext,
         emit: &mut dyn FnMut(Result<Parsed, Diagnostic>) -> bool,
     ) {
         let source = &self.sources[window.source];
@@ -220,12 +221,17 @@ impl ResourceBatch {
                 .options
                 .compression
                 .open_file(path)
-                .and_then(|file| reader.parse(file, runs, &mut deliver)),
+                .and_then(|file| reader.parse(file, runs, context, &mut deliver)),
             (Resource::Path(path), Some(range)) => File::open(path)
                 .and_then(|mut file| file.seek(SeekFrom::Start(range.start)).map(|_| file))
                 .map_err(|error| IoError::unreadable(path, error))
                 .and_then(|file| {
-                    reader.parse(file.take(range.end - range.start), runs, &mut deliver)
+                    reader.parse(
+                        file.take(range.end - range.start),
+                        runs,
+                        context,
+                        &mut deliver,
+                    )
                 }),
             (Resource::Bytes { bytes, .. }, range) => {
                 let slice: &[u8] = match range {
@@ -239,9 +245,9 @@ impl ResourceBatch {
                     }
                 };
                 if source.input.compressed(source.options.compression) {
-                    reader.parse(MultiGzDecoder::new(slice), runs, &mut deliver)
+                    reader.parse(MultiGzDecoder::new(slice), runs, context, &mut deliver)
                 } else {
-                    reader.parse(slice, runs, &mut deliver)
+                    reader.parse(slice, runs, context, &mut deliver)
                 }
             }
         };
@@ -274,10 +280,10 @@ impl ResourceBatch {
             Tasks::sequential(windows.len())
         };
 
-        let mut loads: Vec<Loaded> = self
+        let mut loads: Vec<ResourceLoad<'_>> = self
             .sources
             .iter()
-            .map(|source| Loaded::new(source.options.arity(), context))
+            .map(|source| ResourceLoad::new(&source.options, context))
             .collect();
 
         // For each resource, the lines that its earlier windows consumed,
@@ -286,12 +292,7 @@ impl ResourceBatch {
         let mut bases = vec![0u64; self.sources.len()];
         let mut current: Option<(usize, u64)> = None;
         let mut failure = None;
-        let runs = RunPool::new(context);
-        let mut reads: Vec<DeferredReads<'_>> = self
-            .sources
-            .iter()
-            .map(|source| DeferredReads::new(&source.options))
-            .collect();
+        let runs = RunPool::default();
         parallel::stream_tasks(
             tasks,
             |index| match windows[index].range {
@@ -299,7 +300,7 @@ impl ResourceBatch {
                 None => WHOLE_AHEAD_BYTES,
             },
             |run: &Result<Parsed, Diagnostic>| run.as_ref().map_or(0, Parsed::bytes),
-            |index, emit| self.parse(&windows[index], &runs, emit),
+            |index, emit| self.parse(&windows[index], &runs, context, emit),
             |index, run| {
                 let run = match run {
                     Ok(run) => run,
@@ -314,19 +315,15 @@ impl ResourceBatch {
 
                 current = Some((index, run.consumed_lines));
                 let source = windows[index].source;
-                run.encode_into(
-                    &mut loads[source],
-                    &mut reads[source],
-                    dictionary,
-                    bases[source],
-                );
+                run.encode_into(&mut loads[source], dictionary, bases[source]);
                 runs.give(run);
                 ControlFlow::Continue(())
             },
         );
-        for resource in reads {
-            resource.close(dictionary);
-        }
+        let loads = loads
+            .into_iter()
+            .map(|load| load.finish(dictionary))
+            .collect();
 
         match failure {
             Some(diagnostic) => Err(diagnostic),

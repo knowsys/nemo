@@ -5,8 +5,8 @@
 //! and the *arity* of a read is the number of delivered columns.
 
 use nemo_physical::{
-    function::{EvaluationContext, StackProgram},
-    value::{DataValue, EvaluationError},
+    function::{EvaluationContext, StackProgram, StackValue},
+    value::{DataValue, EvaluationError, ValueRef},
 };
 
 /// The projection and restriction that a reader applies to its resource.
@@ -38,40 +38,6 @@ impl RowSelection {
     /// Returns the number of delivered columns of a resource of the given width.
     pub fn arity(&self, width: usize) -> usize {
         (0..width).filter(|&position| self.keeps(position)).count()
-    }
-
-    /// Returns whether a delivered row passes the condition, which every row passes if there is
-    /// none.
-    ///
-    /// `context` is the evaluation context of the condition, such as the instant its `NOW()`
-    /// reads.
-    ///
-    /// # Errors
-    ///
-    /// Returns the evaluation error that left the row undecided,
-    /// as [RowCondition::evaluate] does.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the row has no value at a column that the condition reads.
-    pub fn evaluate(
-        &self,
-        context: EvaluationContext,
-        row: &[DataValue],
-    ) -> Result<bool, EvaluationError> {
-        self.condition
-            .as_ref()
-            .map_or(Ok(true), |condition| condition.evaluate(context, row))
-    }
-
-    /// Returns whether a delivered row passes the condition,
-    /// counting an evaluation error as a failure.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the row has no value at a column that the condition reads.
-    pub fn admits(&self, context: EvaluationContext, row: &[DataValue]) -> bool {
-        self.evaluate(context, row).unwrap_or(false)
     }
 }
 
@@ -133,15 +99,56 @@ impl RowCondition {
         context: EvaluationContext,
         row: &[DataValue],
     ) -> Result<bool, EvaluationError> {
-        let inputs: Vec<_> = self
-            .inputs
-            .iter()
-            .map(|&position| row[position].as_ref())
-            .collect();
-        let mut stack = Vec::with_capacity(self.program.stack_bound());
+        let mut buffers = ConditionBuffers::default();
 
-        self.program.filter(context, &mut stack, &inputs)
+        self.evaluate_with(context, &mut buffers, |position| row[position].as_ref())
     }
+
+    /// Returns the condition's effective boolean value for a delivered row,
+    /// as [evaluate](Self::evaluate) does, without allocating for the row.
+    ///
+    /// `value` returns the row's value at a delivered column,
+    /// and is called for the condition's [inputs](Self::inputs) only.
+    /// `buffers` are kept between the rows of a read.
+    pub(crate) fn evaluate_with<'a>(
+        &'a self,
+        context: EvaluationContext,
+        buffers: &mut ConditionBuffers,
+        value: impl Fn(usize) -> ValueRef<'a>,
+    ) -> Result<bool, EvaluationError> {
+        let mut inputs: Vec<ValueRef<'a>> = recycled(std::mem::take(&mut buffers.inputs));
+        let mut stack: Vec<StackValue<'a>> = recycled(std::mem::take(&mut buffers.stack));
+
+        inputs.extend(self.inputs.iter().map(|&position| value(position)));
+        let result = self.program.filter(context, &mut stack, &inputs);
+
+        buffers.inputs = recycled(inputs);
+        buffers.stack = recycled(stack);
+
+        result
+    }
+}
+
+/// The buffers of a condition's evaluations, which are kept between the rows of a read.
+#[derive(Debug, Default)]
+pub(crate) struct ConditionBuffers {
+    /// The buffer of the condition's inputs for one row.
+    inputs: Vec<ValueRef<'static>>,
+    /// The buffer of the evaluation stack.
+    stack: Vec<StackValue<'static>>,
+}
+
+/// Returns an emptied vector as a vector of another type of the same layout,
+/// such as the same type with another lifetime.
+///
+/// The vector keeps its allocation, since collecting in place reuses it.
+fn recycled<T, U>(mut values: Vec<T>) -> Vec<U> {
+    values.clear();
+
+    values
+        .into_iter()
+        .map(|_| unreachable!("the vector is empty"))
+        .collect()
 }
 
 #[cfg(test)]
@@ -188,6 +195,29 @@ mod tests {
             ),
             Ok(true)
         );
+    }
+
+    /// The buffers of an evaluation keep their allocations for the next row.
+    #[test]
+    fn evaluations_reuse_their_buffers() {
+        let condition = greater_than(1, 5);
+        let mut buffers = ConditionBuffers::default();
+        let mut evaluate = |text: &str, number: i64| {
+            // The row's values live only for this evaluation.
+            let row = [DataValue::string(text), DataValue::integer(number)];
+            let result =
+                condition.evaluate_with(EvaluationContext::now(), &mut buffers, |position| {
+                    row[position].as_ref()
+                });
+
+            (result, buffers.inputs.as_ptr(), buffers.stack.as_ptr())
+        };
+
+        let (first, inputs, stack) = evaluate("x", 7);
+        assert_eq!(first, Ok(true));
+        for number in 0..100 {
+            assert_eq!(evaluate("y", number), (Ok(number > 5), inputs, stack));
+        }
     }
 
     /// Creating a condition whose program takes a different number of inputs than it has columns

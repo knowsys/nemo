@@ -42,7 +42,7 @@ fn written_parquet_reads_back() {
     let loaded = ParquetReader::new()
         .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the file reads back");
-    assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (2, 0));
     let read = loaded.decoded(&dictionary);
     assert_eq!(read[0][0], DataValue::integer(1));
     assert_eq!(read[1][1], DataValue::double(1.5));
@@ -92,8 +92,15 @@ fn a_column_left_out_still_decides_whether_a_row_is_well_formed() {
         .read_path(&path, &mut Dictionary::new(), EvaluationContext::now())
         .expect("the file reads");
 
-    // The second row's null makes it malformed, whether its column is delivered or not.
-    assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));
+    // The second row's null is a missing value, whether its column is delivered or not.
+    assert_eq!(
+        (
+            loaded.rows.len(),
+            loaded.counts.missing,
+            loaded.counts.malformed
+        ),
+        (1, 1, 0)
+    );
     assert_eq!(loaded.rows.arity(), 1);
 }
 

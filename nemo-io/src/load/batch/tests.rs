@@ -145,8 +145,8 @@ fn batches_and_streams_agree_on_wide_values() {
         .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
 
-    assert_eq!(streamed.malformed, 0);
-    assert_eq!(batched[0].malformed, 0);
+    assert_eq!(streamed.counts.malformed, 0);
+    assert_eq!(batched[0].counts.malformed, 0);
     assert_eq!(streamed.rows.len(), 3);
     assert_eq!(batched[0].rows.len(), streamed.rows.len());
 }
@@ -255,8 +255,8 @@ fn windowed_malformed_rows_keep_their_global_lines() {
         .expect("the batch loads");
 
     assert_eq!(loaded[0].rows.len(), 401);
-    assert_eq!(loaded[0].malformed, 1);
-    assert_eq!(loaded[0].first_malformed, Some(401));
+    assert_eq!(loaded[0].counts.malformed, 1);
+    assert_eq!(loaded[0].counts.first_malformed, Some(401));
 }
 
 /// A batch counts malformed and excluded rows as a streaming read does.
@@ -290,8 +290,8 @@ e,9
         .expect("the batch loads");
     for loaded in [&streamed, &batched[0]] {
         assert_eq!(loaded.rows.len(), 2);
-        assert_eq!(loaded.malformed, 2);
-        assert_eq!(loaded.excluded, 1);
+        assert_eq!(loaded.counts.malformed, 2);
+        assert_eq!(loaded.counts.excluded, 1);
     }
 }
 
@@ -316,8 +316,8 @@ fn an_erroring_condition_is_counted_by_its_kind_in_both_paths() {
         .expect("the batch loads");
     for loaded in [&streamed, &batched[0]] {
         assert_eq!(loaded.rows.len(), 1);
-        assert_eq!(loaded.excluded, 1);
-        let errors = loaded.errors;
+        assert_eq!(loaded.counts.excluded, 1);
+        let errors = loaded.counts.errors;
         assert_eq!(
             (errors.count(EvaluationError::Incomparable), errors.total()),
             (1, 1)
@@ -366,11 +366,17 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
     // The first 200 well-formed rows are 0 to 199, past two malformed lines,
     // and the condition drops the six of them that are not above 5.
     assert_eq!(sequential.rows.len(), 194);
-    assert_eq!((sequential.excluded, sequential.malformed), (6, 2));
+    assert_eq!(
+        (sequential.counts.excluded, sequential.counts.malformed),
+        (6, 2)
+    );
     assert_eq!(windowed[0].rows.len(), sequential.rows.len());
-    assert_eq!(windowed[0].excluded, sequential.excluded);
-    assert_eq!(windowed[0].malformed, sequential.malformed);
-    assert_eq!(windowed[0].first_malformed, sequential.first_malformed);
+    assert_eq!(windowed[0].counts.excluded, sequential.counts.excluded);
+    assert_eq!(windowed[0].counts.malformed, sequential.counts.malformed);
+    assert_eq!(
+        windowed[0].counts.first_malformed,
+        sequential.counts.first_malformed
+    );
     assert_eq!(
         windowed[0].decoded(&windowed_dictionary),
         sequential.decoded(&sequential_dictionary)
@@ -449,11 +455,11 @@ fn runs_intern_like_a_straight_read() {
             };
             let batched = &batched[0];
             assert_eq!(raw(batched), raw(&sequential), "{path:?} {window_bytes}");
-            assert_eq!(batched.malformed, 2);
-            assert_eq!(batched.first_malformed, Some(3));
+            assert_eq!(batched.counts.malformed, 2);
+            assert_eq!(batched.counts.first_malformed, Some(3));
             assert_eq!(
-                (batched.well_formed, batched.excluded),
-                (sequential.well_formed, sequential.excluded)
+                (batched.counts.well_formed, batched.counts.excluded),
+                (sequential.counts.well_formed, sequential.counts.excluded)
             );
         }
     }

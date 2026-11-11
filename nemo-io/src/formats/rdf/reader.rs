@@ -8,7 +8,6 @@ use nemo_physical::{
     diagnostics::Diagnostic,
     dictionary::{Dictionary, LabelScope},
     function::EvaluationContext,
-    storage::StorageValue,
     value::DataValue,
 };
 
@@ -16,7 +15,7 @@ use crate::{
     compression::Compression,
     error::IoError,
     file_format::RdfVariant,
-    load::{BlankNodes, Loaded, Reader},
+    load::{BlankNodes, Loaded, Reader, RowIntake},
     selection::RowSelection,
 };
 
@@ -169,20 +168,19 @@ impl Reader for RdfReader {
         context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         let parser = self.parser()?;
-        let blanks = BlankNodes::open(self.blank_nodes, "document", dictionary);
-        let mut statements = Statements::new(&self.options, blanks, context);
+        let width = self.options.variant.width();
+        let mut statements = Statements {
+            quads: self.options.variant.quads(),
+            intake: RowIntake::new(width, &self.options.selection, context),
+            blanks: BlankNodes::open(self.blank_nodes, "document", dictionary),
+            kept: Vec::with_capacity(width),
+        };
         let read = self.read_statements(parser, source, &mut statements, dictionary);
         statements.blanks.close(dictionary);
         read?;
 
-        let loaded = statements.loaded;
-        tracing::debug!(
-            rows = loaded.rows.len(),
-            malformed = loaded.malformed,
-            excluded = loaded.excluded,
-            errors = ?loaded.errors,
-            "read an RDF source"
-        );
+        let loaded = statements.intake.finish();
+        tracing::debug!(rows = loaded.rows.len(), counts = ?loaded.counts, "read an RDF source");
 
         Ok(loaded)
     }
@@ -195,7 +193,7 @@ impl RdfReader {
         &self,
         parser: RdfParser,
         source: impl Read,
-        statements: &mut Statements<'_>,
+        statements: &mut Statements,
         dictionary: &mut Dictionary,
     ) -> Result<(), Diagnostic> {
         let limit = self.options.limit.unwrap_or(u64::MAX);
@@ -205,7 +203,7 @@ impl RdfReader {
             // None of the line's statements is kept, and the error does not affect the next line.
             let mut source = BufReader::new(source);
             let (mut line, mut quads, mut number) = (Vec::new(), Vec::new(), 0u64);
-            while statements.loaded.well_formed < limit {
+            while statements.intake.well_formed() < limit {
                 line.clear();
                 let read = source
                     .read_until(b'\n', &mut line)
@@ -221,12 +219,12 @@ impl RdfReader {
                     .for_slice(&line)
                     .all(|quad| quad.map(|quad| quads.push(quad)).is_ok());
                 if !parsed {
-                    statements.loaded.count_malformed(number);
+                    statements.intake.count_malformed(number);
                     continue;
                 }
 
                 for quad in quads.drain(..) {
-                    if statements.loaded.well_formed >= limit {
+                    if statements.intake.well_formed() >= limit {
                         break;
                     }
 
@@ -235,13 +233,13 @@ impl RdfReader {
             }
         } else {
             for quad in parser.for_reader(source) {
-                if statements.loaded.well_formed >= limit {
+                if statements.intake.well_formed() >= limit {
                     break;
                 }
 
                 match quad {
                     Ok(quad) => statements.take(quad, dictionary, 0),
-                    Err(oxrdfio::RdfParseError::Syntax(_)) => statements.loaded.count_malformed(0),
+                    Err(oxrdfio::RdfParseError::Syntax(_)) => statements.intake.count_malformed(0),
                     // The stream itself broke, and the error would repeat for
                     // every further statement, so the read ends.
                     Err(oxrdfio::RdfParseError::Io(error)) => {
@@ -255,105 +253,62 @@ impl RdfReader {
     }
 }
 
-/// The rows of one read, built from its statements.
-struct Statements<'a> {
-    /// The options of the read resource.
-    options: &'a RdfReaderOptions,
-    /// The rows loaded so far.
-    loaded: Loaded,
+/// The statements of one read, as they become the rows of its load.
+struct Statements {
+    /// Whether the statements are quads, whose rows start with the graph.
+    quads: bool,
+    /// The intake of the read's rows.
+    intake: RowIntake,
     /// The blank nodes of the read.
     blanks: BlankNodes,
-    /// The terms of the current statement as values, with `None` for a literal without a value.
-    terms: Vec<Option<DataValue>>,
     /// The delivered values of the current statement.
     kept: Vec<DataValue>,
-    /// A scratch buffer for the encoded row of the current statement.
-    row: Vec<StorageValue>,
 }
 
-impl<'a> Statements<'a> {
-    /// Creates the empty rows of a read with the given options.
+impl Statements {
+    /// Takes a statement as a row, or counts it as malformed.
     ///
-    /// `blanks` are the read's blank nodes,
-    /// and `context` is the evaluation context of the selection's condition.
-    fn new(options: &'a RdfReaderOptions, blanks: BlankNodes, context: EvaluationContext) -> Self {
-        let arity = options.variant.width();
-
-        Self {
-            options,
-            loaded: Loaded::new(options.selection.arity(arity), context),
-            blanks,
-            terms: Vec::with_capacity(arity),
-            kept: Vec::with_capacity(arity),
-            row: Vec::with_capacity(arity),
-        }
-    }
-
-    /// Adds a statement to the rows, or counts it as malformed.
+    /// - IRIs stay as they are, and the default graph becomes [DEFAULT_GRAPH].
+    /// - Blank nodes become the nulls that their labels name.
+    /// - Literals become their [values](literal_value),
+    ///   and a literal without a value makes the statement malformed,
+    ///   whether or not its column is delivered.
     ///
     /// `line` is the statement's line, or `0` if it is not known.
     fn take(&mut self, quad: oxrdf::Quad, dictionary: &mut Dictionary, line: u64) {
-        let selection = &self.options.selection;
-        statement(
-            quad,
-            self.options.variant.quads(),
-            &self.blanks,
-            dictionary,
-            &mut self.terms,
-        );
+        let object = match quad.object {
+            oxrdf::Term::NamedNode(node) => Some(DataValue::iri(node.into_string())),
+            oxrdf::Term::BlankNode(node) => Some(self.blanks.null(node.as_str(), dictionary)),
+            oxrdf::Term::Literal(literal) => literal_value(&literal),
+        };
+        let Some(object) = object else {
+            self.intake.count_malformed(line);
+            return;
+        };
 
-        // Every column decides whether the statement is well-formed,
-        // including the columns that are not delivered.
-        if self.terms.iter().all(Option::is_some) {
-            self.kept.clear();
-            self.kept.extend(
-                self.terms
-                    .drain(..)
-                    .enumerate()
-                    .filter(|(position, _)| selection.keeps(*position))
-                    .map(|(_, value)| value.expect("every term has a value")),
-            );
-            self.loaded
-                .take(&self.kept, selection, dictionary, &mut self.row, line);
-        } else {
-            self.loaded.count_malformed(line);
-        }
-    }
-}
-
-/// Writes the terms of a statement into `terms` as values,
-/// with the graph first if `quads` is true.
-///
-/// - IRIs stay as they are, and the default graph becomes [DEFAULT_GRAPH].
-/// - Blank nodes become the nulls that their labels name in `blanks`.
-/// - Literals become their [values](literal_value),
-///   and a literal without a value becomes `None`.
-fn statement(
-    quad: oxrdf::Quad,
-    quads: bool,
-    blanks: &BlankNodes,
-    dictionary: &mut Dictionary,
-    terms: &mut Vec<Option<DataValue>>,
-) {
-    terms.clear();
-    if quads {
-        terms.push(Some(match quad.graph_name {
+        let graph = self.quads.then(|| match quad.graph_name {
             oxrdf::GraphName::DefaultGraph => DataValue::iri(DEFAULT_GRAPH),
             oxrdf::GraphName::NamedNode(node) => DataValue::iri(node.into_string()),
-            oxrdf::GraphName::BlankNode(node) => blanks.null(node.as_str(), dictionary),
-        }));
-    }
+            oxrdf::GraphName::BlankNode(node) => self.blanks.null(node.as_str(), dictionary),
+        });
+        let subject = match quad.subject {
+            oxrdf::NamedOrBlankNode::NamedNode(node) => DataValue::iri(node.into_string()),
+            oxrdf::NamedOrBlankNode::BlankNode(node) => self.blanks.null(node.as_str(), dictionary),
+        };
+        let predicate = DataValue::iri(quad.predicate.into_string());
 
-    terms.push(Some(match quad.subject {
-        oxrdf::NamedOrBlankNode::NamedNode(node) => DataValue::iri(node.into_string()),
-        oxrdf::NamedOrBlankNode::BlankNode(node) => blanks.null(node.as_str(), dictionary),
-    }));
-    terms.push(Some(DataValue::iri(quad.predicate.into_string())));
-    terms.push(match quad.object {
-        oxrdf::Term::NamedNode(node) => Some(DataValue::iri(node.into_string())),
-        oxrdf::Term::BlankNode(node) => Some(blanks.null(node.as_str(), dictionary)),
-        oxrdf::Term::Literal(literal) => literal_value(&literal),
-    });
+        let selection = self.intake.selection();
+        self.kept.clear();
+        self.kept.extend(
+            graph
+                .into_iter()
+                .chain([subject, predicate, object])
+                .enumerate()
+                .filter(|(position, _)| selection.keeps(*position))
+                .map(|(_, value)| value),
+        );
+        self.intake.take(&self.kept, dictionary, line);
+    }
 }
 
 /// Returns the value of an RDF literal, or `None` for an invalid literal.

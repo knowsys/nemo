@@ -12,14 +12,13 @@ use std::{
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 
 use nemo_physical::{
-    diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext,
-    storage::StorageValue, value::DataValue,
+    diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext, value::DataValue,
 };
 
 use crate::{
     compression::Compression,
     error::IoError,
-    load::{Loaded, Reader},
+    load::{Loaded, Reader, RowIntake},
     selection::RowSelection,
     write::{Writer, Written},
 };
@@ -103,60 +102,43 @@ impl Reader for JsonReader {
             .diagnostic()
         })?;
 
-        let mut triples = Triples::new(&self.selection, context);
+        let mut triples = Triples {
+            intake: RowIntake::new(3, &self.selection, context),
+            kept: Vec::with_capacity(3),
+        };
         triples.walk(document, dictionary);
-        let loaded = triples.loaded;
-        tracing::debug!(
-            rows = loaded.rows.len(),
-            excluded = loaded.excluded,
-            errors = ?loaded.errors,
-            "read a JSON document"
-        );
+
+        let loaded = triples.intake.finish();
+        tracing::debug!(rows = loaded.rows.len(), counts = ?loaded.counts, "read a JSON document");
 
         Ok(loaded)
     }
 }
 
 /// The triples of a document's nodes, loaded as they are produced.
-struct Triples<'a> {
-    /// The selection that the reader applies to each triple.
-    selection: &'a RowSelection,
-    /// The rows loaded so far.
-    loaded: Loaded,
+struct Triples {
+    /// The intake of the read's rows.
+    intake: RowIntake,
     /// The delivered values of the current triple.
     kept: Vec<DataValue>,
-    /// A scratch buffer for the encoded values of the current triple.
-    encoded: Vec<StorageValue>,
 }
 
-impl<'a> Triples<'a> {
-    /// Creates an empty collection of triples under a selection.
-    ///
-    /// `context` is the evaluation context of the selection's condition.
-    fn new(selection: &'a RowSelection, context: EvaluationContext) -> Self {
-        Self {
-            selection,
-            loaded: Loaded::new(selection.arity(3), context),
-            kept: Vec::with_capacity(3),
-            encoded: Vec::with_capacity(3),
-        }
-    }
-
+impl Triples {
     /// Loads one triple.
     ///
     /// A triple with a value that the dictionary cannot hold, such as a very long string,
     /// is counted as malformed.
     fn push(&mut self, dictionary: &mut Dictionary, triple: [&DataValue; 3]) {
+        let selection = self.intake.selection();
         self.kept.clear();
         self.kept.extend(
             triple
                 .into_iter()
                 .enumerate()
-                .filter(|(position, _)| self.selection.keeps(*position))
+                .filter(|(position, _)| selection.keeps(*position))
                 .map(|(_, value)| value.clone()),
         );
-        self.loaded
-            .take(&self.kept, self.selection, dictionary, &mut self.encoded, 0);
+        self.intake.take(&self.kept, dictionary, 0);
     }
 
     /// Loads the triples of a document, breadth first.

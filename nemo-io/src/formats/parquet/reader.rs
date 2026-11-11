@@ -15,7 +15,11 @@ use nemo_physical::{
     diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext, value::DataValue,
 };
 
-use crate::{error::IoError, load::Loaded, selection::RowSelection};
+use crate::{
+    error::IoError,
+    load::{Loaded, RowIntake},
+    selection::RowSelection,
+};
 
 /// A reader of Parquet files, which decodes record batches into row buffers.
 ///
@@ -28,7 +32,8 @@ use crate::{error::IoError, load::Loaded, selection::RowSelection};
 /// - booleans as booleans.
 ///
 /// A column of any other type fails the read with an error that names the type.
-/// A row with a null cell is malformed and counted, since a value cannot be missing in a table.
+/// A null cell is a missing value, which no column admits:
+/// its row is dropped and counted among the rows with a missing value.
 #[derive(Debug, Clone, Default)]
 pub struct ParquetReader {
     /// The columns delivered and the rows admitted.
@@ -119,9 +124,7 @@ impl ParquetReader {
             .build()
             .map_err(|error| IoError::unreadable(path, error))?;
 
-        let arity = delivered.iter().filter(|&&delivered| delivered).count();
-        let mut loaded = Loaded::new(arity, context);
-        let mut row = Vec::new();
+        let mut intake = RowIntake::new(width, &self.selection, context);
         let mut kept: Vec<DataValue> = Vec::new();
         for batch in reader {
             let batch = batch.map_err(|error| IoError::unreadable(path, error))?;
@@ -139,7 +142,7 @@ impl ParquetReader {
             for index in 0..batch.num_rows() {
                 kept.clear();
 
-                // `None` here is a null cell, so the row is malformed.
+                // `None` here is a null cell, which is a missing value that no column admits.
                 let complete = columns.iter().zip(&delivered).all(|(column, &delivered)| {
                     if !delivered {
                         return !column.is_null(index);
@@ -151,20 +154,15 @@ impl ParquetReader {
                     })
                 });
                 if complete {
-                    loaded.take(&kept, &self.selection, dictionary, &mut row, 0);
+                    intake.take(&kept, dictionary, 0);
                 } else {
-                    loaded.count_malformed(0);
+                    intake.count_missing(0);
                 }
             }
         }
 
-        tracing::debug!(
-            rows = loaded.rows.len(),
-            malformed = loaded.malformed,
-            excluded = loaded.excluded,
-            errors = ?loaded.errors,
-            "read a Parquet file"
-        );
+        let loaded = intake.finish();
+        tracing::debug!(rows = loaded.rows.len(), counts = ?loaded.counts, "read a Parquet file");
 
         Ok(loaded)
     }

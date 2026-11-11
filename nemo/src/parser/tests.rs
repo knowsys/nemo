@@ -38,6 +38,9 @@ const ROUND_TRIPS: &[&str] = &[
     "@import age(?who, ?years) from csv { resource = \"a.csv\" } where isInteger(?years), ?years >= 0 .",
     "@import q(?x, ?y) from sparql { endpoint = <https://e/sparql> } where b(?x), ?y > 3 .",
     "@export reach to csv { resource = \"reach.csv\" } .",
+    "@import age from csv { resource = \"a.csv\", format = (iri, int?, skip) } .",
+    "casts(int, iri, <true>) .",
+    "@export age to csv { resource = \"a.csv\", format = string? } .",
     "@output reach .",
     "person(name: \"alice\", age: 34) .",
     "adult(?p) :- person(name: ?p, age: ?a), ?a >= 18 .",
@@ -841,4 +844,23 @@ fn a_parse_diagnostic_has_its_line_and_column() {
     // The second argument, on line 2, is missing.
     let problem = Term::parse("f(1,\n  )").expect_err("an argument is missing");
     assert_eq!(line_column(&problem), (2, 3));
+}
+
+/// The marker `?` after a name belongs to the column formats of a `format` option.
+/// Anywhere else it is a variable without a name.
+#[test]
+fn the_marker_of_a_missing_value_belongs_to_column_formats() {
+    for source in [
+        "p(int?) .",
+        "p(?x) :- q(?x, name?) .",
+        "@import p from csv { resource = name? } .",
+        "@import p from csv { format = (int ?) } .",
+        "@import p from csv { format = (<int>?) } .",
+    ] {
+        let (_, diagnostics) = Program::parse(source);
+        assert!(!diagnostics.is_empty(), "{source}");
+    }
+
+    let (_, diagnostics) = Program::parse("p(int?) .");
+    assert_eq!(diagnostics[0].code(), crate::codes::MARKER_WITHOUT_NAME);
 }

@@ -50,7 +50,7 @@ fn written_turtle_reads_back() {
     let loaded = RdfReader::new(RdfReaderOptions::new(RdfVariant::Turtle))
         .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
         .expect("the output reads back");
-    assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (2, 0));
     let read = loaded.decoded(&dictionary);
     assert_eq!(read[0][0], DataValue::iri("http://example.org/a"));
     assert_eq!(read[0][2], DataValue::integer(42));
@@ -140,8 +140,8 @@ fn a_malformed_line_is_one_malformed_row() {
             EvaluationContext::now(),
         )
         .expect("the triples read");
-    assert_eq!((loaded.rows.len(), loaded.malformed), (2, 3));
-    assert_eq!(loaded.first_malformed, Some(1));
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (2, 3));
+    assert_eq!(loaded.counts.first_malformed, Some(1));
     let subjects: Vec<DataValue> = loaded
         .decoded(&dictionary)
         .into_iter()
@@ -167,7 +167,7 @@ fn the_limit_counts_statements_before_the_condition() {
     let loaded = RdfReader::new(options)
         .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
-    assert_eq!((loaded.rows.len(), loaded.excluded), (1, 2));
+    assert_eq!((loaded.rows.len(), loaded.counts.excluded), (1, 2));
     assert_eq!(
         dictionary.decode(loaded.rows.row(0)[2]).expect("decodes"),
         DataValue::integer(3).as_ref()
