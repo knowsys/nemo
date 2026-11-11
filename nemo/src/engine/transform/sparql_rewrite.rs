@@ -58,7 +58,7 @@
 //!   integer 3, may add rows through a constant or a join between merged atoms.
 //!   A bound import never keeps a solution that its bindings do not justify,
 //!   since it keeps only the solutions that match them as Nemo compares values
-//!   ([SparqlReader::with_bindings](nemo_io::sparql::SparqlReader::with_bindings)).
+//!   ([SparqlReader::with_values](nemo_io::sparql::SparqlReader::with_values)).
 //!   All of this needs a store that keeps one value in several forms.
 //!   Where a store has each value in one form, and for IRIs,
 //!   Nemo and the endpoint compare in the same way.

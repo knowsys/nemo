@@ -282,7 +282,7 @@ impl RewriteContext {
             let Some(candidate) = self.candidates.get(&name) else {
                 continue;
             };
-            if atom.terms.len() != candidate.query.arity() {
+            if atom.terms.len() != candidate.query.width() {
                 return None;
             }
             let mut bindings = Vec::with_capacity(atom.terms.len());

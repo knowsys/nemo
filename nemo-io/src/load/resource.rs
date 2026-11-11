@@ -2,7 +2,7 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use crate::{formats::dsv::DsvOptions, stream::compression::Compression};
+use crate::{compression::Compression, dsv::DsvOptions};
 
 /// Where a resource's bytes come from.
 #[derive(Debug, Clone)]
@@ -34,8 +34,8 @@ impl Resource {
     /// For a file, this depends on its name, and for bytes on their content.
     pub(crate) fn compressed(&self, compression: Compression) -> bool {
         match self {
-            Resource::Path(path) => compression.applies(path),
-            Resource::Bytes { bytes, .. } => compression.applies_to_bytes(bytes),
+            Resource::Path(path) => compression.gzip_for_name(path),
+            Resource::Bytes { bytes, .. } => compression.gzip_for_bytes(bytes),
         }
     }
 }

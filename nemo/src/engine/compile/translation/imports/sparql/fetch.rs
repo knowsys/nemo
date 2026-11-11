@@ -69,6 +69,7 @@ impl<'a> Translator<'a> {
     ) -> Result<(CompiledRule, Vec<Option<String>>), Diagnostic> {
         let positions = column_positions(import, spec.layout.source_width())?;
         if let QueryShape::Opaque(reason) = spec.query.shape() {
+            let reason = reason.to_owned();
             return Err(TranslationError::OpaqueQueryBound { reason }.at(import.span));
         }
         let scratch = self.fetch_scratch(&import.predicate, spec.layout.delivered())?;

@@ -26,7 +26,7 @@ pub(crate) fn rdf_export_arity(
     arity: usize,
 ) -> TranslationError {
     TranslationError::RdfExportArity {
-        columns: variant.arity().into(),
+        columns: variant.width().into(),
         layout: String::from(if variant.quads() {
             " (graph, subject, predicate, object)"
         } else {
@@ -162,7 +162,7 @@ impl<'a> Translator<'a> {
                 continue;
             };
             match &spec.format {
-                ExportFormat::Rdf { variant, .. } if arity != variant.arity() => {
+                ExportFormat::Rdf { variant, .. } if arity != variant.width() => {
                     problems.push(rdf_export_arity(*variant, &spec.predicate, arity).at(span));
                 }
                 ExportFormat::Dsv {

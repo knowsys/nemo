@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use nemo_io::{
     dsv::DsvOptions,
-    format::ValueFormat,
     load::{DsvResource, Resource, ResourceBatch},
+    value_format::ValueFormat,
 };
 use nemo_physical::{diagnostics::Diagnostic, management::TableId, value::Type};
 
@@ -99,7 +99,7 @@ impl<'a> Translator<'a> {
         options.quoting = directive.quoting;
         options.ignore_headers = directive.ignore_headers;
         options.compression = directive.compression;
-        options.filter = self
+        options.condition = self
             .import_condition(import, &layout)?
             .map(|(_, filter)| filter);
         options.limit = directive.limit;
@@ -203,14 +203,14 @@ impl<'a> Translator<'a> {
                 }
                 let sniffed =
                     match self.source_stream(resource, directive.compression, fetched.cloned()) {
-                        Some(source) => DsvOptions::sniff_arity_from(
+                        Some(source) => DsvOptions::sniff_width_from(
                             source,
                             directive.delimiter,
                             directive.quoting,
                             directive.ignore_headers,
                         )
                         .map_err(|diagnostic| diagnostic.with_resource(resource.to_owned())),
-                        None => DsvOptions::sniff_arity(
+                        None => DsvOptions::sniff_width(
                             self.resource_path(import.span, resource),
                             directive.delimiter,
                             directive.quoting,

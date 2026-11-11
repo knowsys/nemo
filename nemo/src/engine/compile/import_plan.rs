@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use nemo_io::{row_filter::RowFilter, selection::RowSelection};
+use nemo_io::selection::{RowCondition, RowSelection};
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
@@ -25,7 +25,7 @@ pub(crate) struct ImportPlan {
     /// Per predicate, whether the load prunes each kept column.
     pruned: HashMap<String, Vec<bool>>,
     /// Per predicate, the condition over its delivered columns.
-    filters: HashMap<String, RowFilter>,
+    filters: HashMap<String, RowCondition>,
     /// Per predicate, the condition as written, from which its [filter](Self::filters) was
     /// compiled.
     ///
@@ -70,7 +70,7 @@ impl ImportPlan {
     }
 
     /// Returns the condition that the delivered rows of a predicate must satisfy, if it has one.
-    pub(crate) fn filter(&self, name: &str) -> Option<&RowFilter> {
+    pub(crate) fn filter(&self, name: &str) -> Option<&RowCondition> {
         self.filters.get(name)
     }
 
@@ -88,7 +88,7 @@ impl ImportPlan {
         RowSelection {
             columns: (layout.delivered() != layout.source_width())
                 .then(|| layout.delivered_columns()),
-            filter: self.filters.get(name).cloned(),
+            condition: self.filters.get(name).cloned(),
         }
     }
 
@@ -98,7 +98,7 @@ impl ImportPlan {
     }
 
     /// Records a predicate's row condition, compiled and as written.
-    pub(crate) fn restrict(&mut self, name: String, filter: RowFilter, condition: Operation) {
+    pub(crate) fn restrict(&mut self, name: String, filter: RowCondition, condition: Operation) {
         self.conditions.insert(name.clone(), condition);
         self.filters.insert(name, filter);
     }
@@ -157,7 +157,7 @@ impl ImportPlan {
             }
             self.pruned.insert(name, was_pruned);
         }
-        let mut filters: Vec<(String, RowFilter)> = stored.filters.into_iter().collect();
+        let mut filters: Vec<(String, RowCondition)> = stored.filters.into_iter().collect();
         filters.sort_by(|left, right| left.0.cmp(&right.0));
         for (name, filter) in filters {
             if self.filters.get(&name) != Some(&filter) {

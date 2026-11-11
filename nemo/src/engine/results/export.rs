@@ -3,7 +3,7 @@
 
 use nemo_io::{
     compression::Compression,
-    written::{Writer, Written},
+    write::{Writer, Written},
 };
 use nemo_physical::{diagnostics::Diagnostic, value::DataValue};
 
@@ -59,8 +59,8 @@ pub enum ExportFormat {
         /// The file extension that goes with the format's name, such as `csv`.
         extension: String,
         /// The declared column formats, or `None` to write every column in the
-        /// [Term](nemo_io::format::ValueFormat::Term) format.
-        formats: Option<Vec<nemo_io::format::ValueFormat>>,
+        /// [Term](nemo_io::value_format::ValueFormat::Term) format.
+        formats: Option<Vec<nemo_io::value_format::ValueFormat>>,
     },
     /// An RDF serialization.
     ///
@@ -94,7 +94,7 @@ impl ExportFormat {
 
 impl ExportSpec {
     /// Creates a specification that writes a predicate as comma-separated values,
-    /// with every column in the [Term](nemo_io::format::ValueFormat::Term) format.
+    /// with every column in the [Term](nemo_io::value_format::ValueFormat::Term) format.
     pub fn csv(predicate: impl Into<String>) -> Self {
         Self {
             predicate: predicate.into(),
@@ -309,7 +309,7 @@ impl Engine {
                 }
                 .diagnostic())
             }
-            ExportFormat::Rdf { variant, .. } if !rows.is_empty() && arity != variant.arity() => {
+            ExportFormat::Rdf { variant, .. } if !rows.is_empty() && arity != variant.width() => {
                 Err(rdf_export_arity(*variant, &spec.predicate, arity).diagnostic())
             }
             _ => Ok(rows),
@@ -318,7 +318,7 @@ impl Engine {
 
     /// Returns the configured writer of one export specification.
     fn export_writer(&self, spec: &ExportSpec) -> Result<ExportWriter, Diagnostic> {
-        use nemo_io::format::ValueFormat;
+        use nemo_io::value_format::ValueFormat;
 
         Ok(match &spec.format {
             ExportFormat::Dsv {

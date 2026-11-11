@@ -66,7 +66,7 @@ struct SparqlDirectiveOptions {
     /// The base IRI's source position, if given.
     base_span: Option<crate::model::Span>,
     /// The column formats of the `format` option, if given.
-    formats: Option<Vec<nemo_io::format::ValueFormat>>,
+    formats: Option<Vec<nemo_io::value_format::ValueFormat>>,
     /// The column formats' source position, if given.
     formats_span: Option<crate::model::Span>,
     /// The largest number of rows of one atom that a request of a bound import sends.
@@ -195,13 +195,13 @@ impl<'a> Translator<'a> {
         })?;
         // This is checked before anything is fetched,
         // since the solutions of a query without a projection have no columns to import.
-        if query.arity() == 0 {
+        if query.width() == 0 {
             return Err(TranslationError::SparqlNoProjection.at(options.query_span));
         }
         let kept = term_columns(
             import.format,
             options.formats.as_deref(),
-            query.arity(),
+            query.width(),
             options.formats_span.or(import.span),
         )?;
         let layout = self.plan.layout(&import.predicate, kept);

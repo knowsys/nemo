@@ -299,7 +299,7 @@ mod tests {
     /// A partial response is recognized by its status 206 or by its headers,
     /// and a response with neither is whole.
     #[test]
-    fn partial_responses_are_told_by_status_and_headers() {
+    fn partial_responses_are_recognized_by_status_and_headers() {
         let none = |_: &str| None;
         assert_eq!(Failure::of_partial_response(200, none), None);
         assert!(Failure::of_partial_response(206, none).is_some_and(|failure| failure.partial));

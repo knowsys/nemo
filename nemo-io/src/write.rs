@@ -4,7 +4,7 @@ use std::{fs::File, io::Write, path::Path};
 
 use nemo_physical::{diagnostics::Diagnostic, value::DataValue};
 
-use crate::{AboutResource, error::IoError, stream::compression::Compression};
+use crate::{AboutResource, compression::Compression, error::IoError};
 
 /// A writer of one format, which serializes rows onto a byte stream.
 ///
@@ -48,7 +48,7 @@ pub trait Writer {
     ) -> Result<Written, Diagnostic> {
         let mut stream = self.compression().wrap(target, name);
         let written = self.write(&mut stream, rows)?;
-        stream.finish().map_err(IoError::stream_unwritable)?;
+        stream.finish().map_err(IoError::output_unwritable)?;
         Ok(written)
     }
 

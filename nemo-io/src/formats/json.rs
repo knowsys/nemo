@@ -17,11 +17,11 @@ use nemo_physical::{
 };
 
 use crate::{
+    compression::Compression,
     error::IoError,
     load::{Loaded, Reader},
     selection::RowSelection,
-    stream::compression::Compression,
-    written::{Writer, Written},
+    write::{Writer, Written},
 };
 
 /// A reader of JSON documents, which decodes a document into node/edge triples.
@@ -95,7 +95,7 @@ impl Reader for JsonReader {
         let mut document = Vec::new();
         source
             .read_to_end(&mut document)
-            .map_err(IoError::stream_unreadable)?;
+            .map_err(IoError::input_unreadable)?;
         let document = Node::parse(&document).map_err(|error| {
             IoError::NotJson {
                 reason: error.to_string(),
@@ -444,7 +444,7 @@ impl<'de> Visitor<'de> for NodeSeed<'_, '_> {
 /// - plain strings as strings.
 ///
 /// Every other value is written as a string,
-/// the text that [any_cell](crate::format::ValueFormat::any_cell) gives for it.
+/// the text that [any_cell](crate::value_format::ValueFormat::any_cell) gives for it.
 /// The output is meant for other programs, and is not read back as rows:
 /// the [JsonReader] reads any document as node/edge triples.
 #[derive(Debug, Clone, Default)]
@@ -472,20 +472,20 @@ impl Writer for JsonWriter {
     ) -> Result<Written, Diagnostic> {
         let mut target = target;
         let mut written = Written::default();
-        target.write_all(b"[").map_err(IoError::stream_unwritable)?;
+        target.write_all(b"[").map_err(IoError::output_unwritable)?;
         for row in rows {
             let cells: Vec<serde_json::Value> = row.iter().map(cell).collect();
             let separator: &[u8] = if written.rows == 0 { b"\n" } else { b",\n" };
             target
                 .write_all(separator)
-                .map_err(IoError::stream_unwritable)?;
-            serde_json::to_writer(&mut target, &cells).map_err(IoError::stream_unwritable)?;
+                .map_err(IoError::output_unwritable)?;
+            serde_json::to_writer(&mut target, &cells).map_err(IoError::output_unwritable)?;
             written.rows += 1;
         }
         target
             .write_all(b"\n]\n")
-            .map_err(IoError::stream_unwritable)?;
-        target.flush().map_err(IoError::stream_unwritable)?;
+            .map_err(IoError::output_unwritable)?;
+        target.flush().map_err(IoError::output_unwritable)?;
         Ok(written)
     }
 }
@@ -505,7 +505,7 @@ fn cell(value: &DataValue) -> serde_json::Value {
         }
         ValueRef::Boolean(value) => serde_json::Value::from(value),
         ValueRef::String(text) => serde_json::Value::from(text),
-        other => serde_json::Value::from(crate::format::ValueFormat::any_cell(other)),
+        other => serde_json::Value::from(crate::value_format::ValueFormat::any_cell(other)),
     }
 }
 

@@ -9,12 +9,12 @@
 //!
 //! The crate has three layers.
 //! At the top is the vocabulary that every format shares:
-//! - Cell [formats](mod@format) read the text of cells as values, and write values as cells.
+//! - Cell [formats](mod@value_format) read the text of cells as values, and write values as cells.
 //! - A [file format](file_format::FileFormat) names a serialization and its metadata.
 //! - A [selection](selection::RowSelection) says which columns a reader delivers,
-//!   and its [condition](row_filter) says which rows it admits.
+//!   and its [condition](selection::RowCondition) says which rows it admits.
 //! - Every reader produces the same kind of [load](load::Loaded),
-//!   and every writer reports the same kind of [outcome](written::Written).
+//!   and every writer reports the same kind of [outcome](write::Written).
 //!
 //! In the middle are the format adapters, each with a reader and, except for SPARQL, a writer:
 //! [dsv], [rdf], [json], [sparql], and `parquet` behind its feature.
@@ -33,15 +33,14 @@ pub use error::AboutResource;
 pub mod arrow;
 pub mod codes;
 pub mod file_format;
-pub mod format;
 mod formats;
 pub mod load;
-pub mod row_filter;
 pub mod selection;
 mod stream;
 #[cfg(test)]
 mod testing;
-pub mod written;
+pub mod value_format;
+pub mod write;
 
 #[cfg(feature = "parquet")]
 pub use formats::parquet;

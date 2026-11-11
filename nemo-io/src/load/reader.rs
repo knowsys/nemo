@@ -4,11 +4,7 @@ use std::{io::Read, path::Path};
 
 use nemo_physical::{diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext};
 
-use crate::{
-    AboutResource,
-    load::Loaded,
-    stream::compression::{Compression, open},
-};
+use crate::{AboutResource, compression::Compression, load::Loaded};
 
 /// A reader of one format, which reads rows from a byte stream and interns their values into a
 /// dictionary.
@@ -48,7 +44,7 @@ pub trait Reader {
         context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         let path = path.as_ref();
-        self.read(open(path, self.compression())?, dictionary, context)
+        self.read(self.compression().open_file(path)?, dictionary, context)
             .map_err(|diagnostic| diagnostic.with_resource(path.display().to_string()))
     }
 }

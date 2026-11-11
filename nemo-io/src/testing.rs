@@ -9,12 +9,12 @@ use nemo_physical::{
     value::DataValue,
 };
 
-use crate::row_filter::RowFilter;
+use crate::selection::RowCondition;
 
 /// Returns the condition that the delivered column at `column` is greater than the integer
 /// `bound`.
-pub(crate) fn greater_than(column: usize, bound: i64) -> RowFilter {
-    RowFilter::new(
+pub(crate) fn greater_than(column: usize, bound: i64) -> RowCondition {
+    RowCondition::new(
         vec![column],
         StackProgram::new(
             vec![OpCode::Input(0), OpCode::Constant(0), OpCode::Greater],

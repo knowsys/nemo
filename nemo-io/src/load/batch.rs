@@ -20,10 +20,9 @@ use nemo_physical::{
 
 use crate::{
     AboutResource,
+    dsv::{DsvReader, Parsed, RunPool},
     error::IoError,
-    formats::dsv::{DsvReader, Parsed, RunPool},
     load::{DsvResource, Loaded, Resource},
-    stream::compression,
 };
 
 /// The size a window aims for.
@@ -212,7 +211,10 @@ impl ResourceBatch {
         let reader = DsvReader::new(options);
         let mut deliver = |run: Parsed| emit(Ok(run));
         let result = match (&source.input, &window.range) {
-            (Resource::Path(path), None) => compression::open(path, source.options.compression)
+            (Resource::Path(path), None) => source
+                .options
+                .compression
+                .open_file(path)
                 .and_then(|file| reader.parse(file, runs, &mut deliver)),
             (Resource::Path(path), Some(range)) => File::open(path)
                 .and_then(|mut file| file.seek(SeekFrom::Start(range.start)).map(|_| file))

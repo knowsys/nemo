@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::stream::remote::{Client, Failure, Request, Response, Retry};
+use crate::remote::{Client, Failure, Request, Response, Retry};
 
 /// A [Client] that sends requests over HTTP with `reqwest`'s blocking client.
 ///

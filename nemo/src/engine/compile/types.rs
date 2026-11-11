@@ -23,7 +23,7 @@ mod proofs;
 
 use std::collections::{HashMap, HashSet};
 
-use nemo_io::format::ValueFormat;
+use nemo_io::value_format::ValueFormat;
 use nemo_physical::{
     diagnostics::Diagnostic,
     management::TableId,

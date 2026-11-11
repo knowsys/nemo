@@ -345,7 +345,7 @@ fn requests(
 /// with the fetch's statistics.
 ///
 /// Only the solutions that match a request's binding rows, as Nemo compares values, are kept
-/// ([with_bindings](nemo_io::sparql::SparqlReader::with_bindings)).
+/// ([with_values](nemo_io::sparql::SparqlReader::with_values)).
 /// A failed request, or a response that cannot be read, fails the application,
 /// unless the import sets `on_error = warn`.
 fn solutions(
@@ -355,7 +355,7 @@ fn solutions(
     dictionary: &mut Dictionary,
     context: EvaluationContext,
 ) -> Result<(RowBuffer, Fetched), Diagnostic> {
-    let written = fetch.query.arity();
+    let written = fetch.query.width();
     let mut buffer = RowBuffer::new(arity);
     let mut fetched = Fetched {
         requests: pending.made,
@@ -364,7 +364,7 @@ fn solutions(
     };
     for slot in pending.slots.0 {
         let reader = sparql::SparqlReader::new(written, fetch.selection.clone())
-            .with_bindings(&slot.key)
+            .with_values(&slot.key)
             .with_endpoint_blank_nodes();
         let response = slot
             .response

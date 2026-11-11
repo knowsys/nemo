@@ -8,10 +8,10 @@ use std::{fs, io::Cursor};
 use nemo_physical::{storage::StorageValue, value::EvaluationError};
 
 use crate::{
-    format::ValueFormat,
-    formats::dsv::DsvOptions,
+    dsv::DsvOptions,
     load::Reader,
     testing::{TempDirectory, greater_than},
+    value_format::ValueFormat,
 };
 
 /// Three files loaded as a batch are interned as the same values that sequential reads give,
@@ -234,7 +234,7 @@ e,9
     )
     .expect("the temp file writes");
     let mut options = DsvOptions::csv(vec![ValueFormat::Term, ValueFormat::Integer]);
-    options.filter = Some(greater_than(1, 5));
+    options.condition = Some(greater_than(1, 5));
 
     let mut dictionary = Dictionary::new();
     let streamed = DsvReader::new(options.clone())
@@ -260,7 +260,7 @@ fn an_erroring_condition_is_counted_by_its_kind_in_both_paths() {
     let path = directory.join("nemo_io_filter_errors.csv");
     fs::write(&path, "a,7\nb,x\nc,3\n").expect("the temp file writes");
     let mut options = DsvOptions::csv(vec![ValueFormat::Term, ValueFormat::Term]);
-    options.filter = Some(greater_than(1, 5));
+    options.condition = Some(greater_than(1, 5));
 
     let mut dictionary = Dictionary::new();
     let streamed = DsvReader::new(options.clone())
@@ -299,7 +299,7 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
     fs::write(&path, &content).expect("the temp file writes");
     let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Integer]);
     options.quoting = false;
-    options.filter = Some(greater_than(1, 5));
+    options.condition = Some(greater_than(1, 5));
     options.limit = Some(200);
     let source = DsvResource::path(path.clone(), options.clone());
 
@@ -372,7 +372,7 @@ fn runs_intern_like_a_straight_read() {
     ]);
     options.quoting = false;
     let mut filtered = options.clone();
-    filtered.filter = Some(greater_than(1, 5));
+    filtered.condition = Some(greater_than(1, 5));
 
     for options in [options, filtered] {
         for (path, window_bytes) in [

@@ -27,7 +27,7 @@ use crate::engine::{
 /// Returns the position in the stored row of each column of the query,
 /// or `None` for a column the selection drops.
 fn delivered_positions(fetch: &CompiledFetch) -> Vec<Option<usize>> {
-    let written = fetch.query.arity();
+    let written = fetch.query.width();
     let mut delivered: Vec<Option<usize>> = Vec::with_capacity(written);
     let mut next = 0;
     for position in 0..written {

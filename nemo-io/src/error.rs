@@ -44,12 +44,12 @@ diagnostic_kinds! {
         Unwritable { resource: String, reason: String }
             => UNWRITABLE = 102, error, "could not write `{resource}`: {reason}",
                explain "A resource could not be created or written.";
-        StreamUnreadable { reason: String }
+        InputUnreadable { reason: String }
             => INPUT_UNREADABLE = 103, error, "could not read the input: {reason}",
                explain "Reading an input failed partway, for example because of \
                         malformed quoting, invalid UTF-8, a truncated record, or a \
                         compressed stream that ends early.";
-        StreamUnwritable { reason: String }
+        OutputUnwritable { reason: String }
             => OUTPUT_UNWRITABLE = 104, error, "could not write the output: {reason}",
                explain "Writing an output failed partway.";
         NotJson { reason: String }
@@ -117,16 +117,16 @@ impl IoError {
     }
 
     /// Returns the diagnostic of a stream that cannot be read.
-    pub(crate) fn stream_unreadable(reason: impl Display) -> Diagnostic {
-        IoError::StreamUnreadable {
+    pub(crate) fn input_unreadable(reason: impl Display) -> Diagnostic {
+        IoError::InputUnreadable {
             reason: reason.to_string(),
         }
         .diagnostic()
     }
 
     /// Returns the diagnostic of a stream that cannot be written.
-    pub(crate) fn stream_unwritable(reason: impl Display) -> Diagnostic {
-        IoError::StreamUnwritable {
+    pub(crate) fn output_unwritable(reason: impl Display) -> Diagnostic {
+        IoError::OutputUnwritable {
             reason: reason.to_string(),
         }
         .diagnostic()

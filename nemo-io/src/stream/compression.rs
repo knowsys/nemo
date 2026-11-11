@@ -13,7 +13,7 @@ use flate2::{read::MultiGzDecoder, write::GzEncoder};
 
 use nemo_physical::diagnostics::Diagnostic;
 
-use crate::error::IoError;
+use crate::{error::IoError, remote::Request};
 
 /// The two bytes every gzip stream starts with.
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
@@ -52,7 +52,7 @@ impl Compression {
     }
 
     /// Returns whether a stream with the given resource name is read or written through gzip.
-    pub fn applies(self, name: &Path) -> bool {
+    pub fn gzip_for_name(self, name: &Path) -> bool {
         match self {
             Compression::Gzip => true,
             Compression::Plain => false,
@@ -65,7 +65,7 @@ impl Compression {
     /// Returns whether bytes already in memory are read through gzip.
     ///
     /// Under [Auto](Self::Auto), they are if they start with the gzip magic bytes.
-    pub(crate) fn applies_to_bytes(self, bytes: &[u8]) -> bool {
+    pub(crate) fn gzip_for_bytes(self, bytes: &[u8]) -> bool {
         match self {
             Compression::Gzip => true,
             Compression::Plain => false,
@@ -82,6 +82,22 @@ impl Compression {
         path.strip_suffix(".gz").unwrap_or(path)
     }
 
+    /// Opens a file as a resource stream,
+    /// decompressing it if this compression [applies](Self::gzip_for_name) to its name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming the file if it cannot be opened.
+    pub(crate) fn open_file(self, path: &Path) -> Result<Box<dyn Read>, Diagnostic> {
+        let file = File::open(path).map_err(|error| IoError::unreadable(path, &error))?;
+
+        Ok(if self.gzip_for_name(path) {
+            Box::new(MultiGzDecoder::new(file))
+        } else {
+            Box::new(file)
+        })
+    }
+
     /// Opens bytes in memory as a resource stream,
     /// decompressing them if gzip is declared,
     /// or under [Auto](Self::Auto) if the bytes start with the gzip magic.
@@ -91,8 +107,8 @@ impl Compression {
     /// `name` is the resource's name, used only for a debug message
     /// if the name and the content disagree on gzip.
     pub fn open_bytes(self, bytes: Arc<[u8]>, name: &str) -> Box<dyn Read> {
-        let gzip = self.applies_to_bytes(&bytes);
-        if self == Compression::Auto && gzip != self.applies(Path::new(name)) {
+        let gzip = self.gzip_for_bytes(&bytes);
+        if self == Compression::Auto && gzip != self.gzip_for_name(Path::new(name)) {
             tracing::debug!(
                 name,
                 gzip,
@@ -108,13 +124,13 @@ impl Compression {
     }
 
     /// Wraps a target for writing,
-    /// compressing through gzip if this compression [applies](Self::applies) to the target's name.
+    /// compressing through gzip if this compression [applies](Self::gzip_for_name) to the target's name.
     ///
     /// A target without a name is compressed only under [Gzip](Self::Gzip).
     /// The returned stream must be ended with [finish](CompressedWriter::finish).
     pub(crate) fn wrap<W: Write>(self, target: W, name: Option<&Path>) -> CompressedWriter<W> {
         let gzip = match name {
-            Some(name) => self.applies(name),
+            Some(name) => self.gzip_for_name(name),
             None => self == Compression::Gzip,
         };
         let encoder = if gzip {
@@ -205,21 +221,11 @@ impl<W: Write> Write for Encoder<W> {
 ///
 /// That is a URL without its query and fragment, or any other name whole.
 fn resource_path(name: &str) -> &str {
-    if !crate::stream::remote::Request::is_remote(name) {
+    if !Request::is_remote(name) {
         return name;
     }
     let end = name.find(['?', '#']).unwrap_or(name.len());
     &name[..end]
-}
-
-/// Opens a file for reading, decompressing it if declared or detected.
-pub(crate) fn open(path: &Path, compression: Compression) -> Result<Box<dyn Read>, Diagnostic> {
-    let file = File::open(path).map_err(|error| IoError::unreadable(path, &error))?;
-    Ok(if compression.applies(path) {
-        Box::new(MultiGzDecoder::new(file))
-    } else {
-        Box::new(file)
-    })
 }
 
 #[cfg(test)]
@@ -230,10 +236,10 @@ mod tests {
     /// and a declared compression applies whatever the name.
     #[test]
     fn detection_reads_the_name() {
-        assert!(Compression::Auto.applies(Path::new("data.csv.gz")));
-        assert!(!Compression::Auto.applies(Path::new("data.csv")));
-        assert!(Compression::Gzip.applies(Path::new("data.csv")));
-        assert!(!Compression::Plain.applies(Path::new("data.csv.gz")));
+        assert!(Compression::Auto.gzip_for_name(Path::new("data.csv.gz")));
+        assert!(!Compression::Auto.gzip_for_name(Path::new("data.csv")));
+        assert!(Compression::Gzip.gzip_for_name(Path::new("data.csv")));
+        assert!(!Compression::Plain.gzip_for_name(Path::new("data.csv.gz")));
         assert_eq!(Compression::strip_suffix("graph.ttl.gz"), "graph.ttl");
         assert_eq!(Compression::strip_suffix("graph.ttl"), "graph.ttl");
         assert_eq!(Compression::from_name("gzip"), Some(Compression::Gzip));
@@ -249,12 +255,12 @@ mod tests {
             "https://h/x.csv.gz#frag",
             "https://h/x.csv.gz?a=b.c#d.e",
         ] {
-            assert!(Compression::Auto.applies(Path::new(url)), "{url}");
+            assert!(Compression::Auto.gzip_for_name(Path::new(url)), "{url}");
             assert_eq!(Compression::strip_suffix(url), "https://h/x.csv", "{url}");
         }
-        assert!(!Compression::Auto.applies(Path::new("https://h/x.csv?dl=1.gz")));
+        assert!(!Compression::Auto.gzip_for_name(Path::new("https://h/x.csv?dl=1.gz")));
         // A local file name may contain the characters a URL reserves.
-        assert!(Compression::Auto.applies(Path::new("data#1.csv.gz")));
+        assert!(Compression::Auto.gzip_for_name(Path::new("data#1.csv.gz")));
         assert_eq!(Compression::strip_suffix("data#1.csv.gz"), "data#1.csv");
     }
 
@@ -287,8 +293,8 @@ mod tests {
             read(b"plain", "x.csv.gz", Compression::Auto).expect("reads"),
             "plain"
         );
-        assert!(Compression::Auto.applies_to_bytes(&compressed));
-        assert!(!Compression::Auto.applies_to_bytes(b"plain"));
+        assert!(Compression::Auto.gzip_for_bytes(&compressed));
+        assert!(!Compression::Auto.gzip_for_bytes(b"plain"));
         // The declared settings stay strict.
         assert!(read(b"plain", "x.gz", Compression::Gzip).is_err());
         let mut raw = Vec::new();
@@ -309,7 +315,8 @@ mod tests {
         stream.write_all(b"hello").expect("the bytes write");
         stream.finish().expect("the stream ends");
         let mut text = String::new();
-        open(&path, Compression::Auto)
+        Compression::Auto
+            .open_file(&path)
             .expect("the file opens")
             .read_to_string(&mut text)
             .expect("the bytes read");

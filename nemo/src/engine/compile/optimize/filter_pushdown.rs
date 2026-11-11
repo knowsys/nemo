@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use nemo_io::row_filter::RowFilter;
+use nemo_io::selection::RowCondition;
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
@@ -128,7 +128,7 @@ impl ImportPass for FilterPushdown {
             let Ok((inputs, program)) = translator.condition(&disjunction) else {
                 continue;
             };
-            plan.restrict(name, RowFilter::new(inputs, program), disjunction);
+            plan.restrict(name, RowCondition::new(inputs, program), disjunction);
         }
         Ok(())
     }

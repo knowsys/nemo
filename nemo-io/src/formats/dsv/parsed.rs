@@ -8,10 +8,10 @@ use nemo_physical::{
 };
 
 use crate::{
-    format::{CellValue, ValueFormat},
-    formats::dsv::DsvOptions,
+    dsv::DsvOptions,
     load::Loaded,
     selection::RowSelection,
+    value_format::{CellValue, ValueFormat},
 };
 
 /// The number of cells at which a run is full and is handed on for interning.
@@ -22,7 +22,7 @@ const RUN_TEXT: usize = 1 << 20;
 
 /// One parsed cell, in the form from which the thread that owns the dictionary interns it.
 #[derive(Debug, Clone, Copy)]
-enum Cell {
+enum ParsedCell {
     /// A value with an inline encoding, already encoded.
     Inline(StorageValue),
     /// An IRI whose text is at this byte range of the run's text.
@@ -70,7 +70,7 @@ pub(crate) struct Parsed {
     /// until they are [interned](Self::encode_into).
     loaded: Loaded,
     /// The cells of the admitted rows, row by row, with as many cells per row as the arity.
-    cells: Vec<Cell>,
+    cells: Vec<ParsedCell>,
     /// The text of the IRI and string cells.
     text: String,
     /// The values of the cells of other kinds.
@@ -123,7 +123,7 @@ impl Parsed {
 
     /// Returns the size in bytes of the run's buffers, which a reused run keeps.
     pub(crate) fn bytes(&self) -> usize {
-        self.cells.capacity() * size_of::<Cell>()
+        self.cells.capacity() * size_of::<ParsedCell>()
             + self.text.capacity()
             + self.owned.capacity() * size_of::<DataValue>()
             + self.lines.capacity() * size_of::<u64>()
@@ -146,7 +146,7 @@ impl Parsed {
         record: &csv::StringRecord,
         line: u64,
     ) {
-        if options.filter.is_none() {
+        if options.condition.is_none() {
             self.push_direct(options, record, line);
         } else {
             self.push_selected(options, selection, record, line);
@@ -242,7 +242,7 @@ impl Parsed {
     /// and any other value is kept as an owned value.
     fn push_value(&mut self, value: DataValue) {
         let cell = match StorageValue::from_value(value.as_ref()) {
-            Some(inline) => Some(Cell::Inline(inline)),
+            Some(inline) => Some(ParsedCell::Inline(inline)),
             None => match value.as_ref() {
                 ValueRef::Iri(iri) => self.text_cell([iri.namespace(), iri.local()], true),
                 ValueRef::String(text) => self.text_cell([text, ""], false),
@@ -267,23 +267,23 @@ impl Parsed {
     /// and returns its cell, of an IRI if `iri` is true and of a string otherwise.
     ///
     /// Returns `None`, and appends nothing, if the text's offsets would not fit in 32 bits.
-    fn text_cell(&mut self, parts: [&str; 2], iri: bool) -> Option<Cell> {
+    fn text_cell(&mut self, parts: [&str; 2], iri: bool) -> Option<ParsedCell> {
         let start = u32::try_from(self.text.len()).ok()?;
         let end = u32::try_from(self.text.len() + parts[0].len() + parts[1].len()).ok()?;
         self.text.push_str(parts[0]);
         self.text.push_str(parts[1]);
         Some(if iri {
-            Cell::Iri { start, end }
+            ParsedCell::Iri { start, end }
         } else {
-            Cell::String { start, end }
+            ParsedCell::String { start, end }
         })
     }
 
     /// Keeps a value as an owned value and returns its cell.
-    fn owned_cell(&mut self, value: DataValue) -> Cell {
+    fn owned_cell(&mut self, value: DataValue) -> ParsedCell {
         let index = u32::try_from(self.owned.len()).expect("a run holds fewer than 2³² values");
         self.owned.push(value);
-        Cell::Owned(index)
+        ParsedCell::Owned(index)
     }
 
     /// Interns the run's rows into `loaded`, the load being built, and adds the run's counts to
@@ -334,15 +334,17 @@ impl Parsed {
     }
 
     /// Encodes one cell, or returns `None` if the dictionary cannot hold its value.
-    fn encode(&self, cell: Cell, dictionary: &mut Dictionary) -> Option<StorageValue> {
+    fn encode(&self, cell: ParsedCell, dictionary: &mut Dictionary) -> Option<StorageValue> {
         let text = |start: u32, end: u32| &self.text[start as usize..end as usize];
         match cell {
-            Cell::Inline(value) => Some(value),
-            Cell::Iri { start, end } => {
+            ParsedCell::Inline(value) => Some(value),
+            ParsedCell::Iri { start, end } => {
                 dictionary.encode(ValueRef::Iri(IriRef::new(text(start, end))))
             }
-            Cell::String { start, end } => dictionary.encode(ValueRef::String(text(start, end))),
-            Cell::Owned(index) => dictionary.encode(self.owned[index as usize].as_ref()),
+            ParsedCell::String { start, end } => {
+                dictionary.encode(ValueRef::String(text(start, end)))
+            }
+            ParsedCell::Owned(index) => dictionary.encode(self.owned[index as usize].as_ref()),
         }
     }
 }

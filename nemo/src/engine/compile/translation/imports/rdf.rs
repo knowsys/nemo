@@ -6,7 +6,7 @@ use std::sync::Arc;
 use nemo_io::{
     file_format::FileFormat,
     load::Reader,
-    rdf::{RdfOptions, RdfReader},
+    rdf::{RdfReader, RdfReaderOptions},
 };
 use nemo_physical::{
     dictionary::LabelScope,
@@ -68,17 +68,17 @@ impl<'a> Translator<'a> {
         let kept = term_columns(
             FileFormat::Rdf(Some(variant)),
             directive.formats.as_deref(),
-            variant.arity(),
+            variant.width(),
             directive.formats_span.or(import.span),
         )?;
         let layout = self.plan.layout(&import.predicate, kept);
-        let kept_types: Vec<Type> = column_types(variant.arity())
+        let kept_types: Vec<Type> = column_types(variant.width())
             .into_iter()
             .enumerate()
             .filter(|&(column, _)| !layout.skips(column))
             .map(|(_, column_type)| column_type)
             .collect();
-        let mut options = RdfOptions::new(variant);
+        let mut options = RdfReaderOptions::new(variant);
         options.base = directive.base;
         options.compression = directive.compression;
         options.limit = directive.limit;

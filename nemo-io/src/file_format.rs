@@ -4,7 +4,7 @@
 //! columns.
 //! It accepts its own options for reading and for writing.
 
-use crate::stream::compression::Compression;
+use crate::compression::Compression;
 
 /// A serialization that data is read from or written to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,19 +49,19 @@ pub enum RdfVariant {
 /// Each field says whether the format accepts one of them.
 /// An option that the format does not accept is an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FormatOptions {
+pub struct AcceptedOptions {
     /// Whether the format accepts `base`, the IRI that relative IRIs are resolved against.
     pub base: bool,
     /// Whether the format accepts `compression`.
     pub compression: bool,
     /// Whether the format accepts `http_headers`, which only a read of a possibly remote
     /// resource uses.
-    pub headers: bool,
+    pub http_headers: bool,
     /// Whether the format accepts `limit`, the largest number of rows.
     pub limit: bool,
-    /// Whether the format accepts `format`, one [ValueFormat](crate::format::ValueFormat) per
+    /// Whether the format accepts `format`, one [ValueFormat](crate::value_format::ValueFormat) per
     /// column.
-    pub formats: bool,
+    pub format: bool,
 }
 
 /// The name of a format, and its conventional file extension and media type if it has them.
@@ -187,11 +187,11 @@ impl FileFormat {
 
     /// Returns the number of columns that the format fixes, or `None` if it fixes none.
     ///
-    /// A named RDF variant fixes its [arity](RdfVariant::arity),
+    /// A named RDF variant fixes its [width](RdfVariant::width),
     /// and JSON fixes three, for the triples that the [JSON reader](crate::json) produces.
-    pub fn arity(self) -> Option<usize> {
+    pub fn width(self) -> Option<usize> {
         match self {
-            FileFormat::Rdf(Some(variant)) => Some(variant.arity()),
+            FileFormat::Rdf(Some(variant)) => Some(variant.width()),
             FileFormat::Json => Some(3),
             _ => None,
         }
@@ -220,45 +220,45 @@ impl FileFormat {
 
     /// Returns the options that the format accepts,
     /// for reading if `reading` is true and for writing otherwise.
-    pub fn options(self, reading: bool) -> FormatOptions {
+    pub fn options(self, reading: bool) -> AcceptedOptions {
         match self {
-            FileFormat::Rdf(_) => FormatOptions {
+            FileFormat::Rdf(_) => AcceptedOptions {
                 base: true,
                 compression: true,
-                headers: reading,
+                http_headers: reading,
                 limit: true,
-                formats: reading,
+                format: reading,
             },
             // A JSON document is read whole, and its compression is always detected.
-            FileFormat::Json => FormatOptions {
+            FileFormat::Json => AcceptedOptions {
                 base: false,
                 compression: !reading,
-                headers: reading,
+                http_headers: reading,
                 limit: !reading,
-                formats: false,
+                format: false,
             },
             // Parquet has its own compression, and is read from local
             // files only.
-            FileFormat::Parquet => FormatOptions {
+            FileFormat::Parquet => AcceptedOptions {
                 base: false,
                 compression: false,
-                headers: false,
+                http_headers: false,
                 limit: !reading,
-                formats: false,
+                format: false,
             },
-            FileFormat::Csv | FileFormat::Tsv | FileFormat::Dsv => FormatOptions {
+            FileFormat::Csv | FileFormat::Tsv | FileFormat::Dsv => AcceptedOptions {
                 base: false,
                 compression: true,
-                headers: reading,
+                http_headers: reading,
                 limit: true,
-                formats: true,
+                format: true,
             },
-            FileFormat::Sparql => FormatOptions {
+            FileFormat::Sparql => AcceptedOptions {
                 base: true,
                 compression: false,
-                headers: true,
+                http_headers: true,
                 limit: false,
-                formats: true,
+                format: true,
             },
         }
     }
@@ -309,7 +309,7 @@ impl RdfVariant {
 
     /// Returns the number of columns of the variant's rows:
     /// four for quads, with the graph first, and three for triples.
-    pub fn arity(self) -> usize {
+    pub fn width(self) -> usize {
         if self.quads() { 4 } else { 3 }
     }
 }
@@ -368,7 +368,7 @@ mod tests {
         assert_eq!(FileFormat::Json.rdf_variant(Some("x.ttl")), None);
     }
 
-    /// Each format has its own media type, extension, arity and options.
+    /// Each format has its own media type, extension, width and options.
     #[test]
     fn metadata_is_per_format() {
         assert_eq!(FileFormat::Csv.media_type(), Some("text/csv"));
@@ -379,10 +379,13 @@ mod tests {
         assert_eq!(FileFormat::Rdf(None).media_type(), None);
         assert_eq!(FileFormat::Dsv.extension(), Some("dsv"));
         assert_eq!(FileFormat::Sparql.extension(), None);
-        assert_eq!(FileFormat::Rdf(Some(RdfVariant::NQuads)).arity(), Some(4));
-        assert_eq!(FileFormat::Json.arity(), Some(3));
-        assert_eq!(FileFormat::Csv.arity(), None);
+        assert_eq!(FileFormat::Rdf(Some(RdfVariant::NQuads)).width(), Some(4));
+        assert_eq!(FileFormat::Json.width(), Some(3));
+        assert_eq!(FileFormat::Csv.width(), None);
         assert!(FileFormat::Tsv.is_dsv() && !FileFormat::Json.is_dsv());
-        assert!(FileFormat::Json.options(true).headers && !FileFormat::Json.options(false).headers);
+        assert!(
+            FileFormat::Json.options(true).http_headers
+                && !FileFormat::Json.options(false).http_headers
+        );
     }
 }

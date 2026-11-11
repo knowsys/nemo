@@ -9,10 +9,12 @@
 //! all.
 
 mod batch;
+mod blank_nodes;
 mod reader;
 mod resource;
 
 pub use batch::ResourceBatch;
+pub(crate) use blank_nodes::BlankNodes;
 pub use reader::Reader;
 pub use resource::{DsvResource, Resource};
 

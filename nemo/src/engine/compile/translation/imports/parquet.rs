@@ -41,7 +41,7 @@ impl<'a> Translator<'a> {
         if self.options_only(import) {
             return Ok(());
         }
-        let file_arity = ParquetReader::arity(&path).map_err(ImportFailure::Reading)?;
+        let file_arity = ParquetReader::width(&path).map_err(ImportFailure::Reading)?;
         // The import names as many columns as the width,
         // so the file disagrees with the names.
         if file_arity != width && !import.variables.is_empty() {
@@ -97,7 +97,7 @@ impl<'a> Translator<'a> {
                     self.open.insert(import.predicate.clone());
                     return Ok(None);
                 }
-                None => ParquetReader::arity(path).map_err(ImportFailure::Reading)?,
+                None => ParquetReader::width(path).map_err(ImportFailure::Reading)?,
             },
         }))
     }

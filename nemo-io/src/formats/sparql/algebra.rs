@@ -1,17 +1,14 @@
 //! Analyses of a query's algebra:
-//! what its shape allows, and where bindings and filters are added to it.
+//! what its shape allows, and where values and filters are added to it.
 
 use std::collections::HashSet;
 
-use nemo_physical::value::DataValue;
 use spargebra::{
     algebra::{AggregateExpression, AggregateFunction, Expression, Function, GraphPattern},
-    term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern, Variable},
+    term::{NamedNodePattern, TermPattern, TriplePattern, Variable},
 };
 
-use super::SparqlQuery;
-
-/// The shape of a query, which says whether and where bindings and filters can be added to it.
+/// The shape of a query, which says whether and where values and filters can be added to it.
 ///
 /// A `VALUES` block or a `FILTER` added directly under the outermost projection
 /// selects among the query's final solutions.
@@ -24,7 +21,7 @@ use super::SparqlQuery;
 /// - A nondeterministic function or a `SAMPLE` aggregate has the same problem.
 ///
 /// Such queries are [opaque](Self::Opaque): they can be neither restricted nor merged.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueryShape {
     /// A `SELECT` over a plain group pattern, which can be inlined into a merged query.
     ///
@@ -41,7 +38,7 @@ pub enum QueryShape {
     /// request.
     ///
     /// The string names the construct that makes the query opaque.
-    Opaque(String),
+    Opaque(&'static str),
 }
 
 /// Returns the shape of a `SELECT` query's pattern.
@@ -50,13 +47,13 @@ pub(super) fn shape(pattern: &GraphPattern) -> QueryShape {
         return QueryShape::Opaque(reason);
     }
     match strip_modifiers(pattern) {
-        GraphPattern::Project { inner, .. } if !nests(inner) => QueryShape::Pattern,
+        GraphPattern::Project { inner, .. } if !has_inner_scope(inner) => QueryShape::Pattern,
         _ => QueryShape::Complex,
     }
 }
 
 /// Returns the construct that makes a query opaque, or `None` if the query is not opaque.
-fn opaque(pattern: &GraphPattern) -> Option<String> {
+fn opaque(pattern: &GraphPattern) -> Option<&'static str> {
     let mut reason = None;
     visit_patterns(pattern, &mut |node| {
         if reason.is_some() {
@@ -64,11 +61,11 @@ fn opaque(pattern: &GraphPattern) -> Option<String> {
         }
         match node {
             GraphPattern::Slice { start, length, .. } => {
-                reason = Some(String::from(match (start, length) {
+                reason = Some(match (start, length) {
                     (0, Some(_)) => "LIMIT",
                     (_, None) => "OFFSET",
                     _ => "LIMIT/OFFSET",
-                }));
+                });
             }
             GraphPattern::Group { aggregates, .. }
                 if aggregates.iter().any(|(_, aggregate)| {
@@ -81,7 +78,7 @@ fn opaque(pattern: &GraphPattern) -> Option<String> {
                     )
                 }) =>
             {
-                reason = Some(String::from("SAMPLE"));
+                reason = Some("SAMPLE");
             }
             _ => {}
         }
@@ -102,7 +99,7 @@ fn opaque(pattern: &GraphPattern) -> Option<String> {
                 Function::BNode => "BNODE()",
                 _ => return,
             };
-            reason = Some(String::from(name));
+            reason = Some(name);
         }
     });
     reason
@@ -142,7 +139,7 @@ pub(super) fn computes_in_full(pattern: &GraphPattern) -> bool {
 /// Substituting a term into such a part, or sharing a variable with it,
 /// would change what the query means,
 /// so the whole query enters a merge as a subquery instead.
-fn nests(pattern: &GraphPattern) -> bool {
+fn has_inner_scope(pattern: &GraphPattern) -> bool {
     let mut found = false;
     visit_patterns(pattern, &mut |node| {
         found |= matches!(
@@ -212,57 +209,6 @@ pub(super) fn under_projection(
             length,
         },
         other => rewrite(other),
-    }
-}
-
-/// One `VALUES` block: rows of values over some of a query's projected columns.
-///
-/// Each value is sent as its [ground terms](SparqlQuery::ground_terms),
-/// which the endpoint matches by its own notion of equal terms.
-/// A [SparqlReader](super::SparqlReader) given the block
-/// ([with_bindings](super::SparqlReader::with_bindings)) keeps only the solutions that match a
-/// row as Nemo compares values.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValuesBlock {
-    /// The positions of the projected columns that the rows bind.
-    pub positions: Vec<usize>,
-    /// The rows, one value per position.
-    pub rows: Vec<Vec<DataValue>>,
-}
-
-impl ValuesBlock {
-    /// Returns the block as a `VALUES` pattern over the query's projected variables.
-    ///
-    /// Each row becomes one row for each combination of its values' ground terms:
-    /// one row for a row without integers, and `2^k` rows for a row with `k` integers.
-    /// A row with a value that has no ground term, such as a null, is left out.
-    pub(super) fn pattern(&self, variables: &[String]) -> GraphPattern {
-        let mut bindings: Vec<Vec<Option<GroundTerm>>> = Vec::new();
-        for row in &self.rows {
-            let mut combinations: Vec<Vec<Option<GroundTerm>>> = vec![Vec::new()];
-            for value in row {
-                let terms = SparqlQuery::ground_terms(value);
-                combinations = combinations
-                    .into_iter()
-                    .flat_map(|prefix| {
-                        terms.iter().map(move |term| {
-                            let mut combination = prefix.clone();
-                            combination.push(Some(term.clone()));
-                            combination
-                        })
-                    })
-                    .collect();
-            }
-            bindings.extend(combinations);
-        }
-        GraphPattern::Values {
-            variables: self
-                .positions
-                .iter()
-                .map(|&position| Variable::new_unchecked(variables[position].as_str()))
-                .collect(),
-            bindings,
-        }
     }
 }
 

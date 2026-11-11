@@ -14,7 +14,7 @@ use spargebra::{
     term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern, Variable},
 };
 
-use crate::formats::sparql::{QueryShape, SparqlQuery, algebra};
+use super::{QueryShape, SparqlQuery, algebra};
 
 /// What an instantiation binds a query's projected variable to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -315,9 +315,9 @@ fn rebinding(
 ) -> Option<Rebinding> {
     let defined = defined_variables(inner);
     let node_positions = node_position_variables(inner);
-    let assured = algebra::always_bound(inner);
-    let maybe = algebra::possibly_bound(inner);
-    let unassured = |name: &String| maybe.contains(name) && !assured.contains(name);
+    let always = algebra::always_bound(inner);
+    let possibly = algebra::possibly_bound(inner);
+    let sometimes_bound = |name: &String| possibly.contains(name) && !always.contains(name);
     let mut rebinding = Rebinding {
         replacements: HashMap::new(),
         values: Vec::new(),
@@ -327,7 +327,7 @@ fn rebinding(
         let replacement = match binding {
             Binding::Variable(target) => {
                 let target = Variable::new(target).ok()?;
-                if joined.contains(target.as_str()) && unassured(name) {
+                if joined.contains(target.as_str()) && sometimes_bound(name) {
                     rebinding.required.push(target.clone());
                 }
                 Replacement::Variable(target)
@@ -345,7 +345,7 @@ fn rebinding(
                     [term] if substitutable => Replacement::Term(term.clone()),
                     _ => {
                         let fresh = instance.private(name);
-                        if unassured(name) {
+                        if sometimes_bound(name) {
                             rebinding.required.push(fresh.clone());
                         }
                         rebinding.values.push((fresh.clone(), terms.clone()));

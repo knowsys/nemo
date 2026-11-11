@@ -4,7 +4,7 @@ use std::sync::{Mutex, PoisonError};
 
 use nemo_physical::function::EvaluationContext;
 
-use crate::formats::dsv::Parsed;
+use crate::dsv::Parsed;
 
 /// A pool of runs that were interned and wait to be filled again.
 ///

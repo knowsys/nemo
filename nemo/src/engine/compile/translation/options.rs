@@ -8,9 +8,9 @@ use std::collections::HashMap;
 
 use nemo_io::{
     compression::Compression,
-    file_format::{FileFormat, FormatOptions, RdfVariant},
-    format::ValueFormat,
+    file_format::{AcceptedOptions, FileFormat, RdfVariant},
     remote,
+    value_format::ValueFormat,
 };
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -190,9 +190,9 @@ impl ResourceDirectiveOptions {
         key: &Term,
         name: &str,
         value: &Term,
-        accepts: FormatOptions,
+        accepts: AcceptedOptions,
     ) -> Result<bool, Diagnostic> {
-        if name != "on_error" || !accepts.headers {
+        if name != "on_error" || !accepts.http_headers {
             return Ok(false);
         }
         self.on_error = Some(on_error(value)?);
@@ -208,7 +208,7 @@ impl ResourceDirectiveOptions {
         name: &str,
         value: ValueRef<'_>,
         span: Option<Span>,
-        accepts: FormatOptions,
+        accepts: AcceptedOptions,
     ) -> Result<bool, Diagnostic> {
         match (name, value) {
             ("limit", value) if accepts.limit => self.limit = Some(row_limit(value, span)?),
@@ -329,7 +329,7 @@ impl<'a> Translator<'a> {
                 formats = Some(self.column_formats(value)?);
                 continue;
             }
-            if name == "http_headers" && accepts.headers {
+            if name == "http_headers" && accepts.http_headers {
                 common.headers = self.header_option(value, bindings)?;
                 common.headers_span = key.span;
                 continue;
@@ -414,7 +414,7 @@ impl<'a> Translator<'a> {
             // An option about fetching, which this format's imports accept,
             // is an error in an export.
             if !reading
-                && format.options(true).headers
+                && format.options(true).http_headers
                 && matches!(name, "http_headers" | "on_error")
             {
                 return Err(TranslationError::ReadOptionOnExport {
@@ -423,12 +423,12 @@ impl<'a> Translator<'a> {
                 .at(key.span));
             }
             // The column formats are keywords, matched without evaluation.
-            if name == "format" && accepts.formats {
+            if name == "format" && accepts.format {
                 formats = Some(self.column_formats(value)?);
                 formats_span = value.span;
                 continue;
             }
-            if name == "http_headers" && accepts.headers {
+            if name == "http_headers" && accepts.http_headers {
                 common.headers = self.header_option(value, bindings)?;
                 common.headers_span = key.span;
                 continue;

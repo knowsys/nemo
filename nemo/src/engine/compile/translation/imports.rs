@@ -23,7 +23,7 @@ use std::{
 };
 
 use nemo_io::{
-    compression::Compression, file_format::FileFormat, load::Loaded, row_filter::RowFilter,
+    compression::Compression, file_format::FileFormat, load::Loaded, selection::RowCondition,
     selection::RowSelection,
 };
 use nemo_physical::{diagnostics::Diagnostic, function::Outcome, management::TableId, value::Type};
@@ -389,14 +389,14 @@ impl<'a> Translator<'a> {
         &self,
         import: &PendingImport,
         layout: &ColumnLayout,
-    ) -> Result<Option<(Operation, RowFilter)>, Diagnostic> {
+    ) -> Result<Option<(Operation, RowCondition)>, Diagnostic> {
         let own = self.own_condition(import, layout)?;
         let pushed = self.plan.condition(&import.predicate).cloned();
         let Some(condition) = conjoin(own.into_iter().chain(pushed).collect()) else {
             return Ok(None);
         };
         let (inputs, program) = self.condition(&condition)?;
-        Ok(Some((condition, RowFilter::new(inputs, program))))
+        Ok(Some((condition, RowCondition::new(inputs, program))))
     }
 
     /// Returns the selection of an import under a layout: its delivered columns,
@@ -407,7 +407,7 @@ impl<'a> Translator<'a> {
         layout: &ColumnLayout,
     ) -> Result<RowSelection, Diagnostic> {
         let mut selection = self.plan.selection(&import.predicate, layout);
-        selection.filter = self
+        selection.condition = self
             .import_condition(import, layout)?
             .map(|(_, filter)| filter);
         Ok(selection)
