@@ -233,6 +233,36 @@ fn derivations_are_traced_at_the_instant_of_their_run() {
 }
 
 #[test]
+fn a_tree_has_one_statement_per_line_from_the_first_column() {
+    let mut engine = run("
+        edge(a, b) . edge(b, c) .
+        reach(?x, ?y) :- edge(?x, ?y) .
+        reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
+        both(?x, ?z) :- reach(?x, ?y), reach(?x, ?z), edge(?y, ?z) .
+    ");
+    let facts = ["both(a, c) .", "edge(a, b) .", "reach(c, a) ."]
+        .map(|fact| Fact::parse(fact).expect("the fact parses"));
+    let response = engine.trace(&facts).expect("tracing answers");
+
+    // A derived fact is the instance of its rule, and a loaded one a fact statement.
+    // A derived fact that is shown already, and a fact that does not hold, are notes.
+    assert_eq!(
+        response.ascii(),
+        "both(a, c) :- reach(a, b), reach(a, c), edge(b, c) .\n\
+         ├─ reach(a, b) :- edge(a, b) .\n\
+         │  └─ edge(a, b) .\n\
+         ├─ reach(a, c) :- reach(a, b), edge(b, c) .\n\
+         │  ├─ reach(a, b) (shown above)\n\
+         │  └─ edge(b, c) .\n\
+         └─ edge(b, c) .\n\
+         \n\
+         edge(a, b) .\n\
+         \n\
+         reach(c, a) does not hold\n"
+    );
+}
+
+#[test]
 fn an_underivable_fact_reports_not_derived() {
     let mut engine = run("
         edge(a, b) .
@@ -241,7 +271,7 @@ fn an_underivable_fact_reports_not_derived() {
     let response = trace(&mut engine, "reach(b, a) .");
     assert_eq!(response.facts[0].node, None);
     assert!(response.nodes.is_empty());
-    assert_eq!(response.ascii(), " reach(b, a) does not hold\n");
+    assert_eq!(response.ascii(), "reach(b, a) does not hold\n");
 }
 
 #[test]

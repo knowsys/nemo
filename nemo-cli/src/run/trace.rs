@@ -131,16 +131,14 @@ impl<'a> TraceStream<'a> {
                 let separator = if self.written == 0 { "\n" } else { ",\n" };
                 write!(self.out, "{separator}{}", json(&node))?;
             } else {
-                let line = match &node.derivation {
-                    Some(derivation) => node.inference(
-                        derivation
-                            .premises
-                            .iter()
-                            .map(|&premise| self.facts[premise].as_str()),
-                    ),
-                    None => format!("{} .", node.fact),
-                };
-                writeln!(self.out, "{line}")?;
+                let premises = node.derivation.iter().flat_map(|derivation| {
+                    let facts = &self.facts;
+                    derivation
+                        .premises
+                        .iter()
+                        .map(move |&premise| facts[premise].as_str())
+                });
+                writeln!(self.out, "{}", node.inference(premises))?;
                 self.facts.push(node.fact);
             }
             self.written += 1;

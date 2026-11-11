@@ -22,7 +22,7 @@ pub struct TraceNode {
 
 impl TraceNode {
     /// Returns the rule instance that derives the fact, as one line,
-    /// or the fact alone if no rule derives it.
+    /// or the fact statement if no rule derives it.
     ///
     /// `premises` are the facts of the node's premises, in order.
     /// The line lists them, then the negated premises,
@@ -30,7 +30,7 @@ impl TraceNode {
     /// [trace_predicates](crate::engine::Engine::trace_predicates) shows an example.
     pub fn inference<'a>(&self, premises: impl IntoIterator<Item = &'a str>) -> String {
         let Some(derivation) = &self.derivation else {
-            return self.fact.clone();
+            return format!("{} .", self.fact);
         };
         let mut body: Vec<String> = premises.into_iter().map(str::to_owned).collect();
         body.extend(

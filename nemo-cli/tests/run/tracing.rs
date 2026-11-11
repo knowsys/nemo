@@ -286,7 +286,7 @@ fn a_trace_is_the_last_thing_a_run_shows() {
     );
     assert!(position("Finished in") < position("reach "), "{shown}");
     assert!(position("reach ") < position("reach(1, 3) :- "), "{shown}");
-    assert!(shown.ends_with(" └─ edge(2, 3)\n"), "{shown}");
+    assert!(shown.ends_with("\n└─ edge(2, 3) .\n"), "{shown}");
 
     // The note of a trace file follows the summary and the note of the report page.
     let shown = run_on_one_stream(
