@@ -20,7 +20,7 @@ use nemo_physical::{
 
 use crate::{
     AboutResource,
-    dsv::{DsvReader, Parsed, RunPool},
+    dsv::{DeferredReads, DsvReader, Parsed, RunPool},
     error::IoError,
     load::{DsvResource, Loaded, Resource},
 };
@@ -287,6 +287,11 @@ impl ResourceBatch {
         let mut current: Option<(usize, u64)> = None;
         let mut failure = None;
         let runs = RunPool::new(context);
+        let mut reads: Vec<DeferredReads<'_>> = self
+            .sources
+            .iter()
+            .map(|source| DeferredReads::new(&source.options))
+            .collect();
         parallel::stream_tasks(
             tasks,
             |index| match windows[index].range {
@@ -309,11 +314,20 @@ impl ResourceBatch {
 
                 current = Some((index, run.consumed_lines));
                 let source = windows[index].source;
-                run.encode_into(&mut loads[source], dictionary, bases[source]);
+                run.encode_into(
+                    &mut loads[source],
+                    &mut reads[source],
+                    dictionary,
+                    bases[source],
+                );
                 runs.give(run);
                 ControlFlow::Continue(())
             },
         );
+        for resource in reads {
+            resource.close(dictionary);
+        }
+
         match failure {
             Some(diagnostic) => Err(diagnostic),
             None => Ok(loads),

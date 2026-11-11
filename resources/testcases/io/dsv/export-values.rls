@@ -1,15 +1,21 @@
-% Exported CSV writes each kind of value in its own form:
-%   - integers, names and IRIs bare,
-%   - strings, language strings and typed literals, doubles among them,
-%     in term syntax.
+% An export without formats writes each value as a term, as a program
+% writes it, so that the file is read back as the same values:
+%   - numbers, booleans and bare names as they are,
+%   - any other IRI in angle brackets,
+%   - strings in quotes, with a language tag or a datatype where they
+%     have one,
+%   - tuples and maps in their own syntax.
 
 value(int, 42) .
 value(double, 2.5E0) .
+value(boolean, true) .
 value(name, alice) .
 value(iri, <http://example.org/a>) .
 value(string, "plain") .
 value(comma, "a,b") .
 value(tagged, "hallo"@de) .
 value(typed, "5cm"^^<http://example.org/length>) .
+value(tuple, (1, "a")) .
+value(map, {key = alice}) .
 
 @export value to csv { resource = "values.csv" } .

@@ -4,13 +4,13 @@
 //! The other values are not literals: IRIs and nulls are the RDF terms without a datatype,
 //! and tuples and maps have no counterpart in RDF.
 
-use std::{fmt, num::IntErrorKind};
+use std::num::IntErrorKind;
 
 use crate::{
     function::StackValue,
     value::{
         DataValue, Date, DateTime, DomainSet, Double, Duration, EvaluationError, Float, Iri,
-        NumberRef, Time, ValueDomain, ValueRef, datatype::xsd,
+        NumberRef, Time, ValueRef,
     },
 };
 
@@ -63,65 +63,18 @@ pub(crate) fn lexical(value: ValueRef<'_>) -> StackValue<'static> {
     DataValue::string(text).into()
 }
 
-/// Returns the canonical form of a value as a plain string, the value written out in full.
+/// Returns a value in canonical term syntax as a plain string,
+/// which is the text that the value's [Display](std::fmt::Display) writes.
 ///
-/// - A string is quoted and escaped, and a language string also has its tag.
-/// - An IRI and an exact number are written bare.
-/// - A null is written `_:` followed by its number.
+/// - A string is in quotes, and a language string also has its tag.
+/// - An IRI is written as a bare name if it is one, and in angle brackets otherwise.
+/// - A number, a boolean, a null, a tuple and a map are written as a program writes them.
 /// - Every other literal is written as its quoted lexical form with its datatype.
 ///
+/// The text is read back as the value, except that a null is read back as another null.
 /// This is not a SPARQL function.
-/// Structures have no canonical form, which is a [TypeMismatch](EvaluationError::TypeMismatch).
-pub(crate) fn canonical(value: ValueRef<'_>) -> StackValue<'static> {
-    let text = match value {
-        ValueRef::String(text) => quote(text),
-        ValueRef::LanguageString(value) => format!("{}@{}", quote(value.text()), value.language()),
-        ValueRef::Iri(iri) => iri.to_string(),
-        ValueRef::Boolean(value) => {
-            format!("{}^^<{}>", quote(&value.to_string()), xsd::BOOLEAN)
-        }
-        ValueRef::Number(value) => match value.domain() {
-            ValueDomain::Integer | ValueDomain::Decimal => value.to_string(),
-            ValueDomain::Float => format!("{}^^<{}>", quote(&value.to_string()), xsd::FLOAT),
-            _ => format!("{}^^<{}>", quote(&value.to_string()), xsd::DOUBLE),
-        },
-        ValueRef::Null(_) => format!("_:{}", value.null_number().unwrap_or_default()),
-        ValueRef::DateTime(lexical) => typed(value, lexical),
-        ValueRef::Date(lexical) => typed(value, lexical),
-        ValueRef::Time(lexical) => typed(value, lexical),
-        ValueRef::Duration(lexical) => typed(value, lexical),
-        ValueRef::Other(literal) => {
-            format!("{}^^<{}>", quote(literal.lexical()), literal.datatype())
-        }
-        _ => return EvaluationError::TypeMismatch.into(),
-    };
-    DataValue::string(text).into()
-}
-
-/// Returns a value of a native datatype written as a typed literal,
-/// its quoted lexical form with the datatype of its domain.
-fn typed(value: ValueRef<'_>, lexical: impl fmt::Display) -> String {
-    let datatype = value
-        .datatype_iri()
-        .expect("a value of a native datatype has one");
-    format!("{}^^<{datatype}>", quote(&lexical.to_string()))
-}
-
-/// Returns a text in double quotes, with the quote, the backslash and the line breaks escaped.
-fn quote(text: &str) -> String {
-    let mut quoted = String::with_capacity(text.len() + 2);
-    quoted.push('"');
-    for character in text.chars() {
-        match character {
-            '\\' => quoted.push_str("\\\\"),
-            '"' => quoted.push_str("\\\""),
-            '\n' => quoted.push_str("\\n"),
-            '\r' => quoted.push_str("\\r"),
-            other => quoted.push(other),
-        }
-    }
-    quoted.push('"');
-    quoted
+pub(crate) fn term_syntax(value: ValueRef<'_>) -> StackValue<'static> {
+    DataValue::string(value.to_string()).into()
 }
 
 /// Returns the language tag of a literal,
@@ -444,7 +397,11 @@ mod tests {
 
     use crate::{
         testing::{number, value},
-        value::{DecimalRef, MapValue, TupleValue, datatype::rdf, number::decimal},
+        value::{
+            DecimalRef, MapValue, TupleValue,
+            datatype::{rdf, xsd},
+            number::decimal,
+        },
     };
 
     /// DateTimes, dates, times and durations cast into each other,
@@ -684,7 +641,7 @@ mod tests {
         assert_eq!(matches("en", ""), DataValue::boolean(false));
     }
 
-    /// A dateTime has its lexical form, and a canonical form with its datatype.
+    /// A dateTime has its lexical form, and in term syntax also its datatype.
     #[test]
     fn datetimes_have_lexical_forms() {
         let datetime = DataValue::datetime_from_lexical("2024-03-01T12:30:05Z").expect("valid");
@@ -693,17 +650,43 @@ mod tests {
             DataValue::string("2024-03-01T12:30:05Z")
         );
         assert_eq!(
-            value(canonical(datetime.as_ref())),
+            value(term_syntax(datetime.as_ref())),
             DataValue::string(format!("\"2024-03-01T12:30:05Z\"^^<{}>", xsd::DATE_TIME))
         );
     }
 
-    /// The canonical form of a boolean is a typed literal.
+    /// A value in term syntax is the text that is read back as the value:
+    /// a boolean and a double as a program writes them, an IRI in its brackets,
+    /// and a tuple, which has no lexical form.
     #[test]
-    fn booleans_have_canonical_forms() {
+    fn values_in_term_syntax_are_read_back() {
+        let pair = DataValue::tuple(TupleValue::new(vec![
+            DataValue::iri("http://example.org/a"),
+            DataValue::string("b"),
+        ]));
+        for (written, text) in [
+            (DataValue::boolean(true), "true"),
+            (DataValue::double(2.5), "2.5d"),
+            (
+                DataValue::iri("http://example.org/a"),
+                "<http://example.org/a>",
+            ),
+            (DataValue::iri("alice"), "alice"),
+            (DataValue::string("a \"b\""), r#""a \"b\"""#),
+            (pair, r#"(<http://example.org/a>, "b")"#),
+        ] {
+            assert_eq!(
+                value(term_syntax(written.as_ref())),
+                DataValue::string(text)
+            );
+            assert_eq!(
+                DataValue::from_term_syntax(text, &mut |_| DataValue::null(0)),
+                Some(written)
+            );
+        }
         assert_eq!(
-            value(canonical(DataValue::boolean(true).as_ref())),
-            DataValue::string(format!("\"true\"^^<{}>", xsd::BOOLEAN))
+            lexical(DataValue::tuple(TupleValue::new(vec![])).as_ref()).as_result(),
+            Err(EvaluationError::TypeMismatch)
         );
     }
 

@@ -1,4 +1,7 @@
-sign(<+>) .
-sign(<+.>) .
-sign(<->) .
-sign(<-.>) .
+sign(1) .
+
+signText("+") .
+signText("+.") .
+signText("+1") .
+signText("-") .
+signText("-.") .

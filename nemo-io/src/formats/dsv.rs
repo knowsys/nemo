@@ -8,7 +8,7 @@ mod reader;
 mod run_pool;
 mod writer;
 
-pub(crate) use parsed::Parsed;
+pub(crate) use parsed::{DeferredReads, Parsed};
 pub use reader::DsvReader;
 pub(crate) use run_pool::RunPool;
 pub use writer::DsvWriter;
@@ -133,7 +133,13 @@ impl DsvOptions {
     ///
     /// Returns `false`, and leaves `values` as it was, for a record of the wrong width
     /// or with a cell that its format rejects.
-    fn parse_row(&self, cells: &csv::StringRecord, values: &mut Vec<DataValue>) -> bool {
+    /// `null` returns the null that a label names in the resource.
+    fn parse_row(
+        &self,
+        cells: &csv::StringRecord,
+        values: &mut Vec<DataValue>,
+        null: &mut dyn FnMut(&str) -> DataValue,
+    ) -> bool {
         let before = values.len();
         let complete = cells.len() == self.formats.len()
             && cells
@@ -142,8 +148,8 @@ impl DsvOptions {
                 .enumerate()
                 .all(|(column, (cell, format))| match format {
                     ValueFormat::Skip => true,
-                    _ if self.checks_only(column) => format.parse_cell(cell).is_some(),
-                    _ => format.parse(cell).is_some_and(|value| {
+                    _ if self.checks_only(column) => format.parse_cell(cell, null).is_some(),
+                    _ => format.parse(cell, null).is_some_and(|value| {
                         values.push(value);
                         true
                     }),

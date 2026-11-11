@@ -142,7 +142,7 @@ fn builtin_form(operator: Operator) -> BuiltinForm {
             Fixed(1, const { &[in_domain(ValueDomain::YearMonthDuration)] })
         }
         Operator::Datatype => Fixed(1, &[OpCode::Datatype]),
-        Operator::FullStr => Fixed(1, &[OpCode::Canonical]),
+        Operator::FullStr => Fixed(1, &[OpCode::TermSyntax]),
         Operator::Lang => Fixed(1, &[OpCode::Language]),
         Operator::CastInt => Fixed(1, &[OpCode::CastInteger]),
         Operator::CastFloat => Fixed(1, &[OpCode::CastFloat]),

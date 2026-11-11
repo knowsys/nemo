@@ -183,7 +183,7 @@ impl StackProgram {
                     unary(stack, |value| generic::in_domains(value, domains))
                 }
                 OpCode::Datatype => unary(stack, generic::datatype),
-                OpCode::Canonical => unary(stack, generic::canonical),
+                OpCode::TermSyntax => unary(stack, generic::term_syntax),
                 OpCode::Lexical => unary(stack, generic::lexical),
                 OpCode::Language => unary(stack, generic::language),
                 OpCode::StringLanguage => binary(stack, generic::string_language),

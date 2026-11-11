@@ -1,5 +1,5 @@
-% STR gives the lexical form of a value as a plain string, fullStr a
-% literal's complete term syntax.
+% STR gives the lexical form of a value as a plain string, and fullStr
+% the value as a term: a double as `2.5d`, a string in its quotes.
 
 value(int, 42) .
 value(negative, -7) .

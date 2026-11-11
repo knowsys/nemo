@@ -7,7 +7,7 @@
 a(<Some%20Constant%20With%20Spaces>).
 a(<AnotherConstant>).
 a(YetAnotherConstant).
-a("An invalid constant that will be handled as string literal when parsed from CSV because of the white spaces").
+a("A string with white spaces, which keeps its quotes in the CSV file").
 a("String Litral").
 a("Another String Literal"^^xsd:string).
 a("").

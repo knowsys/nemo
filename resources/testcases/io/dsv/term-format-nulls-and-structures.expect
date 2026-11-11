@@ -1,0 +1,12 @@
+cell(boolean, true) .
+cell(first, _:0) .
+cell(map, {key = alice, "quoted" = 2.5d}) .
+cell(other, _:1) .
+cell(pair, (_:0, 1)) .
+cell(point, point(1, 2)) .
+cell(second, _:0) .
+
+holdsTheNull(pair) .
+
+sameNull(first) .
+sameNull(second) .

@@ -142,11 +142,10 @@ pub enum OpCode {
     ///
     /// Only a literal has one.
     Datatype,
-    /// Pops a value and pushes its canonical form as a plain string.
+    /// Pops a value and pushes it in canonical term syntax, as a plain string.
     ///
-    /// Strings are quoted,
-    /// and every literal other than a string or an exact number is written with its datatype.
-    Canonical,
+    /// The string holds what the value's [Display](std::fmt::Display) writes.
+    TermSyntax,
     /// Pops a value and pushes its lexical form as a plain string.
     ///
     /// A language string yields its text.
@@ -424,7 +423,7 @@ impl OpCode {
 
             OpCode::InDomains(_) => Fixed(&[Plain(&[D::ANY], D::BOOLEAN)]),
             OpCode::Datatype => Fixed(&[Plain(&[D::LITERAL], D::IRI)]),
-            OpCode::Canonical | OpCode::Lexical => Fixed(&[Plain(&[D::ANY], D::STRING)]),
+            OpCode::TermSyntax | OpCode::Lexical => Fixed(&[Plain(&[D::ANY], D::STRING)]),
             OpCode::Language => Fixed(&[Plain(&[D::LITERAL], D::STRING)]),
             OpCode::StringLanguage => Fixed(&[Plain(&[D::STRING, D::STRING], D::LANGUAGE_STRING)]),
             OpCode::LanguageMatches => Fixed(&[Plain(&[D::STRING, D::STRING], D::BOOLEAN)]),

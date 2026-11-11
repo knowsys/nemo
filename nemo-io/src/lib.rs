@@ -25,7 +25,6 @@
 //! the clients that send them.
 
 mod error;
-mod term;
 
 pub use error::AboutResource;
 

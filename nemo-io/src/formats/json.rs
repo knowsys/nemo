@@ -451,8 +451,7 @@ impl<'de> Visitor<'de> for NodeSeed<'_, '_> {
 /// - booleans as booleans,
 /// - plain strings as strings.
 ///
-/// Every other value is written as a string,
-/// the text that [any_cell](crate::value_format::ValueFormat::any_cell) gives for it.
+/// Every other value is written as a string that holds the value in canonical term syntax.
 /// The output is meant for other programs, and is not read back as rows:
 /// the [JsonReader] reads any document as node/edge triples.
 #[derive(Debug, Clone, Default)]
@@ -515,7 +514,7 @@ fn cell(value: &DataValue) -> serde_json::Value {
         }
         ValueRef::Boolean(value) => serde_json::Value::from(value),
         ValueRef::String(text) => serde_json::Value::from(text),
-        other => serde_json::Value::from(crate::value_format::ValueFormat::any_cell(other)),
+        other => serde_json::Value::from(other.to_string()),
     }
 }
 

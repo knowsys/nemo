@@ -1,3 +1,4 @@
 complete(int, "42") .
-complete(iri, "http://example.org/a") .
+complete(iri, "<http://example.org/a>") .
+complete(name, "alice") .
 complete(negative, "-7") .

@@ -1,7 +1,13 @@
-% Quoted fields hold language strings; without quoting, quotes are data.
+% A language string is a term with quotes. CSV quoting takes the quotes
+% of a field away, so the field doubles them and is quoted as a whole.
+% Without quoting, quotes are data, and the term is written as it is.
 
-@import noQuoting from csv{resource="sources/langstrings.csv", quoting=false} .
-@import quoting from csv{resource="sources/langstrings.csv"} .
+@import quoted from csv{resource="sources/langstrings-quoted.csv"} .
+@import plain from csv{resource="sources/langstrings.csv", quoting=false} .
+@import stripped from csv{resource="sources/langstrings.csv"} .
 
-withQuoting(?X, ?Y) :- quoting(?X, ?Y) .
-withoutQuoting(?X, ?Y) :- noQuoting(?X, ?Y) .
+withQuoting(?X, ?Y) :- quoted(?X, ?Y) .
+withoutQuoting(?X, ?Y) :- plain(?X, ?Y) .
+
+% Read with quoting, `"Foo"@en` is the cell `Foo@en`, which is no term.
+withoutItsQuotes(?X, ?Y) :- stripped(?X, ?Y) .

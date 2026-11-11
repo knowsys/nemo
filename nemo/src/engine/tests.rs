@@ -27,6 +27,7 @@ mod methods;
 mod parameters;
 mod rules;
 mod structures;
+mod term_syntax;
 mod types;
 
 /// Returns the rows of a predicate as displayed values, sorted.

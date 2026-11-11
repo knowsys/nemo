@@ -1,0 +1,13 @@
+asIri(2, <http://example.org/a>) .
+asIri(4, <ex:a>) .
+asIri(5, <>) .
+
+asString(1, "<http://example.org/a>") .
+asString(2, "http://example.org/a") .
+asString(3, "Alice Smith") .
+asString(4, "ex:a") .
+asString(5, "") .
+asString(6, "\"Alice Smith\"") .
+
+asTerm(1, <http://example.org/a>) .
+asTerm(6, "Alice Smith") .

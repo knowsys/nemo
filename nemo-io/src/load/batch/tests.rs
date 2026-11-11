@@ -3,9 +3,12 @@
 
 use super::*;
 
-use std::{fs, io::Cursor};
+use std::{collections::HashSet, fs, io::Cursor};
 
-use nemo_physical::{storage::StorageValue, value::EvaluationError};
+use nemo_physical::{
+    storage::StorageValue,
+    value::{DataValue, EvaluationError},
+};
 
 use crate::{
     dsv::DsvOptions,
@@ -184,6 +187,47 @@ fn windowed_batches_match_sequential_reads() {
         windowed[0].decoded(&windowed_dictionary),
         sequential.decoded(&sequential_dictionary)
     );
+}
+
+/// A label names one null across the windows of a file,
+/// and the rows with nulls keep their places among the other rows.
+#[test]
+fn a_label_names_one_null_across_the_windows_of_a_file() {
+    let temporary = TempDirectory::new();
+    let path = temporary.path().join("nulls.tsv");
+    let content: String = (0..300)
+        .map(|index| match index % 3 {
+            0 => format!("_:shared\t{index}\n"),
+            1 => format!("_:own-{index}\t{index}\n"),
+            _ => format!("name-{index}\t{index}\n"),
+        })
+        .collect();
+    fs::write(&path, &content).expect("the temp file writes");
+    let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
+    options.quoting = false;
+
+    let mut batch = ResourceBatch::new(vec![DsvResource::path(path, options)]);
+    batch.window_bytes = 64;
+    let mut dictionary = Dictionary::new();
+    let loaded = batch
+        .load(&mut dictionary, EvaluationContext::now())
+        .expect("the batch loads");
+    assert!(batch.windows(0).len() > 20, "the file split into windows");
+
+    let rows = loaded[0].decoded(&dictionary);
+    assert_eq!(rows.len(), 300);
+    let mut own = HashSet::new();
+    for (index, row) in (0i64..).zip(&rows) {
+        assert_eq!(row[1], DataValue::integer(index));
+        match index % 3 {
+            0 => assert_eq!(row[0], rows[0][0], "row {index}"),
+            1 => assert!(
+                own.insert(row[0].clone()) && row[0] != rows[0][0],
+                "row {index}"
+            ),
+            _ => assert_eq!(row[0], DataValue::iri(format!("name-{index}"))),
+        }
+    }
 }
 
 /// A malformed row deep in a later window is reported at its line in the file,

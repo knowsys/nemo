@@ -1,8 +1,9 @@
-% fullStr writes an exact number bare instead of as a typed literal, and
-% an IRI without its angle brackets.
+% fullStr writes a value as a term: an exact number bare, a bare name
+% bare, and any other IRI in its angle brackets.
 
 value(int, 42) .
 value(negative, -7) .
+value(name, alice) .
 value(iri, <http://example.org/a>) .
 
 complete(?kind, ?r) :- value(?kind, ?v), ?r = fullStr(?v) .

@@ -21,7 +21,8 @@
 //! A [Type] is an upper bound on the values that a column or an expression can hold.
 //!
 //! Values are written in *term syntax*, Nemo's notation for values,
-//! by the [Display](std::fmt::Display) of [DataValue] and [ValueRef].
+//! by the [Display](std::fmt::Display) of [DataValue] and [ValueRef],
+//! and read from it by [ReadValue::from_term_syntax].
 //! [NameKind] distinguishes the names that term syntax writes without quotes or brackets,
 //! and [Escape] reads its escape sequences.
 
@@ -36,6 +37,7 @@ mod literal;
 mod name;
 pub(crate) mod number;
 mod owned;
+mod read;
 mod reference;
 mod structure;
 pub(crate) mod temporal;
@@ -51,6 +53,7 @@ pub use literal::{OtherLiteral, OtherLiteralRef};
 pub use name::NameKind;
 pub use number::{Decimal, DecimalRef, Double, Float, Number, NumberRef};
 pub use owned::DataValue;
+pub use read::ReadValue;
 pub use reference::ValueRef;
 pub use structure::{MapRef, MapValue, TupleRef, TupleValue};
 pub use temporal::{Date, DateTime, Duration, Time, TimezoneOffset};

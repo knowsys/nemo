@@ -2,7 +2,11 @@
 
 use std::io::Cursor;
 
-use nemo_physical::{dictionary::Dictionary, function::EvaluationContext, value::DataValue};
+use nemo_physical::{
+    dictionary::Dictionary,
+    function::EvaluationContext,
+    value::{DataValue, TupleValue, ValueRef},
+};
 
 use crate::{
     load::Reader,
@@ -117,8 +121,115 @@ fn writers_serialize_cells_in_the_term_format() {
     assert_eq!(written.rows, 2);
     assert_eq!(
         String::from_utf8(target).expect("the output is text"),
-        "42,\"\"\"plain\"\"\"\nFoo@en,\"\"\"Foo\"\"@en\"\n",
+        "42,\"\"\"plain\"\"\"\n<Foo@en>,\"\"\"Foo\"\"@en\"\n",
     );
+}
+
+/// A term cell that is not one constant makes its row malformed:
+/// a full IRI without brackets, a text without quotes, and an empty cell.
+#[test]
+fn a_cell_that_is_no_constant_makes_its_row_malformed() {
+    let input = [
+        "<http://example.org/a>,1",
+        "http://example.org/a,2",
+        "Alice Smith,3",
+        ",4",
+        "\"\"\"Alice Smith\"\"\",5",
+        "",
+    ]
+    .join("\n");
+    let mut dictionary = Dictionary::new();
+    let loaded = DsvReader::new(DsvOptions::csv_terms(2))
+        .read(
+            Cursor::new(input),
+            &mut dictionary,
+            EvaluationContext::now(),
+        )
+        .expect("the source reads");
+
+    assert_eq!((loaded.malformed, loaded.first_malformed), (3, Some(2)));
+    assert_eq!(
+        loaded.decoded(&dictionary),
+        vec![
+            vec![
+                DataValue::iri("http://example.org/a"),
+                DataValue::integer(1)
+            ],
+            vec![DataValue::string("Alice Smith"), DataValue::integer(5)],
+        ]
+    );
+}
+
+/// A label names one null throughout a read and another null in the next read,
+/// and a row with a null keeps its place among the other rows.
+#[test]
+fn a_null_is_a_null_of_its_resource() {
+    let input = "_:a,1\nx,2\n\"(_:a,)\",3\n_:b,4\n";
+    let mut dictionary = Dictionary::new();
+    let mut read = || {
+        let loaded = DsvReader::new(DsvOptions::csv_terms(2))
+            .read(
+                Cursor::new(input),
+                &mut dictionary,
+                EvaluationContext::now(),
+            )
+            .expect("the source reads");
+        assert_eq!(loaded.malformed, 0);
+
+        loaded.decoded(&dictionary)
+    };
+    let first = read();
+    let second = read();
+
+    let numbers = |rows: &[Vec<DataValue>]| -> Vec<DataValue> {
+        rows.iter().map(|row| row[1].clone()).collect()
+    };
+    assert_eq!(
+        numbers(&first),
+        (1..=4).map(DataValue::integer).collect::<Vec<_>>()
+    );
+
+    // The tuple of the third row holds the null of the first row.
+    let null = first[0][0].clone();
+    assert!(matches!(null.as_ref(), ValueRef::Null(_)), "{null}");
+    assert_eq!(
+        first[2][0],
+        DataValue::tuple(TupleValue::new(vec![null.clone()]))
+    );
+    assert_ne!(first[3][0], null);
+    assert_ne!(second[0][0], null);
+    assert_eq!(numbers(&second), numbers(&first));
+}
+
+/// A row with a null is admitted by the condition and counted by the limit as any other row.
+#[test]
+fn rows_with_nulls_meet_the_condition_and_the_limit() {
+    let read = |options: DsvOptions, input: &str| {
+        let mut dictionary = Dictionary::new();
+        let loaded = DsvReader::new(options)
+            .read(
+                Cursor::new(input.to_owned()),
+                &mut dictionary,
+                EvaluationContext::now(),
+            )
+            .expect("the source reads");
+        let rows = loaded.decoded(&dictionary);
+
+        (rows, loaded.excluded, loaded.malformed)
+    };
+
+    let mut options = DsvOptions::csv_terms(2);
+    options.condition = Some(greater_than(1, 2));
+    let (rows, excluded, malformed) = read(options, "_:a,1\n_:a,5\nx,7\ny,0\n");
+    assert_eq!((rows.len(), excluded, malformed), (2, 2, 0));
+    assert_eq!(rows[0][1], DataValue::integer(5));
+    assert_eq!(rows[1][0], DataValue::iri("x"));
+
+    // The limit counts the rows with nulls among the well-formed rows.
+    let mut options = DsvOptions::csv_terms(2);
+    options.limit = Some(2);
+    let (rows, _, _) = read(options, "_:a,1\n_:b,2\n_:c,3\nx,4\n");
+    assert_eq!(rows.len(), 2);
 }
 
 /// A skipped column is left out of every written record.
@@ -179,10 +290,13 @@ fn numeric_formats_write_and_read_wide_numbers() {
     );
 
     assert_eq!(
-        ValueFormat::Integer.parse("123456789012345678901"),
+        ValueFormat::Integer.parse("123456789012345678901", &mut |_| DataValue::null(0)),
         Some(big("123456789012345678901"))
     );
-    assert_eq!(ValueFormat::Integer.parse("123456789012345678901.5"), None);
+    assert_eq!(
+        ValueFormat::Integer.parse("123456789012345678901.5", &mut |_| DataValue::null(0)),
+        None
+    );
 }
 
 /// A file written through gzip, as its name asks, is read back as the rows written.

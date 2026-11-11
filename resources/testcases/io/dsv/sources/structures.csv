@@ -1,0 +1,7 @@
+boolean,true
+first,_:a
+second,_:a
+other,_:b
+pair,"(_:a, 1)"
+point,"point(1, 2)"
+map,"{key = alice, ""quoted"" = 2.5d}"

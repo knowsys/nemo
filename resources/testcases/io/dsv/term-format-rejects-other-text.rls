@@ -1,0 +1,15 @@
+% A `term` cell that is not one term makes its row malformed: a full IRI
+% without angle brackets, a text without quotes, a prefixed name, since
+% a file declares no prefixes, even where the program declares the
+% prefix, and an empty cell. Each of them is read under the format that
+% says what it is.
+
+@prefix ex: <http://example.org/> .
+
+@import terms from csv { resource = "sources/not-terms.csv" } .
+@import texts from csv { resource = "sources/not-terms.csv", format = (int, string) } .
+@import iris from csv { resource = "sources/not-terms.csv", format = (int, iri) } .
+
+asTerm(?n, ?v) :- terms(?n, ?v) .
+asString(?n, ?v) :- texts(?n, ?v) .
+asIri(?n, ?v) :- iris(?n, ?v) .

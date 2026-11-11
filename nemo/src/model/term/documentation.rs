@@ -217,7 +217,8 @@ impl Operator {
             ),
             Operator::FullStr => doc(
                 &["fullStr(x: any) -> string"],
-                "The value written out in full as a plain string, datatype included.",
+                "The value as a term, in a plain string: `fullStr(2.5d)` is `\"2.5d\"`, a string \
+                 keeps its quotes, and an IRI that is not a bare name its angle brackets.",
             ),
             Operator::Lang => doc(
                 &["LANG(text: langstring) -> string"],

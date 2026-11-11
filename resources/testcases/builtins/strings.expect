@@ -43,6 +43,7 @@ result(substr_whole, "hello") .
 result(ucase, "HELLO") .
 result(ucase_words, "HELLO WORLD") .
 result(uri_roundtrip, "x & y") .
+result(uridecode, "?foo[]=\"bar quuz\"") .
 result(uridecode_plain, "a b/c") .
 result(uriencode, "%3Ffoo%5B%5D%3D%22bar%20quuz%22") .
 result(uriencode_reserved, "a%20b%2Fc%3Fd%3D%C3%A9") .

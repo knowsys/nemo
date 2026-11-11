@@ -12,7 +12,7 @@ use crate::{
     load::{Loaded, Reader},
 };
 
-use super::{DsvOptions, Parsed, RunPool};
+use super::{DeferredReads, DsvOptions, Parsed, RunPool};
 
 /// A reader of delimiter-separated values, which decodes rows into row buffers.
 ///
@@ -21,6 +21,8 @@ use super::{DsvOptions, Parsed, RunPool};
 /// A malformed row is counted and skipped.
 /// A row is malformed if it has the wrong width, if a cell's format rejects the cell,
 /// or if the dictionary cannot hold one of its values.
+/// A null in a cell is a null of the resource: a label names the same null throughout one
+/// read, and another null in every other read.
 /// The delivered rows are in the order of the file, unsorted.
 ///
 /// # Example
@@ -153,11 +155,15 @@ impl Reader for DsvReader {
     ) -> Result<Loaded, Diagnostic> {
         let runs = RunPool::new(context);
         let mut loaded = Loaded::new(self.options.arity(), context);
-        self.parse(source, &runs, |run| {
-            run.encode_into(&mut loaded, dictionary, 0);
+        let mut reads = DeferredReads::new(&self.options);
+        let parsed = self.parse(source, &runs, |run| {
+            run.encode_into(&mut loaded, &mut reads, dictionary, 0);
             runs.give(run);
             true
-        })?;
+        });
+        reads.close(dictionary);
+        parsed?;
+
         tracing::debug!(
             rows = loaded.rows.len(),
             malformed = loaded.malformed,

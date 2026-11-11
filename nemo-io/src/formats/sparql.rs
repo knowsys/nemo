@@ -14,6 +14,7 @@ mod cut_off;
 mod error;
 mod query;
 mod response;
+mod turtle;
 mod values;
 
 /// The query algebra crate, for composing queries from expressions and patterns.

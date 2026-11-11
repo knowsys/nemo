@@ -1,0 +1,11 @@
+% A `term` cell holds any term of a program: a boolean, a null, a tuple
+% and a map among them. A label names one null throughout its file, and
+% the two files have nulls of their own.
+
+@import left from csv { resource = "sources/structures.csv" } .
+@import right from csv { resource = "sources/structures.csv" } .
+
+cell(?k, ?v) :- left(?k, ?v) .
+sameNull(?k) :- left(first, ?n), left(?k, ?n) .
+acrossFiles(?k) :- left(first, ?n), right(?k, ?n) .
+holdsTheNull(?k) :- left(first, ?n), left(?k, (?n, 1)) .

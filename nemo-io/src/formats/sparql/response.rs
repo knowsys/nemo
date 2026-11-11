@@ -11,10 +11,9 @@ use crate::{
     error::IoError,
     load::{BlankNodes, Loaded},
     selection::RowSelection,
-    term::{self, LiteralSyntax},
 };
 
-use super::{ValuesBlock, cut_off, values::ValuesLookup};
+use super::{ValuesBlock, cut_off, turtle, values::ValuesLookup};
 
 /// The prefix of the name of each label scope in which an endpoint's blank nodes are named.
 const BLANK_NODE_SCOPE: &str = "sparql ";
@@ -256,7 +255,7 @@ fn read_tsv(
 ///
 /// An unbound cell becomes a fresh null,
 /// and a blank node becomes the null that its label names in `blanks`.
-/// Quoted literals are read in [Turtle's literal syntax](LiteralSyntax::Turtle).
+/// Quoted literals are read in [Turtle's syntax](turtle::literal).
 fn read_cell(cell: &str, blanks: &BlankNodes, dictionary: &mut Dictionary) -> Option<DataValue> {
     if cell.is_empty() {
         // An unbound cell is a fresh null every time, since two unbound cells
@@ -274,11 +273,11 @@ fn read_cell(cell: &str, blanks: &BlankNodes, dictionary: &mut Dictionary) -> Op
 /// Parses a TSV cell that is neither unbound nor a blank node as a term in Turtle syntax,
 /// or returns `None` for a cell that is not a term.
 fn ground_cell(cell: &str) -> Option<DataValue> {
-    if let Some(iri) = term::iri(cell) {
+    if let Some(iri) = turtle::iri(cell) {
         return Some(DataValue::iri(iri.as_ref()));
     }
     if let Some(rest) = cell.strip_prefix('"') {
-        return term::literal(rest, LiteralSyntax::Turtle);
+        return turtle::literal(rest);
     }
 
     match cell {

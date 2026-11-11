@@ -2,7 +2,7 @@ b(AnotherConstant) .
 b(Some%20Constant%20With%20Spaces) .
 b(YetAnotherConstant) .
 b("") .
-b("An invalid constant that will be handled as string literal when parsed from CSV because of the white spaces") .
+b("A string with white spaces, which keeps its quotes in the CSV file") .
 b("Another String Literal") .
 b("String Litral") .
 b(6789) .
@@ -12,7 +12,7 @@ c(AnotherConstant) .
 c(Some%20Constant%20With%20Spaces) .
 c(YetAnotherConstant) .
 c("") .
-c("An invalid constant that will be handled as string literal when parsed from CSV because of the white spaces") .
+c("A string with white spaces, which keeps its quotes in the CSV file") .
 c("Another String Literal") .
 c("String Litral") .
 c(6789) .
