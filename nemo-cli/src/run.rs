@@ -200,7 +200,7 @@ impl<'a> Run<'a> {
 
         // The summary and the report document describe the run up to here,
         // and a trace, which answers a question about the results, is shown last.
-        self.summarize(&engine, times, recorder.as_deref());
+        self.summarize(&engine, &specifications, times, recorder.as_deref());
         let facts = recorder.is_some().then(|| self.facts(&engine, times));
         self.document(level, facts.as_ref(), recorder.as_deref())?;
         self.trace(&mut engine, &traced)?;

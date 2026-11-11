@@ -6,7 +6,7 @@ use std::{collections::HashSet, time::Duration};
 use nemo::{
     codes::NOT_STORED_WHOLE,
     diagnostics::render::TerminalStyle,
-    engine::Engine,
+    engine::{Engine, ExportSpec},
     telemetry::{PhaseTable, Recorder},
 };
 
@@ -23,8 +23,15 @@ impl Run<'_> {
     /// Prints the summary of the run to the error stream,
     /// in as much detail as the report level selects.
     ///
+    /// It ends with the export directory, if the run wrote one of `exports` to a file.
     /// Standard output is left for the data.
-    pub(super) fn summarize(&self, engine: &Engine, times: Times, recorder: Option<&Recorder>) {
+    pub(super) fn summarize(
+        &self,
+        engine: &Engine,
+        exports: &[ExportSpec],
+        times: Times,
+        recorder: Option<&Recorder>,
+    ) {
         let level = self.arguments.reporting();
         // At the JSON level, the JSON document is the only report.
         if level == Report::None || level == Report::Json {
@@ -63,6 +70,12 @@ impl Run<'_> {
         }
 
         self.counts(engine, level);
+
+        if exports.iter().any(|export| !export.is_stdout()) {
+            // The directory is shown with a separator at its end.
+            let directory = self.arguments.export_dir.join("");
+            eprintln!("exports: {}", directory.display());
+        }
     }
 
     /// Prints the [RULES_LISTED] applied rules that took the most time,

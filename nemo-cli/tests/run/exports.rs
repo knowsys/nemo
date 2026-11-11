@@ -33,6 +33,29 @@ fn a_run_writes_what_the_program_exports() {
         "a predicate the program is not about stays out of the report: {}",
         outcome.stderr
     );
+    // The report ends with where the export went.
+    assert!(
+        outcome.stderr.ends_with("\nexports: out/\n"),
+        "{}",
+        outcome.stderr
+    );
+
+    // A run that writes no file names no directory:
+    // it exports nothing, prints its results, or exports to standard output alone.
+    write(
+        &directory,
+        "piped.rls",
+        "p(1) .\n@export p to csv { resource = \"\" } .\n",
+    );
+    for arguments in [
+        &["program.rls", "-D", "out", "-e", "none"][..],
+        &["program.rls", "-D", "out", "-P"],
+        &["piped.rls", "-D", "out"],
+    ] {
+        let outcome = run(&directory, arguments);
+        assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
+        assert!(!outcome.stderr.contains("exports:"), "{}", outcome.stderr);
+    }
 }
 
 #[test]
