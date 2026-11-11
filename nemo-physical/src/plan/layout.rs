@@ -125,25 +125,31 @@ impl PlanLayout {
         builder.finish()
     }
 
-    /// Returns whether the joins of a unit emit the rows of its top as a declared output has them.
+    /// Returns the unit whose joins emit the rows of the plan's only output as the output has
+    /// them, or `None` if the output's rows come about in another way.
     ///
-    /// They do if the top is a declared output whose trie is built from the rows as they
-    /// are produced, and if every member produces the rows that its join emits:
+    /// The output's step is the last one, since every step leads to the output.
+    /// The joins of a unit emit the output's rows if the output's trie is built from the rows
+    /// as they are produced, and if every member produces the rows that its join emits:
     /// no sink projects them, and no computed column extends them.
-    pub(crate) fn emits_output(&self, unit: &UnitLayout) -> bool {
+    pub(crate) fn emitting_unit(&self) -> Option<&UnitLayout> {
+        let Some(Step::Unit(unit)) = self.steps.last() else {
+            return None;
+        };
+
         let materialization = self.materializations[unit.top.index()]
             .as_ref()
             .expect("units materialize their tops");
         let as_produced = materialization
             .output
             .is_some_and(|output| materialization.builds[output].is_none());
+        let as_emitted = unit.members.iter().all(|member| match &member.delivery {
+            Delivery::Direct => true,
+            Delivery::RowStage(stage) => stage.delivered.is_empty(),
+            Delivery::Sink(_) => false,
+        });
 
-        as_produced
-            && unit.members.iter().all(|member| match &member.delivery {
-                Delivery::Direct => true,
-                Delivery::RowStage(stage) => stage.delivered.is_empty(),
-                Delivery::Sink(_) => false,
-            })
+        (as_produced && as_emitted).then_some(unit)
     }
 
     /// Returns the number of members of the unit with the given top,

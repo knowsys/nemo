@@ -288,6 +288,35 @@ impl Trie {
             cursor.advance();
         }
     }
+
+    /// Visits rows in storage order, reusing one row buffer, until `visit` breaks or the rows end.
+    ///
+    /// After each row, `visit` continues with a number of the row's leading columns.
+    /// The rows that follow with the same values in these columns are passed over
+    /// without being read.
+    /// With the number of all columns, the visit continues with the next row,
+    /// and with 0, it ends.
+    /// A nullary trie visits the empty row once, if it contains it.
+    pub(crate) fn for_each_row_skipping(
+        &self,
+        mut visit: impl FnMut(&[StorageValue]) -> ControlFlow<(), usize>,
+    ) {
+        if self.arity == 0 {
+            if !self.is_empty() {
+                // The one row is also the last, so what the visitor returns makes no difference.
+                let _ = visit(&[]);
+            }
+            return;
+        }
+
+        let mut cursor = RowCursor::new(self, 0);
+        while !cursor.is_done() {
+            match visit(cursor.row()) {
+                ControlFlow::Break(()) => return,
+                ControlFlow::Continue(prefix) => cursor.advance_past(prefix),
+            }
+        }
+    }
 }
 
 #[cfg(test)]

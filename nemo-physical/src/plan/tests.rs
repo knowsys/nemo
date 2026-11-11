@@ -2212,13 +2212,6 @@ fn ints(row: &[StorageValue]) -> Vec<i64> {
         .collect()
 }
 
-/// Returns whether the joins of a plan's last step emit the rows of the plan's output,
-/// so that a search of the output ends them with the row it finds.
-fn output_is_emitted(plan: &OperationPlan) -> bool {
-    let layout = plan.layout();
-    matches!(layout.steps.last(), Some(Step::Unit(unit)) if layout.emits_output(unit))
-}
-
 /// Returns the row that a search of a plan's output finds, as integers,
 /// for a verdict on the integers of a row.
 fn find_judged(
@@ -2303,7 +2296,7 @@ fn a_join_is_searched_until_a_row_fits() {
     let second = plan.load(number, all(), vec![y]);
     let pairs = plan.join(vec![first, second], vec![x, y]);
     plan.output(pairs);
-    assert!(output_is_emitted(&plan));
+    assert!(plan.finds_rows_in_joins());
 
     // The first pair of numbers from revision 2 follows the four pairs that start with 1,
     // and the pair (2, 1).
@@ -2356,7 +2349,7 @@ fn a_union_of_joins_is_searched_join_by_join() {
     }
     let pairs = plan.union(joins);
     plan.output(pairs);
-    assert!(output_is_emitted(&plan));
+    assert!(plan.finds_rows_in_joins());
     assert_eq!(members(&plan.layout()).len(), 2);
 
     // The first join has no pair that starts with an even number, and the second join has.
@@ -2388,7 +2381,7 @@ fn a_found_row_has_passed_the_operators_above_its_join() {
     // Without the computed column, the output's rows are the rows that the join emits.
     let path = plan.project(long, vec![x, y, z]);
     plan.output(path);
-    assert!(output_is_emitted(&plan));
+    assert!(plan.finds_rows_in_joins());
 
     let mut offered = Vec::new();
     let found = find(&plan, &mut manager, |row| {
@@ -2406,7 +2399,7 @@ fn an_output_with_a_computed_column_is_searched_once_computed() {
     let mut manager = TableManager::new();
     let (mut plan, long, _) = long_open_paths(&mut manager);
     plan.output(long);
-    assert!(!output_is_emitted(&plan));
+    assert!(!plan.finds_rows_in_joins());
 
     assert_eq!(find(&plan, &mut manager, |_| true), Some(vec![3, 4, 5, 8]));
     assert_eq!(find(&plan, &mut manager, |row| row[3] != 8), None);
@@ -2451,7 +2444,7 @@ fn outputs_that_no_join_emits_are_searched_once_computed() {
         (&ends, 4, vec![1, 4]),
     ];
     for (plan, last, expected) in searches {
-        assert!(!output_is_emitted(plan));
+        assert!(!plan.finds_rows_in_joins());
         let found = find(plan, &mut manager, |row| row.last() == Some(&last));
         assert_eq!(found, Some(expected));
         assert_eq!(find(plan, &mut manager, |_| false), None);
@@ -2492,7 +2485,7 @@ fn an_output_without_columns_is_searched_for_the_empty_row() {
         let loaded = plan.load(table, all(), vec![a]);
         let exists = plan.project(loaded, Vec::new());
         plan.output(exists);
-        assert!(output_is_emitted(&plan));
+        assert!(plan.finds_rows_in_joins());
 
         assert_eq!(find(&plan, &mut manager, |_| true), expected);
         assert_eq!(find(&plan, &mut manager, |_| false), None);
@@ -2522,7 +2515,7 @@ fn a_row_whose_computed_value_cannot_be_stored_is_not_found() {
     );
     let kept = plan.project(extended, vec![a]);
     plan.output(kept);
-    assert!(output_is_emitted(&plan));
+    assert!(plan.finds_rows_in_joins());
 
     let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
     assert!(results.outputs[0].is_empty());
@@ -2539,11 +2532,13 @@ fn a_search_needs_exactly_one_output() {
     let [a] = plan.markers();
     let loaded = plan.load(data, all(), vec![a]);
     assert_panics("exactly one output", || find(&plan, &mut manager, |_| true));
+    assert_panics("exactly one output", || plan.finds_rows_in_joins());
 
     let joined = plan.join(vec![loaded], vec![a]);
     plan.output(loaded);
     plan.output(joined);
     assert_panics("exactly one output", || find(&plan, &mut manager, |_| true));
+    assert_panics("exactly one output", || plan.finds_rows_in_joins());
 }
 
 /// A search of a random chain finds a row of the chain's output that fits,
@@ -2567,7 +2562,7 @@ fn rows_found_in_random_chains_are_rows_of_their_outputs() {
         plan.output(node);
 
         let layout = plan.layout();
-        let emitted = output_is_emitted(&plan);
+        let emitted = plan.finds_rows_in_joins();
         let in_order = !emitted || members(&layout).len() == 1;
         emitted_outputs += usize::from(emitted);
 

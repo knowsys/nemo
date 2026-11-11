@@ -78,11 +78,21 @@ impl<'a> RowCursor<'a> {
 
     /// Advances to the next row in storage order.
     pub(crate) fn advance(&mut self) {
+        self.advance_past(self.positions.len());
+    }
+
+    /// Advances to the next row in storage order that differs from the current row
+    /// in one of its first `prefix` columns.
+    ///
+    /// The rows that agree with the current row on these columns are passed over
+    /// without being read.
+    /// The cursor is done if no other row is left, as with a prefix of no columns.
+    pub(crate) fn advance_past(&mut self, prefix: usize) {
         debug_assert!(!self.done, "an exhausted cursor stays exhausted");
 
-        // The deepest column with a further node in its block moves to that node,
+        // The deepest column of the prefix with a further node in its block moves to that node,
         // and every column below it moves to the first node of its new block.
-        for column in (0..self.positions.len()).rev() {
+        for column in (0..prefix.min(self.positions.len())).rev() {
             if self.positions[column] + 1 < self.ends[column] {
                 self.positions[column] += 1;
                 self.descend(column);
@@ -137,9 +147,8 @@ mod tests {
         assert!(RowCursor::new(&Trie::nullary(true), 0).is_done());
     }
 
-    /// A cursor created at any index visits exactly the rows from that index on.
-    #[test]
-    fn seeking_visits_exactly_the_suffix() {
+    /// Returns a trie of six rows over three columns, with its rows in storage order.
+    fn sample() -> (Trie, Vec<Vec<StorageValue>>) {
         let trie = int_trie(
             3,
             &[
@@ -155,6 +164,14 @@ mod tests {
         trie.for_each_row(|row| all.push(row.to_vec()));
         assert_eq!(all.len(), 6);
 
+        (trie, all)
+    }
+
+    /// A cursor created at any index visits exactly the rows from that index on.
+    #[test]
+    fn seeking_visits_exactly_the_suffix() {
+        let (trie, all) = sample();
+
         for start in 0..=all.len() + 1 {
             let expected: Vec<_> = all.iter().skip(start).cloned().collect();
             assert_eq!(
@@ -162,6 +179,27 @@ mod tests {
                 expected,
                 "start {start}"
             );
+        }
+    }
+
+    /// From any row, advancing past a prefix reaches the next row that differs within the
+    /// prefix, and a prefix of every column reaches the next row.
+    #[test]
+    fn advancing_past_a_prefix_passes_over_the_rows_that_share_it() {
+        let (trie, all) = sample();
+
+        for start in 0..all.len() {
+            for prefix in 0..=4 {
+                let shared = prefix.min(3);
+                let expected = all[start + 1..]
+                    .iter()
+                    .find(|row| row[..shared] != all[start][..shared]);
+
+                let mut cursor = RowCursor::new(&trie, start);
+                cursor.advance_past(prefix);
+                let reached = (!cursor.is_done()).then(|| cursor.row().to_vec());
+                assert_eq!(reached.as_ref(), expected, "row {start}, prefix {prefix}");
+            }
         }
     }
 }

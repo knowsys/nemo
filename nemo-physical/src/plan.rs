@@ -400,6 +400,7 @@ impl OperationPlan {
     /// The join ends with the first row accepted,
     /// and finds none of the rows that a [rejection](Verdict::Reject) passes over.
     /// Any other output is computed first, and its rows are given to `judge` in storage order.
+    /// [finds_rows_in_joins](Self::finds_rows_in_joins) tells the two cases apart.
     ///
     /// Evaluation errors are not reported.
     ///
@@ -473,6 +474,20 @@ impl OperationPlan {
         Execution::find(self, &layout, manager, dictionary, context, &arena, judge)
     }
 
+    /// Returns whether [find_row](Self::find_row) finds the rows of the plan's only output
+    /// in its joins, one at a time, instead of computing the output in full first.
+    ///
+    /// A plan that is built for such a search can be checked with it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the plan does not have exactly one output.
+    pub fn finds_rows_in_joins(&self) -> bool {
+        self.only_output();
+
+        PlanLayout::new(self).emitting_unit().is_some()
+    }
+
     /// Lays out the plan, for reuse across executions.
     ///
     /// The layout reads the plan's structure but not the ranges of its loads,
@@ -536,6 +551,15 @@ impl OperationPlan {
     /// Returns the declared outputs.
     pub(crate) fn declared_outputs(&self) -> &[NodeId] {
         &self.outputs
+    }
+
+    /// Returns the plan's only output, and panics if the plan has no output or several.
+    pub(crate) fn only_output(&self) -> NodeId {
+        let [output] = self.outputs.as_slice() else {
+            panic!("a row is found in a plan with exactly one output");
+        };
+
+        *output
     }
 
     /// Adds a validated node and returns its id.

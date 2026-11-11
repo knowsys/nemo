@@ -460,6 +460,10 @@ impl<'a> ProofSearch<'a> {
         // which the plan finds one at a time.
         let variables = plan.project(result, space.order);
         plan.output(variables);
+        debug_assert!(
+            plan.finds_rows_in_joins(),
+            "the witnesses of a body are found one at a time"
+        );
 
         plan.find_row(
             self.manager,

@@ -15,7 +15,7 @@ use crate::{
     plan::{
         OperationPlan, PlanLayout,
         execute::{Execution, StepContext, results::Accounting, unit::MemberJoin},
-        layout::{Delivery, Step, UnitLayout},
+        layout::{Delivery, UnitLayout},
     },
     storage::StorageValue,
 };
@@ -38,11 +38,7 @@ impl<'a> Execution<'a> {
         arena: &JoinArena,
         mut judge: impl FnMut(&TableManager, &[StorageValue]) -> Verdict,
     ) -> Option<Vec<StorageValue>> {
-        assert_eq!(
-            plan.declared_outputs().len(),
-            1,
-            "a row is found in a plan with exactly one output"
-        );
+        let output = plan.only_output();
 
         let mut context = StepContext {
             dictionary,
@@ -57,58 +53,37 @@ impl<'a> Execution<'a> {
             .steps
             .split_last()
             .expect("a plan with an output has a step");
-        debug_assert_eq!(
-            Some(&last.node()),
-            plan.declared_outputs().first(),
-            "the last step executes the output"
-        );
+        debug_assert_eq!(last.node(), output, "the last step executes the output");
         for (position, step) in earlier.iter().enumerate() {
             execution.run_step(position, step, &mut context);
         }
 
-        if let Step::Unit(unit) = last
-            && plan_layout.emits_output(unit)
+        if let Some(unit) = plan_layout.emitting_unit()
             && let Ok(found) = execution.find_emitted(unit, &mut context, &mut judge)
         {
             return found;
         }
 
         let materialized = execution.materialized(last, &mut context);
-        let output = materialized
+        let canonical = materialized
             .output
             .expect("declared outputs keep their canonical trie");
 
-        // The rows that a rejection passes over directly follow the rejected row,
-        // and start with the values that `rejected` keeps of it.
         let mut found = None;
-        let mut rejected: Option<Vec<StorageValue>> = None;
-        materialized.tries[output].for_each_row_from(0, |row| {
-            if rejected
-                .as_ref()
-                .is_some_and(|start| row.starts_with(start))
-            {
-                return ControlFlow::Continue(());
-            }
-
+        materialized.tries[canonical].for_each_row_skipping(|row| {
             match judge(execution.manager, row) {
                 Verdict::Accept => {
                     found = Some(row.to_vec());
                     ControlFlow::Break(())
                 }
-                Verdict::Reject { prefix: 0 } => ControlFlow::Break(()),
-                Verdict::Reject { prefix } => {
-                    let start = rejected.get_or_insert_default();
-                    start.clear();
-                    start.extend_from_slice(&row[..prefix.min(row.len())]);
-                    ControlFlow::Continue(())
-                }
+                Verdict::Reject { prefix } => ControlFlow::Continue(prefix),
             }
         });
 
         found
     }
 
-    /// Offers the rows of a unit whose joins [emit them](PlanLayout::emits_output) to `judge`,
+    /// Offers the rows of a unit whose joins [emit them](PlanLayout::emitting_unit) to `judge`,
     /// each as its join finds it, and returns the first row accepted,
     /// or `None` if none is.
     ///

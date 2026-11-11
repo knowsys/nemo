@@ -155,6 +155,10 @@ impl ProofSearch<'_> {
         }
         let node = filtered(&mut plan, rows, filters);
         plan.output(node);
+        debug_assert!(
+            plan.finds_rows_in_joins(),
+            "the rows of a table are found one at a time"
+        );
 
         // The read ends at the end of the block that contains the step,
         // so it also returns rows added from the step on, which are passed over.
