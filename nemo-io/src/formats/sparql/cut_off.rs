@@ -4,7 +4,7 @@ use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{AboutResource, error::IoError};
 
-use super::response::starts_as_number;
+use super::{response::starts_as_number, turtle};
 
 /// Checks that a response is whole, and returns an error naming `endpoint` otherwise.
 ///
@@ -104,34 +104,21 @@ fn is_whole_cell(cell: &str) -> bool {
         return is_cell(cell);
     };
 
-    // The literal ends at its first unescaped quote, or its first `"""` if it is long.
-    let (body, quote) = match rest.strip_prefix("\"\"") {
-        Some(long) => (long, "\"\"\""),
-        None => (rest, "\""),
+    // The literal ends where the reader of cells finds its closing quote.
+    let Some((_, suffix)) = turtle::split(rest) else {
+        return false;
     };
-    let mut escaped = false;
-    for (index, character) in body.char_indices() {
-        match character {
-            _ if escaped => escaped = false,
-            '\\' => escaped = true,
-            '"' if body[index..].starts_with(quote) => {
-                let suffix = &body[index + quote.len()..];
-                return suffix.is_empty()
-                    || suffix.strip_prefix('@').is_some_and(|tag| {
-                        !tag.is_empty()
-                            && tag.chars().all(|character| {
-                                character.is_ascii_alphanumeric() || character == '-'
-                            })
-                    })
-                    || suffix
-                        .strip_prefix("^^<")
-                        .is_some_and(|datatype| datatype.ends_with('>'));
-            }
-            _ => {}
-        }
-    }
 
-    false
+    suffix.is_empty()
+        || suffix.strip_prefix('@').is_some_and(|tag| {
+            !tag.is_empty()
+                && tag
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        })
+        || suffix
+            .strip_prefix("^^<")
+            .is_some_and(|datatype| datatype.ends_with('>'))
 }
 
 #[cfg(test)]

@@ -75,10 +75,12 @@ fn a_whole_last_row_is_recognized_by_its_syntax() {
         );
     }
 
+    // A literal is whole as the reader of cells reads it, which knows no long form `"""…"""`.
     let cut = [
         "?a\t?b\n<urn:a>\t<urn:b",
         "?a\t?b\n<urn:a>\t\"unfinish",
         "?a\t?b\n<urn:a>\t\"typed\"^^<http://www.w3.org/2001/XML",
+        "?a\t?b\n<urn:a>\t\"\"\"long\"\"\"",
         "?a\t?b\n<urn:a>",
     ];
     for body in cut {

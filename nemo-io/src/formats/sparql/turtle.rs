@@ -46,7 +46,7 @@ pub(super) fn literal(rest: &str) -> Option<DataValue> {
 /// The closing quote is the first quote that no backslash escapes.
 ///
 /// Returns `None` if the literal never closes.
-fn split(rest: &str) -> Option<(&str, &str)> {
+pub(super) fn split(rest: &str) -> Option<(&str, &str)> {
     let mut escaped = false;
     for (index, character) in rest.char_indices() {
         if escaped {
