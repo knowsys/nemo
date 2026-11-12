@@ -27,7 +27,7 @@ use crate::{
         written::WrittenProgram,
     },
     model::{Atom, Directive, Fact, Identifier, Literal, Rule, Statement, Term},
-    pipeline::{Pipeline, RevisionId, StatementId},
+    pipeline::{Pipeline, StatementId},
     trace::query::{EntriesQuery, EntryQuery, Pagination, QueryChildren, QueryNode},
 };
 
@@ -165,7 +165,6 @@ impl<'a> QueryContext<'a> {
         predicates: &'a HashMap<String, Registered>,
         program: &'a CompiledProgram,
         written: &'a WrittenProgram,
-        revision: RevisionId,
         listings: &'a HashMap<String, Result<Registered, Diagnostic>>,
     ) -> Self {
         let mut context = Self {
@@ -174,7 +173,7 @@ impl<'a> QueryContext<'a> {
             predicates,
             program,
             written,
-            router: Router::new(pipeline, state, program, revision),
+            router: Router::new(pipeline, state, program, written.rewrites()),
             neighborhoods: HashMap::new(),
             listings,
         };

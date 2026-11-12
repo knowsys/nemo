@@ -41,7 +41,9 @@ use crate::{
         Atom, Directive, ImportDirective, Literal, Rule, Statement, Substitution, Term, TermKind,
         Variable, VariableKind, Walk,
     },
-    pipeline::{Correspondence, Pipeline, RewriteDeclaration, StatementId},
+    pipeline::{
+        Correspondence, DefinitionKind, Pipeline, RewriteDeclaration, Rewrites, StatementId,
+    },
 };
 
 /// One column of a lifted fact.
@@ -237,40 +239,29 @@ pub(crate) struct Lifter<'a> {
     dictionary: &'a Dictionary,
     /// The translation state, for names, declarations and the import plan.
     state: &'a TranslationState,
-    /// For each predicate that a stage defined, by resolved name, whether an import evaluates
-    /// it.
+    /// The rewrites that the pipeline stages declared while they produced the compiled program.
     ///
     /// The premises of the facts of a predicate that an import evaluates are remote.
-    definitions: HashMap<String, bool>,
-    /// For each predicate, the import that replaces a written rule deriving it.
-    replacing: HashMap<String, StatementId>,
+    rewrites: &'a Rewrites,
 }
 
 impl<'a> Lifter<'a> {
-    /// Prepares the lifting over a loaded engine,
-    /// and collects what the pipeline stages declared while they produced its compiled program.
+    /// Prepares the lifting over a loaded engine.
     pub(crate) fn new(engine: &'a Engine) -> Self {
         let program = engine.program.as_ref().expect("a proof needs a program");
-        let mut lifter = Self {
+        let written = engine
+            .written
+            .as_ref()
+            .expect("a program has a written one");
+
+        Self {
             pipeline: &engine.pipeline,
             program,
             manager: &engine.manager,
             dictionary: &engine.dictionary,
             state: &engine.translation,
-            definitions: HashMap::new(),
-            replacing: HashMap::new(),
-        };
-        if let Some(revision) = engine.revision {
-            lifter.collect(
-                engine
-                    .pipeline
-                    .statements(revision)
-                    .map(|(id, _)| id)
-                    .collect(),
-            );
+            rewrites: written.rewrites(),
         }
-
-        lifter
     }
 
     /// Lifts the proof of a traced fact into the graph, and returns its node's id.
@@ -295,17 +286,17 @@ impl<'a> Lifter<'a> {
 
         let predicate = self.manager.name(node.table).to_owned();
         let terms = self.widen(&predicate, self.cells(&node.row), at);
-        let lifted = match &node.proof {
-            Explanation::Loaded if !self.replacing.contains_key(&predicate) => LiftedNode {
+        let lifted = match (&node.proof, self.rewrites.replacing_import(&predicate)) {
+            (Explanation::Loaded, None) => LiftedNode {
                 predicate,
                 terms,
                 proof: LiftedProof::Leaf,
             },
-            Explanation::Loaded => {
-                let derivation = self.replacing_derivation(self.replacing[&predicate], &terms, 0);
+            (Explanation::Loaded, Some(import)) => {
+                let derivation = self.replacing_derivation(import, &terms, 0);
                 self.finish(self.climb(derivation), predicate, terms, graph)
             }
-            Explanation::Derived { .. } => {
+            (Explanation::Derived { .. }, _) => {
                 let derivation = self.derivation(node, &terms);
                 self.finish(self.climb(derivation), predicate, terms, graph)
             }
@@ -313,45 +304,6 @@ impl<'a> Lifter<'a> {
         let id = graph.push(lifted);
         graph.lifted.insert(key, id);
         id
-    }
-
-    /// Collects the definitions and the imports that replace rules,
-    /// following the provenance back from the given statements.
-    fn collect(&mut self, mut pending: Vec<StatementId>) {
-        let mut seen = HashSet::new();
-        while let Some(id) = pending.pop() {
-            if !seen.insert(id) {
-                continue;
-            }
-            let Some((declaration, sources)) = self.pipeline.declaration(id) else {
-                continue;
-            };
-
-            match declaration {
-                RewriteDeclaration::Replaces { view, .. } => {
-                    if view.is_some()
-                        && let Statement::Directive(Directive::Import(import)) =
-                            self.pipeline.statement(id)
-                        && let Some(name) = self.state.resolve(&import.predicate)
-                    {
-                        self.replacing.insert(name, id);
-                    }
-
-                    pending.push(sources[0]);
-                }
-                RewriteDeclaration::Defines { view } => {
-                    let predicate = match self.pipeline.statement(id) {
-                        Statement::Rule(rule) => &rule.head[0].predicate,
-                        Statement::Directive(Directive::Import(import)) => &import.predicate,
-                        Statement::Fact(_) | Statement::Directive(_) => continue,
-                    };
-                    if let Some(name) = self.state.resolve(predicate) {
-                        self.definitions.insert(name, view.is_some());
-                    }
-                }
-                RewriteDeclaration::DefinesFilter => {}
-            }
-        }
     }
 
     /// Returns the derivation of a derived proof node, at its statement of the
@@ -538,7 +490,7 @@ impl<'a> Lifter<'a> {
     fn instance(&self, derivation: &StageDerivation, position: usize) -> Option<StageDerivation> {
         let atom = derivation.rule.body[position].atom()?;
         let name = self.state.resolve(&atom.predicate)?;
-        if *self.definitions.get(&name)? {
+        if self.rewrites.definition(&name)?.kind == DefinitionKind::View {
             return None;
         }
         let Some(Premise::Node(node)) = &derivation.premises[position] else {

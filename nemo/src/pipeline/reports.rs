@@ -122,38 +122,25 @@ impl Pipeline {
     pub fn refine(&self, mut diagnostic: Diagnostic, statement: StatementId) -> Diagnostic {
         let labels: Vec<Span> = diagnostic.labels().iter().map(|label| label.span).collect();
 
-        let mut pending = vec![statement];
-        let mut seen = Vec::new();
-        while let Some(id) = pending.pop() {
-            if seen.contains(&id) {
-                continue;
-            }
-
-            seen.push(id);
-            let Some(edge) = self.created_by[id.index()] else {
+        for id in self.ancestry(statement) {
+            let Some((RewriteDeclaration::Replaces { substituted, .. }, _)) = self.declaration(id)
+            else {
                 continue;
             };
 
-            let edge = &self.edges[edge];
-            if let Some(RewriteDeclaration::Replaces { substituted, .. }) = &edge.declaration {
-                for record in substituted {
-                    let relevant = record.occurrence.is_some_and(|occurrence| {
-                        labels.iter().any(|label| {
-                            label.file == occurrence.file
-                                && occurrence.start <= label.start
-                                && label.end <= occurrence.end
-                        })
-                    });
-                    if relevant && let Some(definition) = record.definition {
-                        diagnostic = diagnostic.with_label(
-                            definition,
-                            format!("`{}` is defined here", record.variable),
-                        );
-                    }
+            for record in substituted {
+                let relevant = record.occurrence.is_some_and(|occurrence| {
+                    labels.iter().any(|label| {
+                        label.file == occurrence.file
+                            && occurrence.start <= label.start
+                            && label.end <= occurrence.end
+                    })
+                });
+                if relevant && let Some(definition) = record.definition {
+                    diagnostic = diagnostic
+                        .with_label(definition, format!("`{}` is defined here", record.variable));
                 }
             }
-
-            pending.extend(edge.sources.iter().rev());
         }
 
         diagnostic

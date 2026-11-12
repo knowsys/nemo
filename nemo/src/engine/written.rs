@@ -10,13 +10,13 @@
 //! Whether a predicate is derived or extensional also follows the written program,
 //! however the stages rewrote its rules.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
-    model::{Atom, Directive, Identifier, Rule, Statement},
-    pipeline::{NameScope, Pipeline, RevisionId, RewriteDeclaration, StatementId},
+    model::{Atom, Directive, Identifier, Statement},
+    pipeline::{NameScope, Pipeline, RevisionId, Rewrites, StatementId},
 };
 
 /// The written program of a loaded engine.
@@ -35,6 +35,8 @@ pub(crate) struct WrittenProgram {
     /// The predicates the written statements declare `@output` or
     /// export, in declaration order.
     outputs: Vec<String>,
+    /// The rewrites that the pipeline stages declared on the way to the compiled program.
+    rewrites: Rewrites,
     /// Per name of a hidden predicate, as written or resolved,
     /// the text with which a diagnostic names the written literals it replaces.
     hidden: Vec<(String, String)>,
@@ -80,19 +82,28 @@ impl WrittenProgram {
             note_statement(&mut predicates, &scope, statement);
         }
 
+        let rewrites = pipeline.rewrites(revision, &scope);
+
         Self {
             revision: written,
             statements,
             ids,
             predicates,
             outputs,
-            hidden: hidden(pipeline, revision, &scope),
+            hidden: hidden(pipeline, &rewrites),
+            rewrites,
         }
     }
 
     /// Returns the written revision.
     pub(crate) fn revision(&self) -> RevisionId {
         self.revision
+    }
+
+    /// Returns the rewrites that the pipeline stages declared on the way to the compiled
+    /// program.
+    pub(crate) fn rewrites(&self) -> &Rewrites {
+        &self.rewrites
     }
 
     /// Returns the id of a written statement, or `None` for a statement a stage made.
@@ -249,48 +260,27 @@ fn note_statement(
     statement.visit_predicates(|predicate| note(predicate, PredicateUse::Read, None));
 }
 
-/// Returns, per name of a predicate that a stage introduced on the way to a revision,
-/// as written or resolved, the text that names the written literals it replaces,
-/// such as "the literals `a`, `b`".
-fn hidden(pipeline: &Pipeline, revision: RevisionId, scope: &NameScope) -> Vec<(String, String)> {
+/// Returns, per name of a predicate that a stage defined, as written or resolved,
+/// the text that names the written literals it replaces, such as "the literals `a`, `b`".
+fn hidden(pipeline: &Pipeline, rewrites: &Rewrites) -> Vec<(String, String)> {
     let mut hidden = Vec::new();
-    let mut pending: Vec<StatementId> = pipeline.statements(revision).map(|(id, _)| id).collect();
-    let mut seen = HashSet::new();
-    while let Some(id) = pending.pop() {
-        if !seen.insert(id) {
-            continue;
-        }
-        let Some((declaration, sources)) = pipeline.declaration(id) else {
+    for definition in rewrites.definitions() {
+        let (Some(meaning), Some(written)) = (
+            pipeline.definition_rule(definition),
+            pipeline.defined_predicate(definition.statement),
+        ) else {
             continue;
         };
 
-        let meaning: &Rule = match (declaration, pipeline.statement(id)) {
-            (RewriteDeclaration::Replaces { .. }, _) => {
-                pending.push(sources[0]);
-                continue;
-            }
-            (RewriteDeclaration::Defines { view: Some(view) }, _) => view,
-            (
-                RewriteDeclaration::Defines { view: None } | RewriteDeclaration::DefinesFilter,
-                Statement::Rule(rule),
-            ) => rule,
-            _ => continue,
-        };
-        let predicate = match pipeline.statement(id) {
-            Statement::Directive(Directive::Import(import)) => &import.predicate,
-            _ => &meaning.head[0].predicate,
-        };
         let literals: Vec<String> = meaning
             .body
             .iter()
             .map(|literal| format!("`{literal}`"))
             .collect();
         let literals = format!("the literals {}", literals.join(", "));
-        let mut spellings = vec![predicate.to_string()];
-        if let Ok(name) = scope.resolve(predicate, None)
-            && !spellings.contains(&name)
-        {
-            spellings.push(name);
+        let mut spellings = vec![written.to_string()];
+        if !spellings.contains(&definition.predicate) {
+            spellings.push(definition.predicate.clone());
         }
 
         for spelling in spellings {

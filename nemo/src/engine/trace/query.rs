@@ -181,7 +181,6 @@ fn run<T>(
             .written
             .as_ref()
             .expect("a program has a written one"),
-        engine.revision.expect("a program has a revision"),
         &listings,
     );
     let mut evaluation = QueryEvaluation {
@@ -259,7 +258,6 @@ fn context<'a>(
             .written
             .as_ref()
             .expect("a program has a written one"),
-        engine.revision.expect("a program has a revision"),
         listings,
     )
 }

@@ -29,6 +29,7 @@ mod matching;
 mod provenance;
 mod reports;
 mod revision;
+mod rewrites;
 mod scope;
 mod sources;
 mod stage;
@@ -45,10 +46,11 @@ pub(crate) use self::{
     construct::UnlinkedConstruct,
     matching::{Correspondence, grouped_paths},
     provenance::RewriteDeclaration,
+    rewrites::{Definition, DefinitionKind, Rewrites},
     scope::NameScope,
 };
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -297,22 +299,9 @@ impl Pipeline {
     /// A loaded statement derives from itself.
     #[cfg(test)]
     pub(crate) fn origins(&self, statement: StatementId) -> Vec<StatementId> {
-        let mut pending = vec![statement];
-        let mut seen = Vec::new();
-        let mut roots = Vec::new();
-        while let Some(id) = pending.pop() {
-            if seen.contains(&id) {
-                continue;
-            }
-
-            seen.push(id);
-            match self.created_by[id.index()] {
-                None => roots.push(id),
-                Some(edge) => pending.extend(self.edges[edge].sources.iter().rev()),
-            }
-        }
-
-        roots
+        self.ancestry(statement)
+            .filter(|id| self.created_by[id.index()].is_none())
+            .collect()
     }
 
     /// Returns the span of a statement version, or if it has none,
@@ -320,23 +309,18 @@ impl Pipeline {
     ///
     /// The versions it derives from are searched depth first.
     pub(crate) fn source_span(&self, statement: StatementId) -> Option<Span> {
-        let mut pending = vec![statement];
-        let mut seen = Vec::new();
-        while let Some(id) = pending.pop() {
-            if seen.contains(&id) {
-                continue;
-            }
+        self.ancestry(statement)
+            .find_map(|id| self.statement(id).span())
+    }
 
-            seen.push(id);
-            if let Some(span) = self.statement(id).span() {
-                return Some(span);
-            }
-            if let Some(edge) = self.created_by[id.index()] {
-                pending.extend(self.edges[edge].sources.iter().rev());
-            }
+    /// Returns a walk over a statement version and the versions that it derives from,
+    /// depth first, each of them once.
+    pub(crate) fn ancestry(&self, statement: StatementId) -> Ancestry<'_> {
+        Ancestry {
+            pipeline: self,
+            pending: vec![statement],
+            seen: HashSet::new(),
         }
-
-        None
     }
 
     /// Adds a statement version to the arena, and returns its id.
@@ -394,6 +378,39 @@ impl Pipeline {
         );
         self.revisions.push(revision);
         id
+    }
+}
+
+/// A walk over a statement version and the versions that it derives from,
+/// along the provenance edges.
+#[derive(Debug)]
+pub(crate) struct Ancestry<'a> {
+    /// The pipeline whose edges are followed.
+    pipeline: &'a Pipeline,
+    /// The versions still to visit, the next one last.
+    pending: Vec<StatementId>,
+    /// The versions visited so far.
+    seen: HashSet<StatementId>,
+}
+
+impl Iterator for Ancestry<'_> {
+    type Item = StatementId;
+
+    fn next(&mut self) -> Option<StatementId> {
+        while let Some(id) = self.pending.pop() {
+            if !self.seen.insert(id) {
+                continue;
+            }
+
+            if let Some(edge) = self.pipeline.created_by[id.index()] {
+                self.pending
+                    .extend(self.pipeline.edges[edge].sources.iter().rev());
+            }
+
+            return Some(id);
+        }
+
+        None
     }
 }
 

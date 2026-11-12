@@ -12,12 +12,12 @@
 //! For a literal over a predicate that an import evaluates at its endpoint,
 //! the route ends at the literal that reads the import's predicate.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     engine::compile::{compiled::CompiledProgram, translation::TranslationState},
     model::{Directive, Literal, Rule, Statement, Term, TermKind},
-    pipeline::{Pipeline, RevisionId, RewriteDeclaration, StatementId},
+    pipeline::{Definition, DefinitionKind, Pipeline, RewriteDeclaration, Rewrites, StatementId},
 };
 
 /// A body literal of a statement.
@@ -59,66 +59,31 @@ pub(super) struct Router<'a> {
     pipeline: &'a Pipeline,
     /// The translation state, for resolving names.
     state: &'a TranslationState,
-    /// For each statement that a later stage rewrote, the statement that replaces it.
-    later: HashMap<StatementId, StatementId>,
-    /// For each predicate that a stage defined, by resolved name,
-    /// the defining statement and whether an import evaluates it.
-    definitions: HashMap<String, (StatementId, bool)>,
+    /// The rewrites that the pipeline stages declared while they produced the compiled program.
+    rewrites: &'a Rewrites,
     /// The index of the compiled rule of each statement of the compiled program.
     compiled: HashMap<StatementId, usize>,
 }
 
 impl<'a> Router<'a> {
-    /// Prepares the routing from the revision of the compiled program back to its written
-    /// program.
+    /// Prepares the routing from the written program into the compiled program,
+    /// along the rewrites that the stages declared.
     pub(super) fn new(
         pipeline: &'a Pipeline,
         state: &'a TranslationState,
         program: &'a CompiledProgram,
-        revision: RevisionId,
+        rewrites: &'a Rewrites,
     ) -> Self {
-        let mut router = Self {
+        Self {
             pipeline,
             state,
-            later: HashMap::new(),
-            definitions: HashMap::new(),
+            rewrites,
             compiled: program
                 .statements
                 .iter()
                 .enumerate()
                 .map(|(index, &statement)| (statement, index))
                 .collect(),
-        };
-        router.collect(pipeline.statements(revision).map(|(id, _)| id).collect());
-        router
-    }
-
-    /// Collects the later versions and the definitions,
-    /// following the provenance back from the given statements.
-    fn collect(&mut self, mut pending: Vec<StatementId>) {
-        let mut seen = HashSet::new();
-        while let Some(id) = pending.pop() {
-            if !seen.insert(id) {
-                continue;
-            }
-
-            match self.pipeline.declaration(id) {
-                Some((RewriteDeclaration::Replaces { .. }, sources)) => {
-                    self.later.insert(sources[0], id);
-                    pending.push(sources[0]);
-                }
-                Some((RewriteDeclaration::Defines { view }, _)) => {
-                    let predicate = match self.pipeline.statement(id) {
-                        Statement::Rule(rule) => &rule.head[0].predicate,
-                        Statement::Directive(Directive::Import(import)) => &import.predicate,
-                        Statement::Fact(_) | Statement::Directive(_) => continue,
-                    };
-                    if let Some(name) = self.state.resolve(predicate) {
-                        self.definitions.insert(name, (id, view.is_some()));
-                    }
-                }
-                Some((RewriteDeclaration::DefinesFilter, _)) | None => {}
-            }
         }
     }
 
@@ -148,8 +113,8 @@ impl<'a> Router<'a> {
     /// rule.
     pub(super) fn route(&self, statement: StatementId, path: &[usize]) -> Route {
         let (&position, rest) = path.split_first().expect("paths are not empty");
-        let base = match self.later.get(&statement) {
-            Some(&next) => {
+        let base = match self.rewrites.later(statement) {
+            Some(next) => {
                 let Some((RewriteDeclaration::Replaces { correspondence, .. }, _)) =
                     self.pipeline.declaration(next)
                 else {
@@ -170,17 +135,17 @@ impl<'a> Router<'a> {
         if rest.is_empty() || base.remote {
             return base;
         }
-        let Some((definition, remote)) = self.definition_at(statement, position) else {
+        let Some(definition) = self.definition_at(statement, position) else {
             return base;
         };
-        if remote {
+        if definition.kind == DefinitionKind::View {
             return Route {
                 remote: true,
                 ..base
             };
         }
 
-        let inner = self.route(definition, rest);
+        let inner = self.route(definition.statement, rest);
         let mut hops = base.hops;
         hops.push(base.last);
         hops.extend(inner.hops);
@@ -193,22 +158,18 @@ impl<'a> Router<'a> {
     }
 
     /// Returns the definition of the predicate that a literal of a statement reads,
-    /// and whether an import evaluates it.
-    fn definition_at(
-        &self,
-        statement: StatementId,
-        position: usize,
-    ) -> Option<(StatementId, bool)> {
+    /// if a stage defined the predicate.
+    fn definition_at(&self, statement: StatementId, position: usize) -> Option<&'a Definition> {
         let atom = self.rule(statement)?.body[position].atom()?;
         let name = self.state.resolve(&atom.predicate)?;
-        self.definitions.get(&name).copied()
+        self.rewrites.definition(&name)
     }
 
     /// Returns the view of the import defining the predicate
     /// that a remote route's last literal reads.
     pub(super) fn remote_view(&self, route: &Route) -> Option<&'a Rule> {
-        let (definition, _) = self.definition_at(route.last.statement, route.last.literal)?;
-        match self.pipeline.declaration(definition) {
+        let definition = self.definition_at(route.last.statement, route.last.literal)?;
+        match self.pipeline.declaration(definition.statement) {
             Some((RewriteDeclaration::Defines { view: Some(view) }, _)) => Some(view),
             _ => None,
         }
@@ -229,7 +190,7 @@ impl<'a> Router<'a> {
 
     /// Returns the final version of a statement.
     fn current(&self, mut statement: StatementId) -> StatementId {
-        while let Some(&next) = self.later.get(&statement) {
+        while let Some(next) = self.rewrites.later(statement) {
             statement = next;
         }
 
