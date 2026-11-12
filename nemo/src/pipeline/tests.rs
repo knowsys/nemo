@@ -90,6 +90,43 @@ fn rewinding_removes_what_was_added_since_the_mark() {
     assert_eq!(pipeline.program(again).to_string(), "other(2) .");
 }
 
+/// Forgetting what came before a mark removes it, and what was added since keeps its ids.
+#[test]
+fn forgetting_keeps_the_ids_of_what_was_added_since_the_mark() {
+    let (mut pipeline, _) = loaded();
+    let mark = pipeline.mark();
+
+    let later = pipeline.load(Program::new(vec![fact("other", 1), rule("reach", "other")]));
+    let ids = pipeline.revision_statements(later).to_vec();
+    let mut commit = pipeline.commit(later, "rewrite");
+    let new = commit.split(ids[1], vec![rule("reach", "link")])[0];
+    let after = commit.finish();
+
+    pipeline.forget_before(mark);
+    assert_eq!(pipeline.revision_statements(later), ids);
+    assert_eq!(
+        pipeline.program(later).to_string(),
+        "other(1) .\nreach(?x) :- other(?x) ."
+    );
+    assert_eq!(
+        pipeline.program(after).to_string(),
+        "other(1) .\nreach(?x) :- link(?x) ."
+    );
+    assert_eq!(pipeline.origins(new), vec![ids[1]]);
+    assert!(pipeline.ran(after, "rewrite"));
+
+    // What is added next gets new ids, and a rewind still removes it.
+    let mark = pipeline.mark();
+    let next = pipeline.load(Program::new(vec![fact("more", 3)]));
+    assert_eq!(pipeline.program(next).to_string(), "more(3) .");
+    pipeline.rewind(mark);
+    assert_eq!(pipeline.mark(), mark);
+    assert_eq!(
+        pipeline.program(after).to_string(),
+        "other(1) .\nreach(?x) :- link(?x) ."
+    );
+}
+
 /// A commit without changes keeps every statement, and its revision counts as run by its stage.
 #[test]
 fn keeping_is_the_default() {

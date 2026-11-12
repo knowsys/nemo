@@ -14,7 +14,7 @@ impl RevisionId {
         Self(index)
     }
 
-    /// Returns the id's index into the revision list.
+    /// Returns the id as a number.
     pub(crate) fn index(self) -> usize {
         self.0 as usize
     }

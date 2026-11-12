@@ -691,6 +691,37 @@ fn an_abandoned_loading_method_leaves_no_statements_behind() {
     assert_eq!(rows(&mut engine, "q"), [["1"]]);
 }
 
+/// A reload removes the statements of the program that it replaces from the pipeline,
+/// and the reloaded program still explains itself.
+#[test]
+fn a_reload_leaves_no_statements_of_the_replaced_program_behind() {
+    let mut engine = Engine::new();
+    engine
+        .load(parse("r(1) . q(?x) :- r(?x) ."))
+        .expect("the program loads");
+    let held = engine.pipeline.statement_count();
+
+    for value in 2..5 {
+        engine
+            .reload(parse(&format!("r({value}) . q(?x) :- r(?x) .")))
+            .expect("the program reloads");
+        assert_eq!(engine.pipeline.statement_count(), held);
+    }
+
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "q"), [["4"]]);
+    assert_eq!(engine.revisions().len(), 1);
+    let rule = engine.rule(1).expect("the second statement is a rule");
+    assert_eq!(rule.text, "q(?x) :- r(?x) .");
+
+    // An extension still finds the statements that it appends to.
+    engine
+        .extend(parse("s(?x) :- q(?x) ."))
+        .expect("the program extends");
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "s"), [["4"]]);
+}
+
 /// A load that fails registers no predicate, so that a corrected program loads,
 /// even one that uses a predicate of the failed program with another number of columns.
 #[test]

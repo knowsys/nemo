@@ -1,6 +1,6 @@
 //! The program pipeline: statement versions, revisions, and provenance.
 //!
-//! A [Pipeline] keeps every *statement version* in an append-only arena.
+//! A [Pipeline] keeps the *statement versions* of its programs in an arena.
 //! A *revision* of the program is a list of statement versions, which are *live* in it.
 //! A *pipeline stage* ([Transformation]) rewrites one revision into the next through a [Commit].
 //! Keeping a statement is the default,
@@ -71,7 +71,7 @@ use crate::{
 pub struct StatementId(u32);
 
 impl StatementId {
-    /// Returns the id's index into the arena.
+    /// Returns the id as a number.
     fn index(self) -> usize {
         self.0 as usize
     }
@@ -119,7 +119,7 @@ impl Pipeline {
 
     /// Returns the statement version with the given id, even a replaced or removed one.
     pub fn statement(&self, id: StatementId) -> &Statement {
-        &self.arena.statements[id.index()]
+        self.arena.statement(id)
     }
 
     /// Returns the live statements of a revision, in program order.
@@ -127,7 +127,8 @@ impl Pipeline {
         &self,
         revision: RevisionId,
     ) -> impl Iterator<Item = (StatementId, &Statement)> {
-        self.arena.revisions[revision.index()]
+        self.arena
+            .revision(revision)
             .statements
             .iter()
             .map(|&id| (id, self.statement(id)))
@@ -149,8 +150,8 @@ impl Pipeline {
     /// so the stages that `base` has been through count as run for it.
     /// The statements of both revisions keep their provenance.
     pub fn merge(&mut self, base: RevisionId, extension: RevisionId) -> RevisionId {
-        let mut statements = self.arena.revisions[base.index()].statements.clone();
-        statements.extend_from_slice(&self.arena.revisions[extension.index()].statements);
+        let mut statements = self.arena.revision(base).statements.clone();
+        statements.extend_from_slice(&self.arena.revision(extension).statements);
 
         self.push_revision(ProgramRevision {
             parent: Some(base),
@@ -260,7 +261,7 @@ impl Pipeline {
         let mut current = Some(revision);
         while let Some(revision) = current {
             chain.push(revision);
-            current = self.arena.revisions[revision.index()].parent;
+            current = self.arena.revision(revision).parent;
         }
 
         chain.reverse();
@@ -269,14 +270,14 @@ impl Pipeline {
 
     /// Returns the stage that produced a revision, or `None` for a loaded or merged revision.
     pub fn stage(&self, revision: RevisionId) -> Option<&'static str> {
-        self.arena.revisions[revision.index()].stage
+        self.arena.revision(revision).stage
     }
 
     /// Returns whether a revision or one of its ancestors was produced by the named stage.
     pub(crate) fn ran(&self, revision: RevisionId, stage: &str) -> bool {
         let mut current = Some(revision);
         while let Some(revision) = current {
-            let entry = &self.arena.revisions[revision.index()];
+            let entry = self.arena.revision(revision);
             if entry.stage == Some(stage) {
                 return true;
             }
@@ -294,7 +295,7 @@ impl Pipeline {
     #[cfg(test)]
     pub(crate) fn origins(&self, statement: StatementId) -> Vec<StatementId> {
         self.ancestry(statement)
-            .filter(|id| self.arena.created_by[id.index()].is_none())
+            .filter(|&id| self.arena.created_by(id).is_none())
             .collect()
     }
 
@@ -317,7 +318,14 @@ impl Pipeline {
         }
     }
 
-    /// Returns the sizes of the arena now, for a later [rewind](Self::rewind).
+    /// Returns the number of statement versions that the arena has.
+    #[cfg(test)]
+    pub(crate) fn statement_count(&self) -> usize {
+        self.arena.statement_count()
+    }
+
+    /// Returns the position of the arena now:
+    /// what is added from now on comes after it, and everything else before it.
     pub(crate) fn mark(&self) -> ArenaMark {
         self.arena.mark()
     }
@@ -330,22 +338,26 @@ impl Pipeline {
         self.arena.rewind(mark);
     }
 
+    /// Removes every statement version, provenance edge and revision added before `mark` was
+    /// taken, so that a replaced program leaves nothing behind.
+    ///
+    /// The ids given out before then are invalid afterwards, and the later ones stay valid.
+    /// What was added since must not derive from what is removed,
+    /// which holds for a program loaded since and what the stages made of it.
+    pub(crate) fn forget_before(&mut self, mark: ArenaMark) {
+        self.arena.forget_before(mark);
+    }
+
     /// Adds a statement version to the arena, and returns its id.
     ///
     /// `edge` is the index of the edge that created it, or `None` for a loaded statement.
     pub(crate) fn intern(&mut self, statement: Statement, edge: Option<usize>) -> StatementId {
-        let id = StatementId(
-            u32::try_from(self.arena.statements.len()).expect("statement counts stay below u32"),
-        );
-        self.arena.statements.push(statement);
-        self.arena.created_by.push(edge);
-        id
+        self.arena.intern(statement, edge)
     }
 
     /// Records a provenance edge, and returns its index.
     pub(crate) fn record_edge(&mut self, edge: ProvenanceEdge) -> usize {
-        self.arena.edges.push(edge);
-        self.arena.edges.len() - 1
+        self.arena.record_edge(edge)
     }
 
     /// Returns the rewrite declaration made about a statement version when it was created,
@@ -357,34 +369,30 @@ impl Pipeline {
         &self,
         statement: StatementId,
     ) -> Option<(&RewriteDeclaration, &[StatementId])> {
-        let edge = &self.arena.edges[self.arena.created_by[statement.index()]?];
+        let edge = self.arena.edge(self.arena.created_by(statement)?);
         Some((edge.declaration.as_ref()?, &edge.sources))
     }
 
     /// Returns the index of the edge that created a statement version,
     /// or `None` for a loaded statement.
     pub(crate) fn creating_edge(&self, statement: StatementId) -> Option<usize> {
-        self.arena.created_by[statement.index()]
+        self.arena.created_by(statement)
     }
 
     /// Returns the edge with the given index mutably,
     /// so that its targets and rewrite declaration can be filled in.
     pub(crate) fn edge_mut(&mut self, edge: usize) -> &mut ProvenanceEdge {
-        &mut self.arena.edges[edge]
+        self.arena.edge_mut(edge)
     }
 
     /// Returns the ids of the live statements of a revision, in program order.
     pub(crate) fn revision_statements(&self, revision: RevisionId) -> &[StatementId] {
-        &self.arena.revisions[revision.index()].statements
+        &self.arena.revision(revision).statements
     }
 
     /// Appends a revision, and returns its id.
     pub(crate) fn push_revision(&mut self, revision: ProgramRevision) -> RevisionId {
-        let id = RevisionId::new(
-            u32::try_from(self.arena.revisions.len()).expect("revision counts stay below u32"),
-        );
-        self.arena.revisions.push(revision);
-        id
+        self.arena.push_revision(revision)
     }
 }
 
@@ -409,9 +417,9 @@ impl Iterator for Ancestry<'_> {
                 continue;
             }
 
-            if let Some(edge) = self.pipeline.arena.created_by[id.index()] {
+            if let Some(edge) = self.pipeline.arena.created_by(id) {
                 self.pending
-                    .extend(self.pipeline.arena.edges[edge].sources.iter().rev());
+                    .extend(self.pipeline.arena.edge(edge).sources.iter().rev());
             }
 
             return Some(id);

@@ -10,6 +10,8 @@
 //!
 //! A loading method that fails leaves the engine as it was,
 //! and the pipeline without the statements of its program.
+//! A reload that succeeds leaves the pipeline without the statements of the program that it
+//! replaced.
 
 mod context;
 mod extend;
@@ -223,6 +225,12 @@ impl Engine {
                     revision: program.revision,
                     compiled: Arc::new(compiled),
                 });
+
+                // The statements of a replaced program go with it.
+                // An extension appends to the loaded program's statements, and keeps them.
+                if load.kind == LoadKind::Reload {
+                    self.pipeline.forget_before(load.statements_from);
+                }
 
                 tracing::debug!(
                     method = load.kind.method(),
