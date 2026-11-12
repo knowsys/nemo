@@ -2,6 +2,8 @@
 //! to their fixpoint, a predicate's rows as text, a client responding to
 //! an engine's requests, and temporary directories.
 
+// The unit tests use the same temporary directories.
+#[path = "../../src/testing/temp_directory.rs"]
 mod temp_directory;
 
 pub(crate) use temp_directory::TempDirectory;
@@ -15,7 +17,10 @@ use nemo::{
     },
     model::Program,
 };
-use nemo_physical::diagnostics::Diagnostic;
+use nemo_physical::{
+    diagnostics::{Code, Diagnostic},
+    value::DataValue,
+};
 
 /// Parses a program, panicking on diagnostics.
 pub(crate) fn parse(source: &str) -> Program {
@@ -62,6 +67,58 @@ pub(crate) fn rows(engine: &mut Engine, predicate: &str) -> Vec<String> {
         .collect();
     rows.sort();
     rows
+}
+
+/// Returns the rows of a predicate, each as its displayed values, sorted.
+pub(crate) fn cells(engine: &mut Engine, predicate: &str) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = engine
+        .rows(predicate)
+        .expect("the predicate exists")
+        .into_iter()
+        .map(|row| row.iter().map(DataValue::to_string).collect())
+        .collect();
+    rows.sort();
+    rows
+}
+
+/// Returns the number of stored rows of a predicate.
+pub(crate) fn count(engine: &mut Engine, predicate: &str) -> usize {
+    engine.rows(predicate).expect("the predicate exists").len()
+}
+
+/// Loads a program over in-memory resources, given by name and content, and reasons to the
+/// fixpoint.
+///
+/// Returns the engine, with its reports.
+pub(crate) fn load_resources(source: &str, resources: &[(&str, &str)]) -> Engine {
+    let program = parse(source);
+    let mut engine = Engine::new();
+    for (name, content) in resources {
+        engine.add_resource(*name, content.as_bytes().to_vec());
+    }
+
+    engine.load(program).expect("the program loads");
+    engine.reason().expect("reasoning reaches the fixpoint");
+    engine
+}
+
+/// Returns the `count` that the first warning of the given code reports,
+/// or `None` if there is no such warning.
+pub(crate) fn reported_count(engine: &Engine, code: Code) -> Option<u64> {
+    engine.reports().iter().find_map(|report| {
+        (report.code() == code).then(|| {
+            report
+                .field("count")
+                .and_then(|count| count.parse().ok())
+                .expect("the warning reports its count")
+        })
+    })
+}
+
+/// Returns the problems that a check of a source reports.
+pub(crate) fn check(source: &str) -> Vec<Diagnostic> {
+    let program = parse(source);
+    Engine::new().check(program).into_diagnostics()
 }
 
 /// What a responder returns for a request: the body, or why there is none.

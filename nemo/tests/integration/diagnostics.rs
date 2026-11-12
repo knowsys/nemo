@@ -1,13 +1,19 @@
 //! Refused programs: the kind each problem is reported as, and what its report names.
 
-use nemo_physical::diagnostics::Code;
-
-use super::*;
-
-use crate::{
-    diagnostics::Location,
-    engine::remote::{Failure, Request},
+use nemo::{
+    codes,
+    engine::{
+        CheckReport, Engine,
+        remote::{Client, Failure, Progress, Request, Response},
+    },
+    model::Program,
 };
+use nemo_physical::{
+    diagnostics::{Code, Diagnostic, Location},
+    value::DataValue,
+};
+
+use crate::common::parse;
 
 /// Returns the problem that loading a source fails with.
 fn refusal(source: &str) -> Diagnostic {

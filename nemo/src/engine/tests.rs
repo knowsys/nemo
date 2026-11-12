@@ -1,34 +1,26 @@
-//! Tests of the engine through its methods, with one module per subject.
+//! Tests of what the engine holds after a call: its tables, its pipeline and its run state.
 //!
-//! The modules share the helpers below.
+//! They read the engine's private parts.
+//! The tests of the engine through its public methods alone are in `tests/integration`,
+//! under the same module names.
+//! The modules here share the helpers below.
 
 use super::*;
 
-use nemo_physical::{
-    diagnostics::Code,
-    management::Revision,
-    value::{DataValue, EvaluationError},
-};
+use nemo_physical::{management::Revision, value::DataValue};
 
 use crate::{
     codes,
-    engine::{PredicateRole, stores::Registered},
-    model::{Fact, FileId, Program, Term},
-    testing::{TempDirectory, arities, parse, roles, run},
-    values::TypeSyntax,
+    engine::stores::Registered,
+    model::Program,
+    testing::{TempDirectory, arities, parse, run},
 };
 
-mod aggregates;
 mod checking;
-mod diagnostics;
-mod documentation;
 mod imported_rows;
 mod imports;
 mod methods;
-mod parameters;
 mod rules;
-mod structures;
-mod term_syntax;
 mod types;
 
 /// Returns the rows of a predicate as displayed values, sorted.
@@ -77,25 +69,6 @@ fn load_resources(source: &str, resources: &[(&str, &str)]) -> Engine {
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
     engine
-}
-
-/// Returns the `count` that the first warning of the given code reports,
-/// or `None` if there is no such warning.
-fn reported_count(engine: &Engine, code: Code) -> Option<u64> {
-    engine.reports().iter().find_map(|report| {
-        (report.code() == code).then(|| {
-            report
-                .field("count")
-                .and_then(|count| count.parse().ok())
-                .expect("the warning reports its count")
-        })
-    })
-}
-
-/// Returns the problems that a check of a source reports.
-fn check(source: &str) -> Vec<Diagnostic> {
-    let program = parse(source);
-    Engine::new().check(program).into_diagnostics()
 }
 
 /// Returns, per rule, the number of top-level operations that its plan runs per application,

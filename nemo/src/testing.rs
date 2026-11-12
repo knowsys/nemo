@@ -8,7 +8,7 @@ mod temp_directory;
 pub(crate) use temp_directory::TempDirectory;
 
 use crate::{
-    engine::{Engine, PredicateRole},
+    engine::Engine,
     model::{Program, Rule},
 };
 
@@ -40,14 +40,5 @@ pub(crate) fn arities(engine: &Engine) -> Vec<(String, usize)> {
         .predicates()
         .into_iter()
         .map(|info| (info.name, info.arity))
-        .collect()
-}
-
-/// Returns the name and role of each of the engine's predicates.
-pub(crate) fn roles(engine: &Engine) -> Vec<(String, PredicateRole)> {
-    engine
-        .predicates()
-        .into_iter()
-        .map(|info| (info.name, info.role))
         .collect()
 }

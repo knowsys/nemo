@@ -1,6 +1,9 @@
 //! Aggregates and comparisons of structures: what they count and report beyond their results.
 
-use super::*;
+use nemo::codes;
+use nemo_physical::value::EvaluationError;
+
+use crate::common::{cells, count, run};
 
 /// A map aggregate's group with two values for one key is dropped and counted as malformed,
 /// while identical contributions collapse into one.
@@ -38,7 +41,7 @@ fn the_legacy_aggregate_list_means_per_and_warns() {
     let mut engine = run("data(1, 2, 7) . data(1, 2, 8) . data(1, 3, 7) .
          old(?g, #sum(?b, ?a)) :- data(?g, ?a, ?b) .
          new(?g, #sum(?b per ?a)) :- data(?g, ?a, ?b) .");
-    assert_eq!(rows(&mut engine, "old"), rows(&mut engine, "new"));
+    assert_eq!(cells(&mut engine, "old"), cells(&mut engine, "new"));
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };

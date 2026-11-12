@@ -1,6 +1,9 @@
 //! The values that [set_parameter](Engine::set_parameter) gives the parameters of a program.
 
-use super::*;
+use nemo::{codes, engine::Engine, model::Term};
+use nemo_physical::value::DataValue;
+
+use crate::common::{count, parse};
 
 /// A program whose rule keeps the numbers below `$limit`, which is declared without a value.
 const BELOW_LIMIT: &str = "@parameter $limit: int .

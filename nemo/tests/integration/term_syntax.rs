@@ -1,9 +1,8 @@
 //! The two readers of term syntax agree: the parser of programs,
 //! and the reader of `nemo-physical`, which reads the cells of files.
 
-use nemo_physical::value::{MapValue, TupleValue, ValueRef};
-
-use super::*;
+use nemo::{engine::Engine, model::Program};
+use nemo_physical::value::{DataValue, MapValue, TupleValue, ValueRef};
 
 /// Returns the value of a constant as a program without a base and without prefixes reads it,
 /// or `None` if the program is rejected.
