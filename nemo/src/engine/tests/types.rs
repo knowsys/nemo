@@ -1,5 +1,8 @@
 //! Types: the analysis, declarations, `@type`, and named arguments.
 
+#[cfg(debug_assertions)]
+use std::collections::HashMap;
+
 use nemo_physical::value::{Type, ValueDomain};
 #[cfg(debug_assertions)]
 use nemo_physical::{storage::StorageValue, trie::RowBuffer};
@@ -829,7 +832,7 @@ fn an_extension_that_breaks_a_declaration_is_refused() {
 #[should_panic(expected = "the analysis inferred")]
 fn a_stored_value_outside_the_inferred_types_panics_in_debug_builds() {
     let engine = run("p(1) .");
-    let &Registered { table, .. } = engine.predicates.get("p").expect("registered");
+    let &Registered { table, .. } = engine.stores.predicates.get("p").expect("registered");
     let types = HashMap::from([(table, vec![Type::of(ValueDomain::String)])]);
     let mut rows = RowBuffer::new(1);
     let one = DataValue::integer(1);
@@ -849,7 +852,7 @@ fn a_derived_value_outside_the_inferred_types_panics_in_debug_builds() {
         .expect("the program loads");
 
     // The analysis inferred integers for `q`, and strings stand in for a wrong inference.
-    let &Registered { table, .. } = engine.predicates.get("q").expect("registered");
+    let &Registered { table, .. } = engine.stores.predicates.get("q").expect("registered");
     let loaded = engine.loaded.as_mut().expect("a program is loaded");
     Arc::get_mut(&mut loaded.compiled)
         .expect("no run holds the program")

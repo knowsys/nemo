@@ -573,7 +573,7 @@ fn only_a_successful_loading_call_chooses_the_instant() {
     let mut engine = Engine::new();
     assert!(engine.load(missing()).is_err(), "the resource is missing");
     assert!(
-        engine.next_context.is_none(),
+        engine.run.next_context.is_none(),
         "a failed load chooses no instant"
     );
 
@@ -587,23 +587,23 @@ fn only_a_successful_loading_call_chooses_the_instant() {
         "the import is suspended for its resource"
     );
     assert!(
-        engine.next_context.is_some(),
+        engine.run.next_context.is_some(),
         "a suspended load keeps its choice"
     );
     assert!(engine.discard_pending());
     assert!(
-        engine.next_context.is_none(),
+        engine.run.next_context.is_none(),
         "a discarded load chooses no instant"
     );
 
     engine
         .load(parse("p(1) ."))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    let chosen = engine.next_context;
+    let chosen = engine.run.next_context;
     assert!(chosen.is_some(), "a successful load chooses the instant");
     assert!(engine.extend(missing()).is_err(), "the resource is missing");
     assert_eq!(
-        engine.next_context, chosen,
+        engine.run.next_context, chosen,
         "a failed extension keeps the load's instant"
     );
 }
@@ -699,7 +699,7 @@ fn a_failed_load_registers_no_predicate() {
     engine
         .load(parse("r(1, 2) . q(?x) :- r(?x) ."))
         .expect_err("`r` is used with two numbers of columns");
-    let registered: Vec<&String> = engine.predicates.keys().collect();
+    let registered: Vec<&String> = engine.stores.predicates.keys().collect();
     assert!(registered.is_empty(), "{registered:?}");
     engine
         .load(parse("r(1) . q(?x) :- r(?x) ."))

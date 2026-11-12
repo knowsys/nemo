@@ -280,7 +280,10 @@ impl<'a> ResponseAssembly<'a> {
         let node = &self.arenas.compiled[compiled];
         match node.filtered {
             Some(set) => (set, Revision(0)..Revision(1)),
-            None => (node.table, Revision(0)..Revision(self.engine.step.max(1))),
+            None => (
+                node.table,
+                Revision(0)..Revision(self.engine.run.step.max(1)),
+            ),
         }
     }
 
@@ -289,10 +292,10 @@ impl<'a> ResponseAssembly<'a> {
     fn stored_entries(&self, compiled: usize, page: Pagination) -> (Vec<TableEntry>, usize) {
         let Pagination { start, count } = page;
         let node = &self.arenas.compiled[compiled];
-        let now = Revision(self.engine.step.max(1));
+        let now = Revision(self.engine.run.step.max(1));
         let identity = ColumnOrder::identity(node.arity);
         let (set, range) = self.fact_set(compiled);
-        let total = self.engine.manager.row_count(set, range.clone());
+        let total = self.engine.stores.manager.row_count(set, range.clone());
         let rows = self.page_rows(set, range, &identity, start, count);
         let ids = self.entry_ids(node.table, now, &identity, &rows);
         let entries = rows
@@ -365,6 +368,7 @@ impl<'a> ResponseAssembly<'a> {
         }
 
         self.engine
+            .stores
             .manager
             .for_each_row_from(set, range, identity, start, |row| {
                 rows.push(row.to_vec());
@@ -391,6 +395,7 @@ impl<'a> ResponseAssembly<'a> {
         let mut position = 0usize;
         let mut remaining = wanted.len();
         self.engine
+            .stores
             .manager
             .for_each_row_from(table, Revision(0)..now, identity, 0, |row| {
                 if remaining > 0 && wanted.contains(row) {

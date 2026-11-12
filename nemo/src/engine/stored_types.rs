@@ -69,6 +69,7 @@ impl Engine {
         let labels = &self.translation.label_types;
         for (column, (&stored, inferred)) in row.iter().zip(types).enumerate() {
             let value = self
+                .stores
                 .dictionary
                 .decode(stored)
                 .expect("a stored value decodes");

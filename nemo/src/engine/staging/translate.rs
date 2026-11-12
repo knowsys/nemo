@@ -33,9 +33,9 @@ use crate::{
                 Translator,
             },
         },
-        registered::Registered,
         remote::{ResourceRequest, SuspendedLoad},
         staging::Staged,
+        stores::Registered,
         written::WrittenProgram,
     },
     model::Statement,
@@ -132,7 +132,7 @@ impl Engine {
     pub(super) fn checkpoint(&self) -> Checkpoint {
         Checkpoint {
             translation: self.translation.clone(),
-            predicates: self.predicates.clone(),
+            predicates: self.stores.predicates.clone(),
         }
     }
 
@@ -148,6 +148,7 @@ impl Engine {
             .chain(checkpoint.translation.scratch.values().copied())
             .collect();
         let stale: Vec<TableId> = self
+            .stores
             .predicates
             .values()
             .map(|registered| registered.table)
@@ -155,10 +156,10 @@ impl Engine {
             .filter(|table| !kept.contains(table))
             .collect();
         for table in stale {
-            self.manager.drop_table(table);
+            self.stores.manager.drop_table(table);
         }
 
-        self.predicates = checkpoint.predicates;
+        self.stores.predicates = checkpoint.predicates;
         self.translation = checkpoint.translation;
     }
 
@@ -316,7 +317,7 @@ impl Engine {
     /// which start from the given registered predicates.
     fn scratch_stores(&self, predicates: HashMap<String, Registered>) -> ScratchStores {
         ScratchStores {
-            manager: self.manager.without_rows(),
+            manager: self.stores.manager.without_rows(),
             dictionary: Dictionary::new(),
             predicates,
             errors: ErrorCounts::default(),
@@ -334,7 +335,7 @@ impl Engine {
         purpose: Purpose<'a>,
         scratch: &'a mut ScratchStores,
     ) -> (TranslationStores<'a>, TranslationSetup<'a>) {
-        let context = self.next_context.unwrap_or_else(EvaluationContext::now);
+        let context = self.run.next_context.unwrap_or_else(EvaluationContext::now);
         self.parts(purpose, Some(scratch), context)
     }
 
@@ -355,10 +356,10 @@ impl Engine {
                 &mut scratch.errors,
             ),
             None => (
-                &mut self.manager,
-                &mut self.dictionary,
-                &mut self.predicates,
-                &mut self.errors,
+                &mut self.stores.manager,
+                &mut self.stores.dictionary,
+                &mut self.stores.predicates,
+                &mut self.run.errors,
             ),
         };
 
@@ -371,10 +372,10 @@ impl Engine {
                 errors,
             },
             TranslationSetup {
-                import_directory: self.import_directory.as_deref(),
-                resources: &self.resources,
-                telemetry: &self.telemetry,
-                passes: &self.passes,
+                import_directory: self.settings.import_directory.as_deref(),
+                resources: &self.settings.resources,
+                telemetry: &self.settings.telemetry,
+                passes: &self.settings.passes,
                 purpose,
                 written: None,
                 previous_types: self

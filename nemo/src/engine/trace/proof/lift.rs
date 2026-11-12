@@ -258,8 +258,8 @@ impl<'a> Lifter<'a> {
         Self {
             pipeline: &engine.pipeline,
             program,
-            manager: &engine.manager,
-            dictionary: &engine.dictionary,
+            manager: &engine.stores.manager,
+            dictionary: &engine.stores.dictionary,
             state: &engine.translation,
             rewrites: written.rewrites(),
         }

@@ -32,8 +32,8 @@ use crate::{
             fetch::{self, FetchOutcome, Fetched, PendingFetch},
         },
         loaded::LoadedProgram,
-        registered::Registered,
         remote::{PendingRequest, Progress, Response, Suspension},
+        stores::Registered,
     },
     model::Span,
     telemetry::EngineEvent,
@@ -180,7 +180,7 @@ impl Engine {
         suspended: Option<Box<PendingFetch>>,
     ) -> Result<ApplicationOutcome, Diagnostic> {
         let window = DeltaWindow {
-            last: self.last_applied[index],
+            last: self.run.last_applied[index],
             now: step,
         };
 
@@ -189,8 +189,8 @@ impl Engine {
                 rule,
                 index,
                 window,
-                &mut self.manager,
-                &mut self.dictionary,
+                &mut self.stores.manager,
+                &mut self.stores.dictionary,
                 context,
                 suspended.map(|suspended| *suspended),
                 &mut self.request_ids,
@@ -205,7 +205,7 @@ impl Engine {
                 self.tally_fetch(index, fetch, &fetched);
             }
             if fetched.requests > 0 {
-                self.telemetry.record(&EngineEvent::Fetched {
+                self.settings.telemetry.record(&EngineEvent::Fetched {
                     rule: index,
                     endpoint: fetch.endpoint.clone(),
                     requests: fetched.requests,
@@ -217,14 +217,14 @@ impl Engine {
         }
 
         debug_assert!(suspended.is_none(), "only a fetch is suspended");
-        let skeleton = self.skeletons.of(index, rule);
+        let skeleton = self.run.skeletons.of(index, rule);
 
         Ok(ApplicationOutcome::Applied(application::apply(
             rule,
             skeleton,
             window,
-            &mut self.manager,
-            &mut self.dictionary,
+            &mut self.stores.manager,
+            &mut self.stores.dictionary,
             context,
             observe,
         )))
@@ -234,6 +234,7 @@ impl Engine {
     /// tally for the run.
     fn tally_fetch(&mut self, index: usize, fetch: &CompiledFetch, fetched: &Fetched) {
         let tally = self
+            .run
             .fetch_tallies
             .entry(index)
             .or_insert_with(|| FetchTally {
@@ -261,7 +262,7 @@ impl Engine {
     /// fetches skipped during the run, one warning of each kind per import,
     /// and resets the tallies.
     fn report_fetch_tallies(&mut self) {
-        let mut tallies: Vec<(usize, FetchTally)> = std::mem::take(&mut self.fetch_tallies)
+        let mut tallies: Vec<(usize, FetchTally)> = std::mem::take(&mut self.run.fetch_tallies)
             .into_iter()
             .collect();
         tallies.sort_unstable_by_key(|(rule, _)| *rule);
@@ -343,13 +344,14 @@ impl Engine {
                 None
             }
         };
-        self.fixpoint = false;
+        self.run.fixpoint = false;
 
         // A new run evaluates in the context that a loading method chose since the last run,
         // if one did.
         let context = match &resumed {
             Some(suspended) => suspended.context,
             None => self
+                .run
                 .next_context
                 .take()
                 .unwrap_or_else(EvaluationContext::now),
@@ -359,7 +361,7 @@ impl Engine {
         // on them through negation or aggregation (see `drop_invalidated`).
         if resumed.is_none() {
             self.drop_invalidated(&program);
-            self.contexts.begin(self.step, context);
+            self.run.contexts.begin(self.run.step, context);
         }
 
         let outcome = self.iterate_strata(&program, context, resumed);
@@ -375,8 +377,8 @@ impl Engine {
         };
         self.report_fetch_tallies();
         let cancelled = matches!(ended, RunOutcome::Cancelled);
-        if self.telemetry.enabled() {
-            self.telemetry.record(&EngineEvent::Finished {
+        if self.settings.telemetry.enabled() {
+            self.settings.telemetry.record(&EngineEvent::Finished {
                 fixpoint: !cancelled,
                 derived: self.derived_facts() as u64,
                 memory: self.memory_bytes() as u64,
@@ -385,7 +387,7 @@ impl Engine {
 
         tracing::info!(
             derived = self.derived_facts(),
-            steps = self.step,
+            steps = self.run.step,
             fixpoint = !cancelled,
             "reasoning finished"
         );
@@ -393,7 +395,7 @@ impl Engine {
             return Err(EngineError::Cancelled.diagnostic());
         }
 
-        self.fixpoint = true;
+        self.run.fixpoint = true;
         Ok(Progress::Done)
     }
 
@@ -414,7 +416,7 @@ impl Engine {
         // The token is cleared where a public method starts or continues a run, not here.
         // One `reason()` continues its run after every fetch, and a cancellation that arrives
         // in between must stop it.
-        tracing::info!(strata = strata.len(), step = self.step, "reasoning");
+        tracing::info!(strata = strata.len(), step = self.run.step, "reasoning");
         let finished = Self::finished_tables(program, strata);
         let first = resumed.as_ref().map_or(0, |suspended| suspended.stratum);
         let mut resumed = resumed;
@@ -433,10 +435,12 @@ impl Engine {
                 }
                 None => {
                     let active = Self::activate(program, stratum);
-                    self.telemetry.record(&EngineEvent::StratumStarted {
-                        stratum: stratum_index,
-                        rules: active.len(),
-                    });
+                    self.settings
+                        .telemetry
+                        .record(&EngineEvent::StratumStarted {
+                            stratum: stratum_index,
+                            rules: active.len(),
+                        });
                     tracing::debug!(
                         stratum = stratum_index,
                         rules = active.len(),
@@ -452,7 +456,7 @@ impl Engine {
                     Some((next, iteration_start, before, fetch)) => {
                         (next, iteration_start, before, Some(fetch))
                     }
-                    None => (0, self.step, 0, None),
+                    None => (0, self.run.step, 0, None),
                 };
                 let (stored, outcome) =
                     self.run_iteration(program, &active, next, context, suspended)?;
@@ -549,7 +553,7 @@ impl Engine {
 
         let mut stored = 0usize;
         for (position, &index) in active.iter().enumerate().skip(from) {
-            if self.cancel.is_cancelled() {
+            if self.settings.cancel.is_cancelled() {
                 return Ok((stored, IterationOutcome::Cancelled));
             }
 
@@ -574,9 +578,10 @@ impl Engine {
     /// The tables' last nonempty revisions give the exact answer,
     /// however their blocks have merged.
     fn has_fresh_input(&self, rule: &CompiledRule, index: usize) -> bool {
-        let last = Revision(self.last_applied[index]);
+        let last = Revision(self.run.last_applied[index]);
         rule.body.iter().any(|atom| {
-            self.manager
+            self.stores
+                .manager
                 .last_added(atom.table)
                 .is_some_and(|added| added >= last)
         })
@@ -599,13 +604,13 @@ impl Engine {
         suspended: Option<Box<PendingFetch>>,
     ) -> Result<StoreOutcome, Diagnostic> {
         if suspended.is_none() && !self.has_fresh_input(rule, index) {
-            self.last_applied[index] = self.step;
+            self.run.last_applied[index] = self.run.step;
             return Ok(StoreOutcome::Stored(0));
         }
 
-        let step = self.step;
+        let step = self.run.step;
         let begun = Stopwatch::start();
-        let observe = self.telemetry.enabled();
+        let observe = self.settings.telemetry.enabled();
         let Applied {
             outputs,
             errors,
@@ -616,40 +621,42 @@ impl Engine {
             ApplicationOutcome::Applied(applied) => applied,
             ApplicationOutcome::Suspended(fetch) => return Ok(StoreOutcome::Suspended(fetch)),
         };
-        self.step += 1;
-        self.applied += 1;
+        self.run.step += 1;
+        self.run.applied += 1;
         for observation in observations {
-            self.telemetry.record(&EngineEvent::VariantObserved {
-                rule: index,
-                variant: observation.variant,
-                delta_rows: observation.delta_rows,
-                leading_rows: observation.leading_rows,
-                delta_leads: observation.delta_leads,
-            });
+            self.settings
+                .telemetry
+                .record(&EngineEvent::VariantObserved {
+                    rule: index,
+                    variant: observation.variant,
+                    delta_rows: observation.delta_rows,
+                    leading_rows: observation.leading_rows,
+                    delta_leads: observation.delta_leads,
+                });
         }
 
         let applied = begun.nanos();
-        self.timings.apply += applied;
-        self.timings.execution.absorb(&timings);
-        self.timings.counts.absorb(&counts);
-        self.last_applied[index] = step;
+        self.run.timings.apply += applied;
+        self.run.timings.execution.absorb(&timings);
+        self.run.timings.counts.absorb(&counts);
+        self.run.last_applied[index] = step;
         let dropped = errors.total();
-        self.errors.absorb(&errors);
+        self.run.errors.absorb(&errors);
 
         let per_table = group_per_table(outputs);
         let begun = Stopwatch::start();
         let stored = self.store_grouped(step, per_table, applied, column_types);
         let storing = begun.nanos();
-        self.timings.store += storing;
+        self.run.timings.store += storing;
         if stored > 0 {
             // Log which rule wrote this revision, for tracing.
-            self.applications.push(application::LoggedApplication {
+            self.run.applications.push(application::LoggedApplication {
                 rule: u32::try_from(index).unwrap_or(u32::MAX),
                 step,
             });
         }
 
-        self.telemetry.record(&EngineEvent::RuleApplied {
+        self.settings.telemetry.record(&EngineEvent::RuleApplied {
             rule: index,
             step,
             duration: applied + storing,
@@ -693,11 +700,14 @@ impl Engine {
             self.assert_stored_trie(column_types, table, &trie);
 
             let arity = trie.arity();
-            let added =
-                self.manager
-                    .add_trie(table, Revision(step), ColumnOrder::identity(arity), trie);
+            let added = self.stores.manager.add_trie(
+                table,
+                Revision(step),
+                ColumnOrder::identity(arity),
+                trie,
+            );
             if added > 0 {
-                *self.derivation_time.entry(table).or_default() += applied + begun.nanos();
+                *self.run.derivation_time.entry(table).or_default() += applied + begun.nanos();
             }
 
             stored += added;
@@ -710,22 +720,25 @@ impl Engine {
     ///
     /// Does nothing unless telemetry is enabled, since counting the stored rows reads every table.
     fn report_iteration(&mut self, stratum: usize, derived: usize) {
-        if !self.telemetry.enabled() {
+        if !self.settings.telemetry.enabled() {
             return;
         }
 
         let mut total = 0;
-        for &Registered { table, .. } in self.predicates.values() {
+        for &Registered { table, .. } in self.stores.predicates.values() {
             total += self
+                .stores
                 .manager
-                .row_count(table, Revision(0)..Revision(self.step)) as u64;
+                .row_count(table, Revision(0)..Revision(self.run.step)) as u64;
         }
-        self.telemetry.record(&EngineEvent::IterationFinished {
-            stratum,
-            derived: derived as u64,
-            total,
-            memory: self.memory_bytes() as u64,
-        });
+        self.settings
+            .telemetry
+            .record(&EngineEvent::IterationFinished {
+                stratum,
+                derived: derived as u64,
+                total,
+                memory: self.memory_bytes() as u64,
+            });
     }
 
     /// Consolidates the tables after an iteration,
@@ -748,6 +761,7 @@ impl Engine {
         let mut walls = self.exact_walls(program);
         walls.push(Revision(iteration_start));
         let tables: Vec<TableId> = self
+            .stores
             .predicates
             .values()
             .map(|&Registered { table, .. }| table)
@@ -756,7 +770,7 @@ impl Engine {
             self.consolidate_table(table, &walls, MergePolicy::TwoLevel);
         }
 
-        self.timings.consolidate += begun.nanos();
+        self.run.timings.consolidate += begun.nanos();
     }
 
     /// Consolidates after a stratum:
@@ -774,7 +788,7 @@ impl Engine {
             self.consolidate_table(table, &walls, MergePolicy::Whole);
         }
 
-        self.timings.consolidate += begun.nanos();
+        self.run.timings.consolidate += begun.nanos();
     }
 
     /// Returns the steps of the last applications of the rules that read exact windows,
@@ -789,7 +803,7 @@ impl Engine {
         program
             .rules
             .iter()
-            .zip(&self.last_applied)
+            .zip(&self.run.last_applied)
             .filter(|(rule, _)| rule.exact_windows())
             .map(|(_, &last_applied)| Revision(last_applied))
             .collect()
@@ -803,12 +817,12 @@ impl Engine {
     /// and the derived rows can be dropped alone.
     fn consolidate_table(&mut self, table: TableId, walls: &[Revision], policy: MergePolicy) {
         let mut walls = walls.to_vec();
-        for block in self.extensional.get(&table).into_iter().flatten() {
+        for block in self.stores.extensional.get(&table).into_iter().flatten() {
             walls.push(block.range.start);
             walls.push(block.range.end);
         }
 
-        let rewritten = self.manager.consolidate_with(table, &walls, policy);
-        self.timings.consolidated_rows += rewritten as u64;
+        let rewritten = self.stores.manager.consolidate_with(table, &walls, policy);
+        self.run.timings.consolidated_rows += rewritten as u64;
     }
 }

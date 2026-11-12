@@ -459,8 +459,8 @@ impl Engine {
                 .into_iter()
                 .map(|pending| (pending.id, pending.request))
                 .unzip();
-            let token = self.cancel.clone();
-            let responses = match &self.client.0 {
+            let token = self.settings.cancel.clone();
+            let responses = match &self.settings.client.0 {
                 Some(client) => client.fetch_all(&requests, &|| token.is_cancelled()),
                 None => {
                     let problem = EngineError::NoClient {
@@ -534,7 +534,7 @@ impl Engine {
             None => return,
         };
         if load.chose_context {
-            self.next_context = None;
+            self.run.next_context = None;
         }
 
         self.pipeline.take_reports(load.reports_from);

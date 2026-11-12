@@ -216,8 +216,8 @@ impl Engine {
         match outcome {
             Ok(Loaded::Done(compiled)) => {
                 let (rules, strata) = (compiled.rules.len(), compiled.strata.len());
-                self.skeletons.clear();
-                self.last_applied.resize(compiled.rules.len(), 0);
+                self.run.skeletons.clear();
+                self.run.last_applied.resize(compiled.rules.len(), 0);
                 self.loaded = Some(LoadedProgram {
                     written: program.written,
                     revision: program.revision,
@@ -228,7 +228,7 @@ impl Engine {
                     method = load.kind.method(),
                     rules,
                     strata,
-                    predicates = self.predicates.len(),
+                    predicates = self.stores.predicates.len(),
                     loaded = self.loaded_facts(),
                     "program loaded"
                 );
@@ -250,7 +250,7 @@ impl Engine {
     /// [load_staged](Self::load_staged) translates the program that the stages made of it,
     /// but reads no data and stores nothing.
     fn validate_load(&mut self, staged: &Staged) -> Result<(), Diagnostic> {
-        let predicates = self.predicates.clone();
+        let predicates = self.stores.predicates.clone();
         self.translate_written(
             staged.written,
             TranslationState::default(),
@@ -280,7 +280,7 @@ impl Engine {
 
         self.assert_stored_types_of(&translated.compiled, &translated.facts);
         self.store_input(translated.facts, Revision(0), ExtensionalOrigin::Load);
-        self.step = 1;
+        self.run.step = 1;
 
         if !translated.imported.is_empty() {
             let imported = translated
@@ -293,7 +293,7 @@ impl Engine {
                 Revision(1),
                 ExtensionalOrigin::ImportRows,
             );
-            self.step = 2;
+            self.run.step = 2;
         }
 
         self.unloaded_rows = UnloadedRows::default();
@@ -324,7 +324,7 @@ impl Engine {
         let mut grown = Vec::new();
         for (table, rows) in rows {
             let order = ColumnOrder::identity(rows.arity());
-            let stored = self.manager.add_rows(table, revision, order, rows);
+            let stored = self.stores.manager.add_rows(table, revision, order, rows);
             if stored > 0 {
                 self.record_extensional(table, revision, origin);
                 grown.push(table);
@@ -342,7 +342,7 @@ impl Engine {
     /// For an `extension`, the parameters of the loaded program count as declared.
     /// Fails for a value whose parameter is not declared.
     fn supply_parameters(&self, program: &mut Program, extension: bool) -> Result<(), Diagnostic> {
-        if self.parameters.is_empty() {
+        if self.settings.parameters.is_empty() {
             return Ok(());
         }
 
@@ -357,7 +357,7 @@ impl Engine {
                 continue;
             }
 
-            if let Some(value) = self.parameters.get(name) {
+            if let Some(value) = self.settings.parameters.get(name) {
                 parameter.value = Some(value.clone());
             }
 
@@ -369,7 +369,12 @@ impl Engine {
             declared.extend(loaded.filter(|name| !is_instance_parameter(name)).cloned());
         }
 
-        let Some(unknown) = self.parameters.keys().find(|name| !declared.contains(name)) else {
+        let Some(unknown) = self
+            .settings
+            .parameters
+            .keys()
+            .find(|name| !declared.contains(name))
+        else {
             return Ok(());
         };
 
@@ -408,7 +413,7 @@ impl Engine {
         let written = self.pipeline.load(program);
         let revision = self
             .pipeline
-            .apply_imported(&self.stages.0, written, imported)?;
+            .apply_imported(&self.settings.stages.0, written, imported)?;
         Ok(Staged { written, revision })
     }
 

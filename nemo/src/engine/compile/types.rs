@@ -32,7 +32,7 @@ use nemo_physical::{
 use crate::{
     diagnostics::TypeError,
     engine::{
-        compile::compiled::CompiledRule, compile::import_plan::ImportPlan, registered::Registered,
+        compile::compiled::CompiledRule, compile::import_plan::ImportPlan, stores::Registered,
     },
     model::Span,
 };

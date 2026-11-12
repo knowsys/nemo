@@ -7,6 +7,7 @@
 //! - [extensional] records which revision blocks of a table hold input facts rather than
 //!   derived ones.
 //! - [contexts] keeps the evaluation context of each run.
+//! - [run_state] is what the runs leave in the engine.
 //! - `fetch` applies the rules of bound SPARQL imports, which query an endpoint instead of
 //!   joining.
 
@@ -16,3 +17,4 @@ pub(super) mod contexts;
 pub(super) mod extensional;
 pub(super) mod fetch;
 pub(super) mod reason;
+pub(super) mod run_state;

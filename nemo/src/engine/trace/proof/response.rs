@@ -44,13 +44,14 @@ impl<'a> Responder<'a> {
             .iter()
             .map(|value| self.engine.term_text(value.as_ref()))
             .collect();
-        fact_text(self.engine.manager.name(table), &terms)
+        fact_text(self.engine.stores.manager.name(table), &terms)
     }
 
     /// Returns a stored value in canonical term syntax.
     pub(crate) fn rendered(&self, value: StorageValue) -> String {
         let value = self
             .engine
+            .stores
             .dictionary
             .decode(value)
             .expect("stored values decode against their dictionary");

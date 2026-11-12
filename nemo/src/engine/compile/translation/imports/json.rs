@@ -20,7 +20,7 @@ use crate::{
             imports::{ImportFailure, PendingImport, required_resource},
             options::PlainDirectiveOptions,
         },
-        registered::Registered,
+        stores::Registered,
     },
 };
 

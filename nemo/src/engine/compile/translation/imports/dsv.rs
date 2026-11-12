@@ -17,7 +17,7 @@ use crate::{
             imports::{ImportFailure, PendingImport, required_resource},
             options::DsvDirectiveOptions,
         },
-        registered::Registered,
+        stores::Registered,
     },
 };
 

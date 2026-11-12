@@ -11,7 +11,7 @@ use crate::{
     engine::{
         ExportFormat, ExportSpec,
         compile::translation::{Translator, unsupported},
-        registered::Registered,
+        stores::Registered,
     },
     model::{ExportDirective, Identifier},
 };

@@ -15,7 +15,7 @@ use crate::{
             imports::{ImportFailure, PendingImport, required_resource},
             unsupported,
         },
-        registered::Registered,
+        stores::Registered,
     },
 };
 

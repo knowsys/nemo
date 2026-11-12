@@ -73,11 +73,11 @@ impl Engine {
     /// A reset rule starts over, as if it had never been applied.
     /// Programs without negation or aggregation never drop a row.
     pub(super) fn drop_invalidated(&mut self, program: &CompiledProgram) {
-        if self.dirty.is_empty() {
+        if self.run.dirty.is_empty() {
             return;
         }
 
-        let mut grown: HashSet<TableId> = std::mem::take(&mut self.dirty);
+        let mut grown: HashSet<TableId> = std::mem::take(&mut self.run.dirty);
         let mut reset = vec![false; program.rules.len()];
         let mut dropped: HashSet<TableId> = HashSet::new();
         loop {
@@ -129,14 +129,14 @@ impl Engine {
             removed += self.drop_derived(table);
         }
 
-        for (last_applied, flag) in self.last_applied.iter_mut().zip(&reset) {
+        for (last_applied, flag) in self.run.last_applied.iter_mut().zip(&reset) {
             if *flag {
                 *last_applied = 0;
             }
         }
 
-        if self.telemetry.enabled() {
-            self.telemetry.record(&EngineEvent::Invalidated {
+        if self.settings.telemetry.enabled() {
+            self.settings.telemetry.record(&EngineEvent::Invalidated {
                 tables: dropped.len() as u64,
                 rows: removed as u64,
             });
@@ -155,10 +155,11 @@ impl Engine {
     /// The blocks' boundaries were walls of every consolidation,
     /// so no stored block crosses them.
     pub(crate) fn drop_derived(&mut self, table: TableId) -> usize {
-        let end = Revision(self.step.max(1));
+        let end = Revision(self.run.step.max(1));
         let mut removed = 0;
         let mut cursor = Revision(0);
         let blocks: Vec<Range<Revision>> = self
+            .stores
             .extensional
             .get(&table)
             .into_iter()
@@ -167,14 +168,14 @@ impl Engine {
             .collect();
         for block in blocks {
             if block.start > cursor {
-                removed += self.manager.drop_rows(table, cursor..block.start);
+                removed += self.stores.manager.drop_rows(table, cursor..block.start);
             }
 
             cursor = block.end;
         }
 
         if end > cursor {
-            removed += self.manager.drop_rows(table, cursor..end);
+            removed += self.stores.manager.drop_rows(table, cursor..end);
         }
 
         removed
@@ -191,7 +192,7 @@ impl Engine {
         origin: ExtensionalOrigin,
     ) {
         let next = Revision(revision.0 + 1);
-        let blocks = self.extensional.entry(table).or_default();
+        let blocks = self.stores.extensional.entry(table).or_default();
         if let Some(last) = blocks.last_mut()
             && last.range.end == revision
             && last.origin == origin

@@ -12,7 +12,7 @@ use nemo_physical::{
 
 use crate::{
     codes,
-    engine::{PredicateRole, registered::Registered},
+    engine::{PredicateRole, stores::Registered},
     model::{Fact, FileId, Program, Term},
     testing::{TempDirectory, arities, parse, roles, run},
     values::TypeSyntax,
@@ -52,12 +52,14 @@ fn count(engine: &mut Engine, predicate: &str) -> usize {
 /// whether or not it is stored whole, which shows what the import passes left of it.
 fn stored(engine: &Engine, predicate: &str) -> (usize, usize) {
     let &Registered { table, arity } = engine
+        .stores
         .predicates
         .get(predicate)
         .expect("the predicate has a table");
     let rows = engine
+        .stores
         .manager
-        .row_count(table, Revision(0)..Revision(engine.step.max(1)));
+        .row_count(table, Revision(0)..Revision(engine.run.step.max(1)));
     (rows, arity)
 }
 
@@ -108,6 +110,7 @@ fn rule_steps(engine: &Engine) -> Vec<usize> {
     (0..program.rules.len())
         .map(|position| {
             let layout = engine
+                .run
                 .skeletons
                 .get(position)
                 .expect("every rule was applied")

@@ -113,13 +113,13 @@ impl<'a> ProofSearch<'a> {
             .compiled;
 
         Ok(Self {
-            manager: &mut engine.manager,
-            dictionary: &mut engine.dictionary,
+            manager: &mut engine.stores.manager,
+            dictionary: &mut engine.stores.dictionary,
             program,
-            applications: &engine.applications,
-            contexts: &engine.contexts,
-            extensional: &engine.extensional,
-            now: engine.step.max(1),
+            applications: &engine.run.applications,
+            contexts: &engine.run.contexts,
+            extensional: &engine.stores.extensional,
+            now: engine.run.step.max(1),
             outcomes,
         })
     }

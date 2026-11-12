@@ -71,7 +71,7 @@ impl Engine {
         let imported = self.imported_predicates();
         let revision = self
             .pipeline
-            .extend(&self.stages.0, merged, frozen, &imported)?;
+            .extend(&self.settings.stages.0, merged, frozen, &imported)?;
         Ok(Staged { written, revision })
     }
 
@@ -171,7 +171,7 @@ impl Engine {
         preloaded.resize(self.pipeline.statements(staged.written).count(), false);
         let mut state = self.translation.clone();
         state.clear_statement_state();
-        let predicates = self.predicates.clone();
+        let predicates = self.stores.predicates.clone();
         self.translate_written(
             staged.written,
             state,
@@ -205,13 +205,13 @@ impl Engine {
 
         // The extension's rows go into one new revision.
         self.assert_stored_types_of(&compiled, &translated.facts);
-        let revision = Revision(self.step);
+        let revision = Revision(self.run.step);
         let grown = self.store_input(translated.facts, revision, ExtensionalOrigin::Load);
         if !grown.is_empty() {
-            self.step += 1;
+            self.run.step += 1;
         }
 
-        self.dirty.extend(grown);
+        self.run.dirty.extend(grown);
 
         // The loaded statements come first in the staged program, so the loaded rules keep
         // their indices, and with them the steps of their last applications:
@@ -220,10 +220,10 @@ impl Engine {
         // Their tables are conservatively marked as gaining input facts,
         // so the derived facts that depend on them through negation or aggregation are
         // dropped and derived again.
-        let added = compiled.rules.iter().skip(self.last_applied.len());
+        let added = compiled.rules.iter().skip(self.run.last_applied.len());
         let heads: Vec<TableId> = added.flat_map(Self::head_tables).collect();
-        self.dirty.extend(heads);
-        self.fixpoint = false;
+        self.run.dirty.extend(heads);
+        self.run.fixpoint = false;
 
         Ok(Loaded::Done(compiled))
     }

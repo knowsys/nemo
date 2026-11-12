@@ -29,8 +29,8 @@ fn a_finished_table_merges_whole_before_later_strata_read_it() {
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
 
-    let &Registered { table: path, .. } = engine.predicates.get("path").expect("registered");
-    assert_eq!(engine.manager.blocks(path).len(), 1);
+    let &Registered { table: path, .. } = engine.stores.predicates.get("path").expect("registered");
+    assert_eq!(engine.stores.manager.blocks(path).len(), 1);
     assert_eq!(count(&mut engine, "reach"), 5);
 }
 

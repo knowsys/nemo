@@ -46,11 +46,12 @@ mod evaluate;
 mod imported_rows;
 mod link;
 mod loaded;
-mod registered;
 pub mod remote;
 mod results;
+mod settings;
 mod staging;
 mod stored_types;
+mod stores;
 mod trace;
 mod transform;
 mod written;
@@ -66,16 +67,13 @@ pub use results::{
 };
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use nemo_physical::{
     diagnostics::{Diagnostic, Location, Span},
-    dictionary::Dictionary,
-    function::EvaluationContext,
-    management::{Revision, TableId, TableManager},
+    management::Revision,
     value::{DataValue, ErrorCounts, IriRef, Type, ValueRef},
 };
 
@@ -86,14 +84,15 @@ use crate::{
     },
     engine::{
         compile::translation::TranslationState,
-        evaluate::extensional::ExtensionalBlock,
+        evaluate::run_state::RunState,
         loaded::LoadedProgram,
-        registered::Registered,
         remote::{Client, ClientSlot, PendingRequest, Progress, RequestId, Response, Suspension},
+        settings::Settings,
+        stores::Stores,
     },
     model::{Directive, Fact, FileId, Identifier, Program, Statement, Term},
     pipeline::{Pipeline, RegisteredSource, RevisionText, Stages, StatementId},
-    telemetry::{EngineEvent, EngineTimings, EventSink, SinkSlot},
+    telemetry::{EngineEvent, EngineTimings, EventSink},
     trace::{
         TracePart, TraceResponse, TracedFact, WrittenRule,
         query::{
@@ -132,117 +131,27 @@ pub struct Engine {
     /// The program pipeline, which stores the registered sources, every revision of the
     /// program, and the reports.
     pipeline: Pipeline,
-    /// The table manager, which stores the tables of the predicates.
-    manager: TableManager,
-    /// The dictionary, which encodes the stored values.
-    dictionary: Dictionary,
-    /// The optimization passes that compilation runs.
+    /// The stored data: the tables, the dictionary, and the registered predicates.
+    stores: Stores,
+    /// The program that the engine holds, or `None` before [load](Self::load).
+    loaded: Option<LoadedProgram>,
+    /// The translation state kept between translations.
     ///
-    /// [retain_imports](Self::retain_imports) removes the import passes.
-    passes: compile::optimize::OptimizationPasses,
-    /// The pipeline stages that run over every loaded program
-    /// (see [stages_mut](Self::stages_mut)).
-    stages: staging::EngineStages,
-    /// The registered predicates by resolved name, each with its table
-    /// and its number of columns.
-    predicates: HashMap<String, Registered>,
+    /// An extension, and the rows added through [import_rows](Self::import_rows) after a
+    /// load, are translated against it.
+    translation: TranslationState,
+    /// What the runs have done so far, and where the next run continues.
+    run: RunState,
+    /// What the user set the engine up with, such as its parameters and its client.
+    settings: Settings,
     /// The rows added through [import_rows](Self::import_rows) before a program is loaded,
     /// one block per predicate.
     ///
     /// The first [load](Self::load) checks them against the program and stores them.
     /// They stay here until a load succeeds.
     unloaded_rows: imported_rows::UnloadedRows,
-    /// The in-memory resources registered through [add_resource](Self::add_resource), by name.
-    ///
-    /// An import of a resource with one of these names reads the bytes from here
-    /// instead of the filesystem.
-    resources: HashMap<String, Arc<[u8]>>,
-    /// The values set through [set_parameter](Self::set_parameter),
-    /// by the name of their parameter without its `$`.
-    ///
-    /// The loading methods and [check](Self::check) write them into the `@parameter`
-    /// declarations of the program they are given.
-    parameters: BTreeMap<String, Term>,
-    /// The module roots and the module texts registered by name, which [link](Self::link)
-    /// reads.
-    modules: link::ModuleSources,
-    /// The program that the engine holds, or `None` before [load](Self::load).
-    loaded: Option<LoadedProgram>,
-    /// Per rule of the compiled program, by index, the step of the rule's last application,
-    /// or 0 before the first.
-    ///
-    /// A rule reads the rows that its body's tables gained since then.
-    last_applied: Vec<u64>,
-    /// The translation state kept between translations.
-    ///
-    /// An extension, and the rows added through [import_rows](Self::import_rows) after a
-    /// load, are translated against it.
-    translation: TranslationState,
-    /// The application log, with one entry per rule application that stored rows,
-    /// in ascending order of step.
-    ///
-    /// It records which rule wrote which revision, for tracing.
-    /// [reload](Self::reload) clears it, since a reload drops every derived row.
-    applications: Vec<evaluate::application::LoggedApplication>,
-    /// The evaluation context of each run.
-    ///
-    /// Tracing executes a run's rule applications again in the run's context.
-    /// It is cleared together with the application log.
-    contexts: evaluate::contexts::RunContexts,
-    /// The evaluation context of the next run, if a loading method or
-    /// [import_rows](Self::import_rows) chose it since the last run began.
-    ///
-    /// The first such call chooses it at its own instant,
-    /// and it evaluates the `NOW()` of facts and option values in it.
-    /// Later calls, and the next run, evaluate their `NOW()` in the same context.
-    /// A call that fails or is discarded undoes its choice.
-    next_context: Option<EvaluationContext>,
-    /// The plan skeletons of the compiled program's rules.
-    skeletons: evaluate::application::PlanSkeletons,
-    /// The directory that relative import resources are resolved against, if one is set.
-    import_directory: Option<PathBuf>,
-    /// Per table, the wall time in nanoseconds of the rule applications that stored rows
-    /// into it.
-    ///
-    /// It is cleared together with the application log.
-    derivation_time: HashMap<TableId, u64>,
-    /// Per table, its extensional blocks in ascending order.
-    extensional: HashMap<TableId, Vec<ExtensionalBlock>>,
-    /// The tables that gained input facts since the last run,
-    /// or may gain facts through new rules.
-    ///
-    /// The next run first drops the derived facts that depend on them through negation or
-    /// aggregation, so that it derives them again (see `drop_invalidated`).
-    dirty: HashSet<TableId>,
-    /// The step counter, which is the revision that the next stored rows go into.
-    ///
-    /// Revision 0 contains the input facts of the first load.
-    step: u64,
-    /// The number of rule applications so far, including the fetches of bound imports.
-    applied: u64,
-    /// Whether the last run reached the fixpoint and nothing was added since.
-    ///
-    /// A cancelled run leaves it false.
-    fixpoint: bool,
-    /// The evaluation errors of all rule applications, counted by kind.
-    errors: ErrorCounts,
-    /// The wall-clock times of the reasoning so far.
-    timings: EngineTimings,
-    /// The cancellation flag, which [reason](Self::reason) checks between rule applications.
-    ///
-    /// [cancel_token](Self::cancel_token) returns handles to it.
-    cancel: CancelToken,
-    /// The sink that receives telemetry events, if one was [installed](Self::set_telemetry).
-    telemetry: SinkSlot,
     /// The method suspended for data from the network, if any (see [pending](Self::pending)).
     suspension: Option<Suspension>,
-    /// The client through which the plain methods send their requests
-    /// (see [set_client](Self::set_client)).
-    client: ClientSlot,
-    /// Per rule of a bound import, by rule index, the tally of its fetches in the current run.
-    ///
-    /// The tallies are reported as warnings when the run ends.
-    fetch_tallies: HashMap<usize, evaluate::reason::FetchTally>,
     /// The last id given to a request of a suspended method.
     request_ids: u64,
 }
@@ -367,7 +276,7 @@ impl Engine {
     /// A module's own imports are still resolved against the module's directory,
     /// so that a module can ship the data it reads.
     pub fn set_import_directory(&mut self, directory: impl Into<PathBuf>) {
-        self.import_directory = Some(directory.into());
+        self.settings.import_directory = Some(directory.into());
     }
 
     /// Registers an in-memory resource under a name.
@@ -376,7 +285,7 @@ impl Engine {
     /// This makes data that exists only in memory available to `@import` directives,
     /// such as a browser blob or a text built in another language.
     pub fn add_resource(&mut self, name: impl Into<String>, bytes: impl Into<Arc<[u8]>>) {
-        self.resources.insert(name.into(), bytes.into());
+        self.settings.resources.insert(name.into(), bytes.into());
     }
 
     /// Sets the value of a parameter, which a program declares with `@parameter`.
@@ -417,7 +326,8 @@ impl Engine {
     /// # Ok::<(), nemo::diagnostics::Diagnostic>(())
     /// ```
     pub fn set_parameter(&mut self, name: &str, value: impl Into<Term>) {
-        self.parameters
+        self.settings
+            .parameters
             .insert(parameter_name(name).to_owned(), value.into());
     }
 
@@ -427,7 +337,10 @@ impl Engine {
     /// The programs given to the loading methods afterwards have the value that the
     /// parameter's declaration states.
     pub fn unset_parameter(&mut self, name: &str) -> bool {
-        self.parameters.remove(parameter_name(name)).is_some()
+        self.settings
+            .parameters
+            .remove(parameter_name(name))
+            .is_some()
     }
 
     /// Makes imports store every declared column and every row.
@@ -444,7 +357,7 @@ impl Engine {
     ///
     /// It takes effect for programs loaded afterwards.
     pub fn retain_imports(&mut self) {
-        self.passes.imports.clear();
+        self.settings.passes.imports.clear();
     }
 
     /// Returns the pipeline stages that run over every loaded program,
@@ -456,7 +369,7 @@ impl Engine {
     /// so that results and diagnostics can be mapped back to the written program.
     /// Changes take effect for programs loaded afterwards.
     pub fn stages_mut(&mut self) -> &mut Stages {
-        &mut self.stages.0
+        &mut self.settings.stages.0
     }
 
     /// Sends the engine's telemetry [EngineEvent]s to the given sink.
@@ -465,7 +378,7 @@ impl Engine {
     /// and the ready-made [Recorder](crate::telemetry::Recorder).
     /// Without a sink, events cost nothing.
     pub fn set_telemetry(&mut self, sink: Arc<dyn EventSink<EngineEvent>>) {
-        self.telemetry.install(sink);
+        self.settings.telemetry.install(sink);
     }
 
     /// Returns a handle that cancels the method the engine is running.
@@ -474,7 +387,7 @@ impl Engine {
     /// and every handle of the engine sets the same flag.
     /// [CancelToken] says which methods check it.
     pub fn cancel_token(&self) -> CancelToken {
-        self.cancel.clone()
+        self.settings.cancel.clone()
     }
 
     /// Links a program: instantiates every module it uses with `@use`,
@@ -535,7 +448,7 @@ impl Engine {
     /// Panics if a pipeline stage rewrites the program into one that translation refuses,
     /// although the program as written passes: the stage has a bug.
     pub fn load(&mut self, program: Program) -> Result<(), Diagnostic> {
-        self.cancel.clear();
+        self.settings.cancel.clear();
         let progress = self.start_load(program);
         let loaded = self.complete(progress);
         self.located(loaded)
@@ -599,7 +512,7 @@ impl Engine {
     /// Panics if a pipeline stage rewrites the program into one that translation refuses,
     /// although the program as written passes: the stage has a bug.
     pub fn extend(&mut self, program: Program) -> Result<(), Diagnostic> {
-        self.cancel.clear();
+        self.settings.cancel.clear();
         let progress = self.start_extend(program);
         let extended = self.complete(progress);
         self.located(extended)
@@ -659,7 +572,7 @@ impl Engine {
     /// Panics if a pipeline stage rewrites the program into one that translation refuses,
     /// although the program as written passes: the stage has a bug.
     pub fn reload(&mut self, program: Program) -> Result<(), Diagnostic> {
-        self.cancel.clear();
+        self.settings.cancel.clear();
         let progress = self.start_reload(program);
         let reloaded = self.complete(progress);
         self.located(reloaded)
@@ -871,7 +784,7 @@ impl Engine {
         &mut self,
         client: Option<Box<dyn Client + Send>>,
     ) -> Option<Box<dyn Client + Send>> {
-        std::mem::replace(&mut self.client, ClientSlot(client)).0
+        std::mem::replace(&mut self.settings.client, ClientSlot(client)).0
     }
 
     /// Returns the requests that the suspended method needs responses to,
@@ -917,7 +830,7 @@ impl Engine {
         &mut self,
         responses: impl IntoIterator<Item = (RequestId, Response)>,
     ) -> Result<Progress, Diagnostic> {
-        self.cancel.clear();
+        self.settings.cancel.clear();
         let progress = self.pass_responses(responses);
         self.located(progress)
     }
@@ -937,8 +850,8 @@ impl Engine {
     /// Evaluates the rules semi-naively to the fixpoint, stratum by stratum.
     ///
     /// The predicates that a stratum negates are final before the stratum starts.
-    /// A run evaluates in one [context](EvaluationContext), so every `NOW()` in it reads the
-    /// same instant.
+    /// A run evaluates in one [context](nemo_physical::function::EvaluationContext),
+    /// so every `NOW()` in it reads the same instant.
     /// The facts loaded since the last run evaluated their `NOW()` at this instant too.
     /// The instant is that of the first successful call, since the last run,
     /// of a loading method or of [import_rows](Self::import_rows) after a load.
@@ -984,7 +897,7 @@ impl Engine {
     /// Returns what [reason](Self::reason) returns, except [NO_CLIENT](crate::codes::NO_CLIENT)
     /// and [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED).
     pub fn start_reason(&mut self) -> Result<Progress, Diagnostic> {
-        self.cancel.clear();
+        self.settings.cancel.clear();
         match &self.suspension {
             Some(Suspension::Load(_)) => self.refuse_while_suspended("reason")?,
             Some(suspended) if suspended.has_pending() => {
@@ -1145,14 +1058,19 @@ impl Engine {
         // A reload drops the table of a predicate that it rebuilds,
         // and the table manager answers only for the tables it holds.
         let held = self
+            .stores
             .predicates
             .values()
             .any(|registered| registered.table == cursor.table);
 
         // The blocks are compared first, since counting the rows of a range panics if the range
         // does not align with the table's blocks, which a merge of blocks can cause.
-        held && self.manager.blocks(cursor.table) == cursor.blocks
-            && self.manager.row_count(cursor.table, cursor.range.clone()) == cursor.rows
+        held && self.stores.manager.blocks(cursor.table) == cursor.blocks
+            && self
+                .stores
+                .manager
+                .row_count(cursor.table, cursor.range.clone())
+                == cursor.rows
     }
 
     /// Returns the number of stored rows of a predicate, counted without decoding any values.
@@ -1164,8 +1082,9 @@ impl Engine {
         let table = self.whole_predicate(predicate)?.table;
 
         Ok(self
+            .stores
             .manager
-            .row_count(table, Revision(0)..Revision(self.step.max(1))))
+            .row_count(table, Revision(0)..Revision(self.run.step.max(1))))
     }
 
     /// Returns the program's export directives as specifications, in directive order,
@@ -1422,21 +1341,22 @@ impl Engine {
     ///
     /// The tracing methods, such as [trace](Self::trace), require it.
     pub fn is_at_fixpoint(&self) -> bool {
-        self.loaded.is_some() && self.dirty.is_empty() && self.fixpoint
+        self.loaded.is_some() && self.run.dirty.is_empty() && self.run.fixpoint
     }
 
     /// Returns the number of rule applications so far.
     pub fn applications(&self) -> u64 {
-        self.applied
+        self.run.applied
     }
 
     /// Returns the wall-clock times and work counts of the reasoning so far.
     pub fn timings(&self) -> EngineTimings {
-        let mut timings = self.timings;
+        let mut timings = self.run.timings;
         timings.stored_orders = self
+            .stores
             .predicates
             .values()
-            .map(|registered| self.manager.stored_orders(registered.table) as u64)
+            .map(|registered| self.stores.manager.stored_orders(registered.table) as u64)
             .sum();
         timings
     }
@@ -1448,7 +1368,7 @@ impl Engine {
     /// [WorkCounts::buffer_bytes](nemo_physical::plan::WorkCounts::buffer_bytes)
     /// in [EngineTimings::counts].
     pub fn memory_bytes(&self) -> usize {
-        self.manager.memory_bytes() + self.dictionary.memory().total()
+        self.stores.manager.memory_bytes() + self.stores.dictionary.memory().total()
     }
 
     /// Returns the written program, and the program after every pipeline stage that rewrote it,
@@ -1523,7 +1443,7 @@ impl Engine {
     ///
     /// A row whose evaluation fails is dropped and counted here.
     pub fn evaluation_errors(&self) -> ErrorCounts {
-        self.errors
+        self.run.errors
     }
 }
 

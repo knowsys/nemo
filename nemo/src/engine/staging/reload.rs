@@ -22,12 +22,12 @@ use crate::{
         Engine,
         compile::translation::{Purpose, TranslationState},
         evaluate::extensional::ExtensionalOrigin,
-        registered::Registered,
         remote::{LoadKind, Progress, SuspendedLoad},
         staging::{
             Loaded, Staged,
             translate::{StagedProgram, Translated},
         },
+        stores::Registered,
     },
     model::{Directive, Identifier, Program, Statement},
     pipeline::RevisionId,
@@ -137,7 +137,7 @@ impl Engine {
         let rebuild = self.rebuild_by_diff(&self.statements_of(held), &new_statements);
         let rebuilt = self.rebuilt_predicates(&rebuild, &HashSet::new(), &new_statements);
         let mut state = self.translation.clone();
-        let mut predicates = self.predicates.clone();
+        let mut predicates = self.stores.predicates.clone();
         unregister_from(&mut state, &mut predicates, &rebuilt);
         let preloaded = preloaded(
             &self.statements_of(staged.written),
@@ -186,11 +186,12 @@ impl Engine {
             // The rebuilt predicates are unregistered, so that the new program registers
             // them anew. Their tables are dropped only once the translation is done.
             let checkpoint = self.checkpoint();
-            let replaced = unregister_from(&mut self.translation, &mut self.predicates, &rebuilt);
+            let replaced =
+                unregister_from(&mut self.translation, &mut self.stores.predicates, &rebuilt);
             let preloaded = preloaded(
                 &program.statements,
                 &checkpoint.translation,
-                &self.predicates,
+                &self.stores.predicates,
             );
 
             match self.translate(load, program, preloaded, checkpoint)? {
@@ -213,14 +214,14 @@ impl Engine {
         self.assert_stored_types_of(&translated.compiled, &translated.facts);
 
         // The new rows go into one new revision, after the revision of the first load.
-        self.step = self.step.max(1);
-        let revision = Revision(self.step);
+        self.run.step = self.run.step.max(1);
+        let revision = Revision(self.run.step);
         let grown = self.store_input(translated.facts, revision, ExtensionalOrigin::Load);
         if !grown.is_empty() {
-            self.step += 1;
+            self.run.step += 1;
         }
 
-        self.forget_runs();
+        self.run.forget_derivations();
 
         Ok(Loaded::Done(translated.compiled))
     }
@@ -308,7 +309,7 @@ impl Engine {
         statements: &[Statement],
     ) -> Vec<String> {
         if rebuild.all {
-            return self.predicates.keys().cloned().collect();
+            return self.stores.predicates.keys().cloned().collect();
         }
 
         let with_input_statements: HashSet<String> = statements
@@ -317,7 +318,8 @@ impl Engine {
             .filter_map(|predicate| self.translation.resolve(predicate))
             .collect();
 
-        self.predicates
+        self.stores
+            .predicates
             .keys()
             .filter(|name| {
                 let keeps_input_rows =
@@ -336,7 +338,7 @@ impl Engine {
     /// so dropping them is reported with a warning.
     fn replace_store(&mut self, replaced: Vec<ReplacedTable>) {
         for ReplacedTable { predicate, table } in replaced {
-            let blocks = self.extensional.remove(&table).unwrap_or_default();
+            let blocks = self.stores.extensional.remove(&table).unwrap_or_default();
             if blocks
                 .iter()
                 .any(|block| block.origin == ExtensionalOrigin::ImportRows)
@@ -345,10 +347,11 @@ impl Engine {
                     .report(EngineError::ImportedRowsDropped { predicate }.diagnostic());
             }
 
-            self.manager.drop_table(table);
+            self.stores.manager.drop_table(table);
         }
 
         let tables: Vec<TableId> = self
+            .stores
             .predicates
             .values()
             .map(|&Registered { table, .. }| table)
@@ -356,18 +359,5 @@ impl Engine {
         for table in tables {
             self.drop_derived(table);
         }
-    }
-
-    /// Forgets what the runs of the replaced program left behind:
-    /// no rule was applied, no table is marked as having gained input facts,
-    /// the fixpoint is not reached,
-    /// and the application log, the run contexts and the derivation times are empty.
-    fn forget_runs(&mut self) {
-        self.last_applied.clear();
-        self.dirty.clear();
-        self.fixpoint = false;
-        self.applications.clear();
-        self.contexts.clear();
-        self.derivation_time.clear();
     }
 }

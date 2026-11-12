@@ -18,7 +18,7 @@ use crate::{
             Purpose, StackProgramBuilder, Translator, VariableScope, terms::collect_globals,
         },
         compile::types,
-        registered::Registered,
+        stores::Registered,
     },
     model::{
         Atom, BaseType, DeclareDirective, Fact, Identifier, InputDirective, Literal, Operator,

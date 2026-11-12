@@ -9,7 +9,7 @@ use nemo_physical::{
 
 use crate::{
     diagnostics::EngineError,
-    engine::{Engine, PredicateCursor, RowChunk, registered::Registered},
+    engine::{Engine, PredicateCursor, RowChunk, stores::Registered},
 };
 
 impl Engine {
@@ -21,9 +21,9 @@ impl Engine {
         predicate: &str,
     ) -> Result<PredicateCursor, Diagnostic> {
         let Registered { table, arity } = self.whole_predicate(predicate)?;
-        let range = Revision(0)..Revision(self.step.max(1));
-        let rows = self.manager.row_count(table, range.clone());
-        let blocks = self.manager.blocks(table);
+        let range = Revision(0)..Revision(self.run.step.max(1));
+        let rows = self.stores.manager.row_count(table, range.clone());
+        let blocks = self.stores.manager.blocks(table);
 
         Ok(PredicateCursor {
             table,
@@ -52,13 +52,14 @@ impl Engine {
         }
 
         let order = ColumnOrder::identity(cursor.arity);
-        self.manager
+        self.stores
+            .manager
             .ensure_order(cursor.table, cursor.range.clone(), &order);
 
         // The walk enters at the cursor's position and decoding stops
         // at the budget.
         let mut decoded = Vec::with_capacity(cursor.arity);
-        self.manager.for_each_row_from(
+        self.stores.manager.for_each_row_from(
             cursor.table,
             cursor.range.clone(),
             &order,
@@ -66,7 +67,8 @@ impl Engine {
             |row| {
                 decoded.clear();
                 decoded.extend(row.iter().map(|&value| {
-                    self.dictionary
+                    self.stores
+                        .dictionary
                         .decode(value)
                         .expect("stored values decode against their dictionary")
                         .to_owned()

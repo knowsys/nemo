@@ -89,12 +89,12 @@ impl Engine {
             self.assert_stored_types(&loaded.compiled.column_types, table, &rows);
         }
 
-        let revision = Revision(self.step);
-        self.step += 1;
+        let revision = Revision(self.run.step);
+        self.run.step += 1;
         let grown = self.store_input([(table, rows)], revision, ExtensionalOrigin::ImportRows);
         if !grown.is_empty() {
-            self.dirty.insert(table);
-            self.fixpoint = false;
+            self.run.dirty.insert(table);
+            self.run.fixpoint = false;
         }
 
         Ok(())
@@ -148,7 +148,7 @@ impl Engine {
             })
             .collect();
         let inputs = types::AnalysisInputs {
-            predicates: &self.predicates,
+            predicates: &self.stores.predicates,
             seeds: &self.translation.seeds,
             declared: types::Declared {
                 predicates: &self.translation.declarations,

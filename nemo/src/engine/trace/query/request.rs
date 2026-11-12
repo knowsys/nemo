@@ -22,7 +22,7 @@ use crate::{
     engine::{
         Engine,
         compile::{compiled::CompiledProgram, translation::TranslationState},
-        registered::Registered,
+        stores::Registered,
         trace::query::route::{Realization, Route, Router, StatementLiteral, view_columns},
         written::WrittenProgram,
     },
@@ -718,7 +718,7 @@ pub(super) fn ground_selectors(
             };
 
             let terms = selection_terms(text)?;
-            let name = engine.manager.name(node.table).to_owned();
+            let name = engine.stores.manager.name(node.table).to_owned();
             if terms.len() != node.arity {
                 return Err(TraceError::SelectorArity {
                     predicate: name,

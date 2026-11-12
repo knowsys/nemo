@@ -15,7 +15,10 @@ impl Engine {
     /// it chooses one at the current instant.
     /// The next run evaluates in the same context.
     pub(in crate::engine) fn loading_context(&mut self) -> EvaluationContext {
-        *self.next_context.get_or_insert_with(EvaluationContext::now)
+        *self
+            .run
+            .next_context
+            .get_or_insert_with(EvaluationContext::now)
     }
 
     /// Runs a loading method, and settles its choice of the context by how it ended
@@ -24,7 +27,7 @@ impl Engine {
         &mut self,
         call: impl FnOnce(&mut Self) -> Result<Progress, Diagnostic>,
     ) -> Result<Progress, Diagnostic> {
-        let chose = self.next_context.is_none();
+        let chose = self.run.next_context.is_none();
         let outcome = call(self);
         self.settle_context(chose, &outcome);
         outcome
@@ -52,7 +55,7 @@ impl Engine {
                     load.chose_context = true;
                 }
             }
-            Err(_) => self.next_context = None,
+            Err(_) => self.run.next_context = None,
         }
     }
 }

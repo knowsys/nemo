@@ -17,8 +17,7 @@ use nemo_physical::{
 use crate::{
     diagnostics::EngineError,
     engine::{
-        Engine, evaluate::extensional::ExtensionalOrigin, loaded::LoadedProgram,
-        registered::Registered,
+        Engine, evaluate::extensional::ExtensionalOrigin, loaded::LoadedProgram, stores::Registered,
     },
 };
 
@@ -100,7 +99,7 @@ impl Engine {
             return None;
         }
 
-        match self.predicates.get(predicate) {
+        match self.stores.predicates.get(predicate) {
             Some(&Registered {
                 arity: delivered, ..
             }) => Some(
@@ -158,10 +157,10 @@ impl Engine {
     /// so the rows of an import with which a pipeline stage replaced a written rule count as
     /// derived.
     pub(in crate::engine) fn fact_counts(&self) -> FactCounts {
-        let range = Revision(0)..Revision(self.step.max(1));
+        let range = Revision(0)..Revision(self.run.step.max(1));
         let (mut loaded, mut derived) = (0, 0);
         for name in self.listed() {
-            let Some(&Registered { table, .. }) = self.predicates.get(&name) else {
+            let Some(&Registered { table, .. }) = self.stores.predicates.get(&name) else {
                 continue;
             };
 
@@ -169,16 +168,16 @@ impl Engine {
                 .loaded
                 .as_ref()
                 .is_none_or(|loaded| loaded.written.has_input_facts(&name));
-            let outside: usize = self.extensional.get(&table).map_or(0, |blocks| {
+            let outside: usize = self.stores.extensional.get(&table).map_or(0, |blocks| {
                 blocks
                     .iter()
                     .filter(|block| {
                         has_input_facts || block.origin == ExtensionalOrigin::ImportRows
                     })
-                    .map(|block| self.manager.row_count(table, block.range.clone()))
+                    .map(|block| self.stores.manager.row_count(table, block.range.clone()))
                     .sum()
             });
-            let total = self.manager.row_count(table, range.clone());
+            let total = self.stores.manager.row_count(table, range.clone());
             loaded += outside;
             derived += total - outside;
         }
@@ -189,10 +188,11 @@ impl Engine {
     /// Returns whether rows were added to a predicate through
     /// [import_rows](crate::engine::Engine::import_rows).
     pub(in crate::engine) fn holds_imported_rows(&self, predicate: &str) -> bool {
-        self.predicates
+        self.stores
+            .predicates
             .get(predicate)
             .is_some_and(|Registered { table, .. }| {
-                self.extensional.get(table).is_some_and(|blocks| {
+                self.stores.extensional.get(table).is_some_and(|blocks| {
                     blocks
                         .iter()
                         .any(|block| block.origin == ExtensionalOrigin::ImportRows)
@@ -206,7 +206,8 @@ impl Engine {
     pub(in crate::engine) fn imported_predicates(&self) -> Vec<String> {
         let mut names = self.unloaded_rows.predicates();
         names.extend(
-            self.predicates
+            self.stores
+                .predicates
                 .keys()
                 .filter(|name| self.holds_imported_rows(name))
                 .cloned(),
@@ -223,14 +224,15 @@ impl Engine {
             Some(LoadedProgram { written, .. }) => {
                 let mut names: Vec<String> = written.predicates().map(str::to_owned).collect();
                 names.extend(
-                    self.predicates
+                    self.stores
+                        .predicates
                         .keys()
                         .filter(|name| !written.names(name) && self.holds_imported_rows(name))
                         .cloned(),
                 );
                 names
             }
-            None => self.predicates.keys().cloned().collect(),
+            None => self.stores.predicates.keys().cloned().collect(),
         }
     }
 
@@ -240,7 +242,7 @@ impl Engine {
             Some(LoadedProgram { written, .. }) => {
                 written.names(predicate) || self.holds_imported_rows(predicate)
             }
-            None => self.predicates.contains_key(predicate),
+            None => self.stores.predicates.contains_key(predicate),
         }
     }
 
@@ -252,7 +254,7 @@ impl Engine {
     /// Fails for a predicate that the program never used, and for one that a pipeline stage
     /// introduced, which no user wrote.
     pub(crate) fn written_predicate(&self, predicate: &str) -> Result<Registered, Diagnostic> {
-        match self.predicates.get(predicate) {
+        match self.stores.predicates.get(predicate) {
             Some(&registered) if self.names(predicate) => Ok(registered),
             _ => Err(EngineError::UnknownPredicate {
                 predicate: predicate.to_owned(),
@@ -291,7 +293,7 @@ impl Engine {
         let Some(&Registered {
             table,
             arity: delivered,
-        }) = self.predicates.get(predicate)
+        }) = self.stores.predicates.get(predicate)
         else {
             return StoredExtent::Absent;
         };

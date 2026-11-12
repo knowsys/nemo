@@ -46,7 +46,7 @@ use crate::{
     engine::{
         Engine,
         compile::compiled::CompiledProgram,
-        registered::Registered,
+        stores::Registered,
         trace::query::{
             request::{QueryArenas, QueryContext, negated_literals},
             response::ResponseAssembly,
@@ -176,17 +176,17 @@ fn run<T>(
     let mut context = QueryContext::new(
         &engine.pipeline,
         &engine.translation,
-        &engine.predicates,
+        &engine.stores.predicates,
         program,
         &loaded.written,
         &listings,
     );
     let mut evaluation = QueryEvaluation {
-        manager: &mut engine.manager,
-        dictionary: &mut engine.dictionary,
+        manager: &mut engine.stores.manager,
+        dictionary: &mut engine.stores.dictionary,
         program,
-        now: engine.step.max(1),
-        context: engine.contexts.latest(),
+        now: engine.run.step.max(1),
+        context: engine.run.contexts.latest(),
         scratch: Vec::new(),
         grounded,
     };
@@ -204,7 +204,7 @@ fn run<T>(
         ))
     });
     for table in scratch {
-        engine.manager.drop_table(table);
+        engine.stores.manager.drop_table(table);
     }
 
     result
@@ -250,7 +250,7 @@ fn context<'a>(
     QueryContext::new(
         &engine.pipeline,
         &engine.translation,
-        &engine.predicates,
+        &engine.stores.predicates,
         &loaded.compiled,
         &loaded.written,
         listings,

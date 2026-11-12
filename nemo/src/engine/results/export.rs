@@ -393,17 +393,20 @@ impl Engine {
         spec.check_arity(cursor.arity)?;
 
         let order = ColumnOrder::identity(cursor.arity);
-        self.manager
+        self.stores
+            .manager
             .ensure_order(cursor.table, cursor.range.clone(), &order);
 
         let mut row: Vec<ValueRef<'_>> = Vec::with_capacity(cursor.arity);
         let mut written = 0;
         let mut failure = None;
-        self.manager
+        self.stores
+            .manager
             .for_each_row_from(cursor.table, cursor.range, &order, 0, |values| {
                 row.clear();
                 row.extend(values.iter().map(|&value| {
-                    self.dictionary
+                    self.stores
+                        .dictionary
                         .decode(value)
                         .expect("stored values decode against their dictionary")
                 }));

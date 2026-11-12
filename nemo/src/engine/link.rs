@@ -112,8 +112,8 @@ impl Engine {
 
         Linker {
             pipeline: &mut self.pipeline,
-            roots: &self.modules.roots,
-            texts: self.modules.texts(),
+            roots: &self.settings.modules.roots,
+            texts: self.settings.modules.texts(),
             files: HashMap::new(),
             reported: HashSet::new(),
             count: 0,

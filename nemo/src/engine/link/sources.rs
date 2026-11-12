@@ -62,7 +62,7 @@ impl Engine {
             .with_resource(name.to_owned()));
         }
 
-        self.modules.texts.insert(module, Arc::from(text));
+        self.settings.modules.texts.insert(module, Arc::from(text));
         Ok(())
     }
 
@@ -95,7 +95,10 @@ impl Engine {
             return Err(not_a_root());
         }
 
-        self.modules.roots.insert(root.clone(), directory.into());
+        self.settings
+            .modules
+            .roots
+            .insert(root.clone(), directory.into());
         Ok(())
     }
 }

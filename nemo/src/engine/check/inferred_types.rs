@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use nemo_physical::value::Type;
 
 use crate::{
-    engine::{compile::compiled::CompiledProgram, registered::Registered},
+    engine::{compile::compiled::CompiledProgram, stores::Registered},
     model::{Identifier, Span},
     pipeline::NameScope,
 };
