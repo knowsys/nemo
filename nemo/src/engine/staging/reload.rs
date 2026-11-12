@@ -32,6 +32,7 @@ use crate::{
         written::WrittenProgram,
     },
     model::{Directive, Identifier, Program, Statement},
+    pipeline::{RevisionId, StatementId},
 };
 
 /// What a reload must rebuild, according to its comparison of the statements.
@@ -178,7 +179,7 @@ impl Engine {
     }
 
     /// Returns the statements of a revision.
-    fn statements_of(&self, revision: crate::pipeline::RevisionId) -> Vec<Statement> {
+    fn statements_of(&self, revision: RevisionId) -> Vec<Statement> {
         self.pipeline
             .statements(revision)
             .map(|(_, statement)| statement.clone())
@@ -350,7 +351,7 @@ impl Engine {
         &mut self,
         load: &mut SuspendedLoad,
         written: &WrittenProgram,
-        new_ids: &[crate::pipeline::StatementId],
+        new_ids: &[StatementId],
         new_statements: &[Statement],
         rebuild: &RebuildScope,
         previous: &HashMap<TableId, Vec<Type>>,

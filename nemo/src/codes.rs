@@ -19,6 +19,7 @@
 
 use std::sync::LazyLock;
 
+use nemo_io::codes;
 use nemo_physical::diagnostics::Registry;
 
 use crate::diagnostics::{
@@ -36,7 +37,7 @@ pub use nemo_io::codes::*;
 /// It contains the codes of the IO and physical layers, and those of this crate.
 pub static REGISTRY: LazyLock<Registry> = LazyLock::new(|| {
     Registry::new()
-        .with_registry(&nemo_io::codes::REGISTRY)
+        .with_registry(&codes::REGISTRY)
         .with_kinds::<ParseError>()
         .with_kinds::<TranslationError>()
         .with_kinds::<ModuleError>()

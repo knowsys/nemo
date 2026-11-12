@@ -11,11 +11,11 @@ mod sources;
 
 pub use sources::{SourceLookup, SourceTexts};
 
-use std::io::IsTerminal;
+use std::{io::IsTerminal, ops::Range};
 
 use ariadne::{Color, Config, IndexType, Report, ReportKind};
 
-use nemo_physical::diagnostics::{Diagnostic, FileId, Severity, Span};
+use nemo_physical::diagnostics::{Diagnostic, FileId, Label, Severity, Span};
 
 use crate::diagnostics::{AboutPredicate, AboutResource};
 
@@ -197,7 +197,7 @@ impl<'a> Renderer<'a> {
     fn snippet(
         &self,
         diagnostic: &Diagnostic,
-        labels: &[&nemo_physical::diagnostics::Label],
+        labels: &[&Label],
         context: &[String],
     ) -> Option<String> {
         let kind = match diagnostic.severity() {
@@ -272,7 +272,7 @@ impl<'a> Renderer<'a> {
 
     /// Returns a span in the form that the snippet writer accepts,
     /// as the source's name and a byte range clamped to its text.
-    fn place(&self, span: Span) -> (String, std::ops::Range<usize>) {
+    fn place(&self, span: Span) -> (String, Range<usize>) {
         let text = self.sources.text(span.file);
         let name = self.sources.name(span.file).unwrap_or_default().to_owned();
         let start = usize::try_from(span.start)

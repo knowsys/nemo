@@ -1,10 +1,19 @@
 //! Remote imports the HTTP client fetches from a listener on a loopback port: CSV and SPARQL
 //! imports, failed fetches, registered bytes, retries, and cancellation.
 
-use std::sync::Arc;
+use std::{
+    io::{Read, Write},
+    net::TcpListener,
+    sync::{Arc, mpsc::Receiver},
+    time::{Duration, Instant},
+};
 
 use nemo::{
-    engine::{Engine, remote::Progress},
+    codes,
+    engine::{
+        Engine,
+        remote::{BlockingClient, Progress, Retry},
+    },
     model::Program,
 };
 use nemo_physical::value::DataValue;
@@ -16,11 +25,7 @@ use super::{load_into, run};
 /// A one-shot HTTP server on a loopback port: responds to `responses` many
 /// requests with the given body, sending each request's full text back
 /// through the channel.
-fn serve(
-    body: &str,
-    status: &str,
-    responses: usize,
-) -> (String, std::sync::mpsc::Receiver<String>) {
+fn serve(body: &str, status: &str, responses: usize) -> (String, Receiver<String>) {
     let response = format!(
         "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
@@ -32,10 +37,8 @@ fn serve(
 /// An HTTP server on a loopback port responding to one request after the
 /// other with the given raw responses, sending each request's full
 /// text back through the channel.
-fn serve_responses(responses: Vec<String>) -> (String, std::sync::mpsc::Receiver<String>) {
-    use std::io::{Read, Write};
-
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port is free");
+fn serve_responses(responses: Vec<String>) -> (String, Receiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port is free");
     let address = listener.local_addr().expect("the port is known");
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -128,7 +131,7 @@ fn a_failed_fetch_is_an_error() {
     let (program, diagnostics) = Program::parse(&source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let problem = Engine::new().load(program).expect_err("the fetch failed");
-    assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNFETCHABLE, "{problem:?}");
     assert!(
         problem
             .field("url")
@@ -247,7 +250,7 @@ fn sparql_imports_hold_any_term() {
     assert!(
         problems
             .iter()
-            .any(|problem| problem.code() == nemo::codes::IMPORT_OUTSIDE_DECLARATION),
+            .any(|problem| problem.code() == codes::IMPORT_OUTSIDE_DECLARATION),
         "{problems:?}"
     );
 
@@ -267,7 +270,7 @@ fn sparql_imports_hold_any_term() {
         .iter()
         .map(|report| report.code())
         .collect();
-    assert_eq!(codes, [nemo::codes::MALFORMED_ROWS]);
+    assert_eq!(codes, [codes::MALFORMED_ROWS]);
 }
 
 /// The conditions of a SPARQL import's `where` clause go to the endpoint as a `FILTER`,
@@ -305,12 +308,10 @@ fn sparql_import_conditions_reach_the_endpoint() {
 /// and a request that still fails is the load's error.
 #[test]
 fn the_client_retries_overload_and_rate_limits() {
-    use nemo::engine::remote::{BlockingClient, Retry};
-
     let retry = Retry {
         retries: 3,
-        backoff: std::time::Duration::from_millis(10),
-        longest_wait: std::time::Duration::from_secs(1),
+        backoff: Duration::from_millis(10),
+        longest_wait: Duration::from_secs(1),
     };
     let fast = || {
         let mut engine = Engine::new();
@@ -346,7 +347,7 @@ fn the_client_retries_overload_and_rate_limits() {
     let problem = fast()
         .load(parse(&source))
         .expect_err("the server stays down");
-    assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNFETCHABLE, "{problem:?}");
     assert!(
         problem
             .field("reason")
@@ -391,7 +392,7 @@ fn a_partial_result_fails_its_import() {
         let problem = Engine::new()
             .load(import(&base, false))
             .expect_err("a partial result is no result");
-        assert_eq!(problem.code(), nemo::codes::PARTIAL_RESULT, "{problem:?}");
+        assert_eq!(problem.code(), codes::PARTIAL_RESULT, "{problem:?}");
         assert!(
             problem
                 .field("url")
@@ -409,7 +410,7 @@ fn a_partial_result_fails_its_import() {
             engine
                 .reports()
                 .iter()
-                .any(|report| report.code() == nemo::codes::IMPORT_FAILED),
+                .any(|report| report.code() == codes::IMPORT_FAILED),
             "{:?}",
             engine.reports()
         );
@@ -446,7 +447,7 @@ joined(?a, ?c) :- first(?a, <urn:p>, ?b), second(?b, <urn:q>, ?c) .
 #[test]
 fn a_load_cancelled_while_waiting_changes_nothing() {
     // A server that accepts and never responds, then one that does.
-    let silent = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+    let silent = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let url = format!(
         "http://{}/data.csv",
         silent.local_addr().expect("an address")
@@ -455,16 +456,16 @@ fn a_load_cancelled_while_waiting_changes_nothing() {
     let mut engine = Engine::new();
     let token = engine.cancel_token();
     let canceller = std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        std::thread::sleep(Duration::from_millis(300));
         token.cancel();
     });
-    let started = std::time::Instant::now();
+    let started = Instant::now();
     let problem = engine
         .load(parse(&source))
         .expect_err("the load is cancelled");
     canceller.join().unwrap();
-    assert_eq!(problem.code(), nemo::codes::WAIT_CANCELLED, "{problem:?}");
-    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(problem.code(), codes::WAIT_CANCELLED, "{problem:?}");
+    assert!(started.elapsed() < Duration::from_secs(10));
     assert!(engine.pending().is_empty(), "nothing is suspended");
     assert!(!engine.has_program(), "nothing was loaded");
 

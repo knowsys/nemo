@@ -10,7 +10,9 @@ use nemo_physical::{
 };
 
 use crate::{
-    engine::compile::compiled::{CompiledAggregate, CompiledRule, ExistentialTerm},
+    engine::compile::compiled::{
+        AggregateColumn, CompiledAggregate, CompiledRule, ExistentialTerm,
+    },
     model::AggregateKind,
 };
 
@@ -180,8 +182,6 @@ fn aggregate_output(
     columns: &[Type],
     labels: &LabelTypes,
 ) -> Vec<Type> {
-    use crate::engine::compile::compiled::AggregateColumn;
-
     let results: Vec<Type> = aggregate
         .functions
         .iter()

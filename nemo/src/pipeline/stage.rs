@@ -1,6 +1,6 @@
 //! Transformations as named stages.
 
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -70,8 +70,8 @@ pub struct Stages {
     entries: Vec<Arc<dyn Transformation>>,
 }
 
-impl std::fmt::Debug for Stages {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Stages {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.names()).finish()
     }
 }

@@ -28,6 +28,8 @@ mod survey;
 pub(crate) use filter_pushdown::{column_variable, conjoin};
 pub(crate) use survey::ImportSurvey;
 
+use std::fmt;
+
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
@@ -40,7 +42,7 @@ use crate::{
 
 /// An import pass, which decides what the loads of imported predicates may leave out
 /// (see [ImportPlan]).
-pub(crate) trait ImportPass: std::fmt::Debug + Send + Sync {
+pub(crate) trait ImportPass: fmt::Debug + Send + Sync {
     /// Returns the pass's name, for logs.
     fn name(&self) -> &'static str;
 
@@ -54,7 +56,7 @@ pub(crate) trait ImportPass: std::fmt::Debug + Send + Sync {
 }
 
 /// A program pass, which rewrites the compiled rules.
-pub(crate) trait ProgramPass: std::fmt::Debug + Send + Sync {
+pub(crate) trait ProgramPass: fmt::Debug + Send + Sync {
     /// Returns the pass's name, for logs.
     fn name(&self) -> &'static str;
 

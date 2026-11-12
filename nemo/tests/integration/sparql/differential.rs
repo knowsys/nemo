@@ -10,8 +10,9 @@
 
 use std::sync::Arc;
 
-use nemo::{engine::Engine, pipeline::Stages};
+use nemo::{codes, engine::Engine, pipeline::Stages};
 use nemo_io::sparql::spargebra::SparqlParser;
+use nemo_physical::diagnostics::Code;
 use oxrdf::{Dataset, GraphName};
 use oxttl::TurtleParser;
 use sparesults::{QueryResultsFormat, QueryResultsSerializer};
@@ -126,7 +127,7 @@ struct Run {
     /// How many of them reasoning sent, the fetches of bound imports.
     fetched: usize,
     /// The codes of the reports of the run.
-    reports: Vec<nemo_physical::diagnostics::Code>,
+    reports: Vec<Code>,
 }
 
 /// Runs a program against the endpoint, with or without the rewrite stage.
@@ -1009,14 +1010,12 @@ member(?c, ?m) :- cell(?c, ?l), t(?l, rdf:first, ?m) .
     );
     assert!(rewritten.outputs[0].1.is_empty(), "{:?}", rewritten.outputs);
     assert!(
-        rewritten
-            .reports
-            .contains(&nemo::codes::BLANK_NODE_BINDINGS),
+        rewritten.reports.contains(&codes::BLANK_NODE_BINDINGS),
         "{:?}",
         rewritten.reports
     );
     assert!(
-        !written.reports.contains(&nemo::codes::BLANK_NODE_BINDINGS),
+        !written.reports.contains(&codes::BLANK_NODE_BINDINGS),
         "{:?}",
         written.reports
     );

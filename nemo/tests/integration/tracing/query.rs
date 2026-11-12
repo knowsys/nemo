@@ -2,10 +2,13 @@
 //! the valid/filter two-pass over the shape it is given,
 //! `treeForTable` expands server-side.
 
+use std::time::Duration;
+
 use nemo::{
+    codes,
     engine::Engine,
     trace::query::{
-        EntriesQuery, EntryQuery, NodeResponse, Pagination, QueryChildren, QueryNode,
+        EntriesQuery, EntryQuery, NodeResponse, Pagination, QueryChildren, QueryNode, TableEntries,
         TableEntriesForTreeNodesQuery, TreeForTableQuery, TreeForTableResponse,
     },
 };
@@ -39,7 +42,7 @@ fn tree(predicate: &str, queries: Vec<EntryQuery>) -> TreeForTableQuery {
 }
 
 /// A node's facts, rendered.
-fn rendered(predicate: &str, node: &nemo::trace::query::TableEntries) -> Vec<String> {
+fn rendered(predicate: &str, node: &TableEntries) -> Vec<String> {
     node.entries
         .iter()
         .map(|entry| format!("{predicate}({})", entry.term_tuple.join(", ")))
@@ -78,7 +81,7 @@ fn a_tree_query_expands_at_the_instant_of_the_run() {
     ");
 
     // The clock moves on between reasoning and the query.
-    std::thread::sleep(std::time::Duration::from_millis(5));
+    std::thread::sleep(Duration::from_millis(5));
     let response = engine
         .tree_for_table(tree("current", vec![EntryQuery::Terms("a".into())]))
         .expect("the query answers");
@@ -282,7 +285,7 @@ fn negated_literals_list_their_predicate() {
             }),
         }))
         .expect_err("a listing is not expanded");
-    assert_eq!(refusal.code(), nemo::codes::NEGATED_EXPANSION);
+    assert_eq!(refusal.code(), codes::NEGATED_EXPANSION);
 }
 
 #[test]
@@ -341,15 +344,15 @@ fn selections_that_do_not_fit_are_refused() {
     let refusal = engine
         .tree_for_table(tree("edge", vec![EntryQuery::Terms("a, (".into())]))
         .expect_err("the terms do not parse");
-    assert_eq!(refusal.code(), nemo::codes::NOT_TERMS);
+    assert_eq!(refusal.code(), codes::NOT_TERMS);
     let refusal = engine
         .tree_for_table(tree("edge", vec![EntryQuery::Terms("a".into())]))
         .expect_err("one term for two columns");
-    assert_eq!(refusal.code(), nemo::codes::SELECTOR_ARITY);
+    assert_eq!(refusal.code(), codes::SELECTOR_ARITY);
     let refusal = engine
         .tree_for_table(tree("edge", vec![EntryQuery::Entry(99)]))
         .expect_err("no such entry");
-    assert_eq!(refusal.code(), nemo::codes::UNKNOWN_ENTRY);
+    assert_eq!(refusal.code(), codes::UNKNOWN_ENTRY);
 }
 
 #[test]

@@ -5,8 +5,14 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+#[cfg(feature = "http")]
+use std::{
+    io::{BufRead, BufReader, Read, Write},
+    net::TcpListener,
+};
 
 use nemo::{
+    codes,
     engine::{
         CancelToken, Engine,
         remote::{Client, Failure, Progress, Request, Response},
@@ -64,7 +70,7 @@ fn a_run_cancelled_while_its_client_waits_continues_with_reason() {
         responder: responder.clone(),
     })));
     let problem = engine.reason().expect_err("the wait is cancelled");
-    assert_eq!(problem.code(), nemo::codes::WAIT_CANCELLED, "{problem:?}");
+    assert_eq!(problem.code(), codes::WAIT_CANCELLED, "{problem:?}");
     assert_eq!(engine.pending().len(), 1, "the run is suspended");
 
     // The next call clears the token it inherits, and continues the run.
@@ -98,7 +104,7 @@ anc(?m) :- mother(?c, ?m) .
         engine
             .reports()
             .iter()
-            .filter(|report| report.code() == nemo::codes::REQUESTS_FAILED)
+            .filter(|report| report.code() == codes::REQUESTS_FAILED)
             .count()
     };
     let mut engine = Engine::new();
@@ -192,9 +198,7 @@ fn form_decode(text: &str) -> String {
 /// with a function of its text.
 #[cfg(feature = "http")]
 fn serve_endpoint(respond: fn(&str) -> String) -> String {
-    use std::io::{BufRead, BufReader, Read, Write};
-
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let address = listener.local_addr().expect("an address");
     std::thread::spawn(move || {
         for stream in listener.incoming() {
@@ -263,7 +267,7 @@ fn a_suspended_run_continues_at_its_application() {
     assert_eq!(engine.count("anc").expect("readable"), 1);
     let fact = Fact::parse("anc(<urn:a>) .").expect("parses");
     let refused = engine.trace(&[fact]).expect_err("the run is unfinished");
-    assert_eq!(refused.code(), nemo::codes::UNFINISHED, "{refused:?}");
+    assert_eq!(refused.code(), codes::UNFINISHED, "{refused:?}");
 
     assert_eq!(
         engine
@@ -301,7 +305,7 @@ fn a_change_is_refused_while_a_run_is_suspended() {
     let refused = engine
         .import_rows("anc", vec![vec![DataValue::iri("urn:x")]])
         .expect_err("a run is suspended");
-    assert_eq!(refused.code(), nemo::codes::METHOD_SUSPENDED, "{refused:?}");
+    assert_eq!(refused.code(), codes::METHOD_SUSPENDED, "{refused:?}");
     assert_eq!(refused.field("refused"), Some("import_rows"), "{refused:?}");
     assert_eq!(refused.field("suspended"), Some("reason"), "{refused:?}");
     assert_eq!(engine.count("anc").expect("readable"), 1, "nothing changed");
@@ -349,7 +353,7 @@ fn a_client_giving_too_few_responses_fails_the_rest() {
         r#"@import q from sparql { endpoint = <http://example.org/sparql>, query = "SELECT ?x WHERE { ?x <urn:p> ?y }" } ."#,
     );
     let problem = engine.load(program).expect_err("no response came");
-    assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNFETCHABLE, "{problem:?}");
     assert!(
         problem
             .field("reason")
@@ -443,7 +447,7 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) .
     let problem = endpoint
         .serve(&mut engine, Engine::reason)
         .expect_err("one binding cannot shrink");
-    assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNFETCHABLE, "{problem:?}");
     assert!(
         problem
             .field("reason")
@@ -500,11 +504,7 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) .
     let problem = endpoint
         .serve(&mut engine, Engine::reason)
         .expect_err("one binding cannot shrink");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::SPARQL_RESPONSE_CUT,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::SPARQL_RESPONSE_CUT, "{problem:?}");
 }
 
 #[test]
@@ -600,7 +600,7 @@ fn failed_requests_under_warn_keep_what_arrived() {
     let warnings: Vec<_> = engine
         .reports()
         .iter()
-        .filter(|report| report.code() == nemo::codes::REQUESTS_FAILED)
+        .filter(|report| report.code() == codes::REQUESTS_FAILED)
         .collect();
     let [warning] = warnings.as_slice() else {
         panic!("one warning: {:?}", engine.reports());

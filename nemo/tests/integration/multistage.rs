@@ -6,7 +6,7 @@
 //! computed again.
 //! A reload replaces the program while unchanged imports stay unread.
 
-use nemo::engine::Engine;
+use nemo::{codes, engine::Engine};
 use nemo_physical::value::DataValue;
 
 use crate::common::{TempDirectory, parse, rows, run};
@@ -155,7 +155,7 @@ fn imported_rows_pass_the_fact_gate() {
         .expect_err("a declared type refuses the row");
     assert_eq!(
         refusal.code(),
-        nemo::codes::FACT_OUTSIDE_DECLARATION,
+        codes::FACT_OUTSIDE_DECLARATION,
         "{refusal:?}"
     );
     assert_eq!(refusal.field("declared"), Some("int"));
@@ -173,7 +173,7 @@ fn imported_rows_pass_the_fact_gate() {
     let refusal = engine
         .import_rows("p", vec![row(&[1, 2])])
         .expect_err("the arity is one predicate's");
-    assert_eq!(refusal.code(), nemo::codes::ARITY_MISMATCH, "{refusal:?}");
+    assert_eq!(refusal.code(), codes::ARITY_MISMATCH, "{refusal:?}");
     assert_eq!(refusal.field("arity"), Some("2"));
 }
 
@@ -237,7 +237,7 @@ fn extensions_keep_the_one_arity_rule() {
     let refusal = engine
         .extend(parse("p(1, 2) ."))
         .expect_err("one predicate, one arity");
-    assert_eq!(refusal.code(), nemo::codes::ARITY_MISMATCH, "{refusal:?}");
+    assert_eq!(refusal.code(), codes::ARITY_MISMATCH, "{refusal:?}");
     assert_eq!(refusal.field("arity"), Some("2"));
 
     // The failed extension left the engine standing.
@@ -253,7 +253,7 @@ fn extensions_cannot_change_loaded_meaning() {
         .expect_err("rebinding a prefix is refused");
     assert_eq!(
         refusal.code(),
-        nemo::codes::EXTENSION_REBINDS_PREFIX,
+        codes::EXTENSION_REBINDS_PREFIX,
         "{refusal:?}"
     );
 
@@ -262,7 +262,7 @@ fn extensions_cannot_change_loaded_meaning() {
         .expect_err("a late base is refused");
     assert_eq!(
         refusal.code(),
-        nemo::codes::EXTENSION_DECLARES_BASE,
+        codes::EXTENSION_DECLARES_BASE,
         "{refusal:?}"
     );
 
@@ -282,7 +282,7 @@ fn extensions_cannot_redefine_parameters() {
         .expect_err("the loaded rules compiled with the value");
     assert_eq!(
         refusal.code(),
-        nemo::codes::EXTENSION_REDEFINES_PARAMETER,
+        codes::EXTENSION_REDEFINES_PARAMETER,
         "{refusal:?}"
     );
     assert_eq!(
@@ -302,11 +302,7 @@ fn late_declarations_check_the_store() {
     let refusal = engine
         .extend(parse("@declare p(v: int) ."))
         .expect_err("the store already violates the declaration");
-    assert_eq!(
-        refusal.code(),
-        nemo::codes::STORED_VALUES_EXCLUDED,
-        "{refusal:?}"
-    );
+    assert_eq!(refusal.code(), codes::STORED_VALUES_EXCLUDED, "{refusal:?}");
     assert_eq!(refusal.field("stored"), Some("string"));
     engine
         .extend(parse("@declare q(v: int) . q(1) ."))
@@ -399,7 +395,7 @@ fn reload_keeps_imported_rows_of_unchanged_predicates() {
         engine
             .reports()
             .iter()
-            .any(|report| report.code() == nemo::codes::IMPORTED_ROWS_DROPPED),
+            .any(|report| report.code() == codes::IMPORTED_ROWS_DROPPED),
         "{:?}",
         engine.reports()
     );
@@ -456,7 +452,7 @@ fn open_cursors_notice_recovery() {
     let refusal = engine
         .read_chunk(&mut cursor, 16)
         .expect_err("the world shifted under the cursor");
-    assert_eq!(refusal.code(), nemo::codes::CURSOR_INVALIDATED);
+    assert_eq!(refusal.code(), codes::CURSOR_INVALIDATED);
 }
 
 #[test]
@@ -464,7 +460,7 @@ fn the_checks_tell_which_methods_fail() {
     let mut engine = Engine::new();
     assert!(!engine.has_program());
     let refusal = engine.reason().expect_err("there is nothing to reason");
-    assert_eq!(refusal.code(), nemo::codes::NO_PROGRAM);
+    assert_eq!(refusal.code(), codes::NO_PROGRAM);
 
     engine
         .load(parse("p(1) . q(?x) :- p(?x) ."))
@@ -473,7 +469,7 @@ fn the_checks_tell_which_methods_fail() {
     let refusal = engine
         .load(parse("r(1) ."))
         .expect_err("one program per engine");
-    assert_eq!(refusal.code(), nemo::codes::ALREADY_LOADED);
+    assert_eq!(refusal.code(), codes::ALREADY_LOADED);
 
     assert!(!engine.is_at_fixpoint());
     engine.reason().expect("reasoning reaches the fixpoint");

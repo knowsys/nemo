@@ -3,6 +3,9 @@
 
 use nemo_physical::{management::TableId, value::DataValue};
 
+use crate::model::{OnError, Span};
+use nemo_io::{selection::RowSelection, sparql::SparqlQuery};
+
 /// The fetch of a SPARQL import with a `where` clause.
 ///
 /// Each application of the rule sends the rows of the `where` clause's atoms to the endpoint
@@ -12,13 +15,13 @@ pub(crate) struct CompiledFetch {
     /// The endpoint URL.
     pub(crate) endpoint: String,
     /// The validated query, with the import's condition added if it has a SPARQL form.
-    pub(crate) query: nemo_io::sparql::SparqlQuery,
+    pub(crate) query: SparqlQuery,
     /// The HTTP headers sent with every request.
     pub(crate) headers: Vec<(String, String)>,
     /// The largest number of rows of one atom that a request sends.
     pub(crate) page_size: usize,
     /// Which columns of a response are delivered, and the condition that a row must satisfy.
-    pub(crate) selection: nemo_io::selection::RowSelection,
+    pub(crate) selection: RowSelection,
     /// The name of the head predicate, for the fetch's diagnostics.
     pub(crate) predicate: String,
     /// Per body atom, how the fetch reads each of the atom's stored columns.
@@ -27,9 +30,9 @@ pub(crate) struct CompiledFetch {
     /// in which a response's rows are deduplicated against the head before they are stored.
     pub(crate) scratch: TableId,
     /// The source position of the import directive, for the fetch's diagnostics.
-    pub(crate) span: Option<crate::model::Span>,
+    pub(crate) span: Option<Span>,
     /// What happens when a request fails.
-    pub(crate) on_error: crate::model::OnError,
+    pub(crate) on_error: OnError,
 }
 
 /// How a fetch reads one stored column of an atom of the `where` clause.

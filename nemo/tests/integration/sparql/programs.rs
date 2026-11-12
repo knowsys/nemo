@@ -1,7 +1,10 @@
 //! Programs with SPARQL imports from check to report: reloads and extensions, declarations,
 //! stratification, failed fetches, warnings, and the predicates they list and store.
 
-use nemo::engine::{Engine, PredicateRole, remote::Failure};
+use nemo::{
+    codes,
+    engine::{Engine, PredicateRole, remote::Failure},
+};
 use nemo_physical::value::DataValue;
 
 use crate::common::{Responder, arities, parse_into, roles};
@@ -121,7 +124,7 @@ fn rewritten_imports_carry_their_declarations() {
     assert!(
         problems
             .iter()
-            .any(|problem| problem.code() == nemo::codes::IMPORT_OUTSIDE_DECLARATION),
+            .any(|problem| problem.code() == codes::IMPORT_OUTSIDE_DECLARATION),
         "{problems:?}"
     );
 }
@@ -195,7 +198,7 @@ fn a_failed_fetch_keeps_the_program() {
     let problem = refusing
         .serve(&mut engine, Engine::reason)
         .expect_err("the fetch fails");
-    assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNFETCHABLE, "{problem:?}");
 
     // The import that the label points at starts the second line of the registered text.
     let location = problem.location().expect("the import is labeled");
@@ -221,7 +224,7 @@ fn a_failed_fetch_keeps_the_program() {
     let again = refusing
         .serve(&mut engine, Engine::reason)
         .expect_err("the fetch fails again");
-    assert_eq!(again.code(), nemo::codes::UNFETCHABLE, "{again:?}");
+    assert_eq!(again.code(), codes::UNFETCHABLE, "{again:?}");
     parents()
         .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
@@ -250,7 +253,7 @@ dead(?x, ?y) :- word(?x), value(?x), triple(?x, <urn:parent>, ?y) .
     let warnings: Vec<_> = engine
         .reports()
         .iter()
-        .filter(|report| report.code() == nemo::codes::NEVER_FIRES)
+        .filter(|report| report.code() == codes::NEVER_FIRES)
         .collect();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     let json = format!("{warnings:?}");
@@ -269,7 +272,7 @@ fn an_import_matched_at_its_endpoint_is_listed_but_not_stored() {
         ]
     );
     let refusal = engine.rows("triple").expect_err("triple is not stored");
-    assert_eq!(refusal.code(), nemo::codes::NOT_STORED_WHOLE);
+    assert_eq!(refusal.code(), codes::NOT_STORED_WHOLE);
     assert_eq!(
         refusal.message(),
         "`triple` is not stored whole: it is not stored, since the rules reading it \
@@ -432,11 +435,11 @@ fn an_import_the_stage_answers_at_its_endpoint_is_checked_as_written() {
     assert!(
         checked
             .iter()
-            .any(|problem| problem.code() == nemo::codes::PAGE_NOT_A_COUNT),
+            .any(|problem| problem.code() == codes::PAGE_NOT_A_COUNT),
         "{checked:?}"
     );
     let problem = engine.load(program).expect_err("the option is refused");
-    assert_eq!(problem.code(), nemo::codes::PAGE_NOT_A_COUNT, "{problem:?}");
+    assert_eq!(problem.code(), codes::PAGE_NOT_A_COUNT, "{problem:?}");
     assert_eq!(problem.labels().len(), 1, "{problem:?}");
 }
 
@@ -451,5 +454,5 @@ fn a_rewritten_program_reports_what_reading_finds() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, &source);
     let problem = engine.load(program).expect_err("the file is missing");
-    assert_eq!(problem.code(), nemo::codes::UNREADABLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNREADABLE, "{problem:?}");
 }

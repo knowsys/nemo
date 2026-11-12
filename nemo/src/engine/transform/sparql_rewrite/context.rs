@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use nemo_io::sparql::{QueryShape, SparqlQuery};
+use nemo_io::sparql::{DEFAULT_QUERY, QueryShape, SparqlQuery};
 
 use crate::{
     engine::transform::sparql_rewrite::is_sparql,
@@ -303,7 +303,7 @@ fn option<'a>(directive: &'a ImportDirective, name: &str) -> Option<&'a Term> {
 /// if its `query` option is a string or absent, and the query parses in the scope.
 fn query_of(directive: &ImportDirective, scope: &NameScope) -> Option<SparqlQuery> {
     let text = match option(directive, "query") {
-        None => nemo_io::sparql::DEFAULT_QUERY.to_owned(),
+        None => DEFAULT_QUERY.to_owned(),
         Some(Term {
             kind: TermKind::String(text),
             ..

@@ -24,7 +24,7 @@ pub(crate) use self::import::OnError;
 
 use std::fmt::{self, Display, Formatter};
 
-use crate::model::{Identifier, Span, Variable, fmt_list, span_ignoring_eq};
+use crate::model::{Identifier, Span, Term, Variable, fmt_list, span_ignoring_eq};
 
 /// A directive, which is a statement that starts with `@`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -182,7 +182,7 @@ pub struct ParameterDirective {
     /// Its declared type, if one is stated.
     pub datatype: Option<TypeExpression>,
     /// Its default value, or `None` if the directive declares none.
-    pub value: Option<crate::model::Term>,
+    pub value: Option<Term>,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,
 }

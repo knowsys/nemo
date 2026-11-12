@@ -35,7 +35,10 @@ pub use self::{
 pub use nemo_io::remote::BlockingClient;
 pub use nemo_io::remote::{Client, Failure, Request, Response, Retry};
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -340,8 +343,8 @@ impl Default for ClientSlot {
     }
 }
 
-impl std::fmt::Debug for ClientSlot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for ClientSlot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(if self.0.is_some() {
             "ClientSlot(Some(..))"
         } else {

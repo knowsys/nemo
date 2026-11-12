@@ -1,7 +1,7 @@
 //! Unbound values: a query that may leave a variable unbound is fetched once, so every rule
 //! reading it sees the same null for an unbound value, and no solution is lost to a binding.
 
-use nemo::engine::Engine;
+use nemo::{codes, engine::Engine};
 
 use crate::common::{Responder, parse_into, rows};
 
@@ -134,7 +134,7 @@ b(?s, ?x) :- c(?x), t(?s, ?x) .
     let warned: Vec<_> = engine
         .reports()
         .iter()
-        .filter(|report| report.code() == nemo::codes::NEVER_BOUND_VARIABLE)
+        .filter(|report| report.code() == codes::NEVER_BOUND_VARIABLE)
         .collect();
     assert_eq!(warned.len(), 1, "{warned:?}");
     assert_eq!(warned[0].field("variable"), Some("x"), "{warned:?}");

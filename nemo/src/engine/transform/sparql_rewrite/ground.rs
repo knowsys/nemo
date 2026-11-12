@@ -1,6 +1,6 @@
 //! Ground terms of a rule as the SPARQL terms in which an endpoint may store their values.
 
-use nemo_io::sparql::spargebra::term::GroundTerm;
+use nemo_io::sparql::{SparqlQuery, spargebra::term::GroundTerm};
 use nemo_physical::value::DataValue;
 
 use crate::{
@@ -14,7 +14,7 @@ impl RewriteContext {
     /// or `None` if a query cannot contain it:
     /// for a term without a value, or a value without an RDF form.
     pub(super) fn ground_terms(&self, kind: &TermKind) -> Option<Vec<GroundTerm>> {
-        let terms = nemo_io::sparql::SparqlQuery::ground_terms(&self.value(kind)?);
+        let terms = SparqlQuery::ground_terms(&self.value(kind)?);
         (!terms.is_empty()).then_some(terms)
     }
 

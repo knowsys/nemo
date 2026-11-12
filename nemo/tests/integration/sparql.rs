@@ -11,7 +11,7 @@ mod requests;
 mod tracing;
 mod unbound;
 
-use nemo::engine::Engine;
+use nemo::{engine::Engine, trace::TraceResponse};
 
 use crate::common::{Responder, parse_into};
 
@@ -107,7 +107,7 @@ fn generic_ancestors() -> Engine {
 }
 
 /// A response's JSON, which must name nothing a stage introduced.
-fn written_only(response: &nemo::trace::TraceResponse) -> String {
+fn written_only(response: &TraceResponse) -> String {
     let json = serde_json::to_string(response).expect("the response serializes");
     assert!(
         !json.contains("_query") && !json.contains("_bindings"),

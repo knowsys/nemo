@@ -5,7 +5,7 @@
 //! decoding must yield the identical value. Nulls are the documented
 //! exception (`_:id` is data syntax, not program syntax).
 
-use nemo::{engine::Engine, model::Program};
+use nemo::{codes, engine::Engine, model::Program};
 use nemo_physical::value::{DataValue, MapValue, TupleValue};
 
 /// Loads a fact holding the value's rendered form and reads it back.
@@ -118,7 +118,7 @@ fn nulls_do_not_import() {
     let refusal = engine
         .import_rows("p", vec![vec![DataValue::null(3)]])
         .expect_err("a null has no term");
-    assert_eq!(refusal.code(), nemo::codes::NULL_IN_ROW, "{refusal:?}");
+    assert_eq!(refusal.code(), codes::NULL_IN_ROW, "{refusal:?}");
     assert_eq!(refusal.field("predicate"), Some("p"));
 }
 
@@ -140,11 +140,7 @@ fn rows_import_into_a_loaded_engine() {
     let refusal = engine
         .import_rows("r", vec![vec![DataValue::integer(1)]])
         .expect_err("an unknown predicate is refused");
-    assert_eq!(
-        refusal.code(),
-        nemo::codes::UNKNOWN_PREDICATE,
-        "{refusal:?}"
-    );
+    assert_eq!(refusal.code(), codes::UNKNOWN_PREDICATE, "{refusal:?}");
     assert_eq!(refusal.field("predicate"), Some("r"));
 }
 

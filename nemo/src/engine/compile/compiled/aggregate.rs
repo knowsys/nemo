@@ -2,7 +2,7 @@
 
 use nemo_physical::management::TableId;
 
-use crate::engine::compile::compiled::ComputedColumn;
+use crate::{engine::compile::compiled::ComputedColumn, model::AggregateKind};
 
 /// One head atom with aggregates.
 ///
@@ -36,7 +36,7 @@ pub(crate) struct CompiledAggregate {
 #[derive(Debug)]
 pub(crate) struct CompiledAggregateFunction {
     /// The aggregation function.
-    pub(crate) kind: crate::model::AggregateKind,
+    pub(crate) kind: AggregateKind,
     /// The aggregated column, or `None` for a count without an input,
     /// which reads no column.
     ///

@@ -18,7 +18,7 @@ use crate::{
             unsupported,
         },
     },
-    model::{Atom, Literal, Rule, Span, TermKind, VariableKind, Walk},
+    model::{Atom, Literal, Operation, Rule, Span, TermKind, VariableKind, Walk},
 };
 
 /// A rule's compiled head: its ordinary atoms,
@@ -163,7 +163,7 @@ impl RuleCompiler<'_, '_> {
     ///
     /// Every operation is passed on with the part of the rule's text that it comes from:
     /// a written condition, an expression argument, or a pattern.
-    fn conditions(&mut self, operations: Vec<&crate::model::Operation>) -> Result<(), Diagnostic> {
+    fn conditions(&mut self, operations: Vec<&Operation>) -> Result<(), Diagnostic> {
         let deferred = std::mem::take(&mut self.deferred);
         let mut synthesized = Vec::new();
         let mut patterns = Vec::new();

@@ -5,9 +5,12 @@
 
 use std::sync::Arc;
 
-use nemo::engine::{
-    Engine,
-    remote::{PendingRequest, Progress, RequestId},
+use nemo::{
+    codes,
+    engine::{
+        Engine,
+        remote::{PendingRequest, Progress, RequestId},
+    },
 };
 use nemo_physical::value::DataValue;
 
@@ -119,7 +122,7 @@ fn a_load_without_a_client_changes_nothing() {
             r#"@import p from csv { resource = "https://example.org/p.csv" } ."#,
         ))
         .expect_err("nothing sends the request");
-    assert_eq!(problem.code(), nemo::codes::NO_CLIENT, "{problem:?}");
+    assert_eq!(problem.code(), codes::NO_CLIENT, "{problem:?}");
     assert_eq!(problem.field("first"), Some("https://example.org/p.csv"));
     assert!(engine.pending().is_empty(), "nothing is suspended");
     assert!(!engine.has_program(), "nothing was loaded");
@@ -133,7 +136,7 @@ fn a_failed_response_fails_the_load() {
     let problem = Responder::canned(&[])
         .serve(&mut engine, |engine| engine.load(program))
         .expect_err("no body is canned for this URL");
-    assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNFETCHABLE, "{problem:?}");
     assert_eq!(
         problem.field("url"),
         Some("https://example.org/missing.csv")
@@ -176,7 +179,7 @@ s(?x) :- q(?x, ?y) ."#,
     let warnings: Vec<_> = engine
         .reports()
         .iter()
-        .filter(|report| report.code() == nemo::codes::IMPORT_FAILED)
+        .filter(|report| report.code() == codes::IMPORT_FAILED)
         .collect();
     let [warning] = warnings.as_slice() else {
         panic!("one warning, for the failed import: {:?}", engine.reports());
@@ -280,7 +283,7 @@ fn a_suspended_load_refuses_changes_until_discarded() {
     ];
     for (method, refused) in refusals {
         let problem = refused.expect_err("a load is suspended");
-        assert_eq!(problem.code(), nemo::codes::METHOD_SUSPENDED, "{problem:?}");
+        assert_eq!(problem.code(), codes::METHOD_SUSPENDED, "{problem:?}");
         assert_eq!(problem.field("refused"), Some(method), "{problem:?}");
         assert_eq!(problem.field("suspended"), Some("load"), "{problem:?}");
     }
@@ -323,7 +326,7 @@ c(?x) :- b(?x) ."#,
         vec![vec![DataValue::integer(1)]]
     );
     let refused = engine.reason().expect_err("an extension is suspended");
-    assert_eq!(refused.code(), nemo::codes::METHOD_SUSPENDED, "{refused:?}");
+    assert_eq!(refused.code(), codes::METHOD_SUSPENDED, "{refused:?}");
     assert_eq!(refused.field("suspended"), Some("extend"), "{refused:?}");
 
     canned

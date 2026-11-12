@@ -11,6 +11,7 @@
 
 mod dsv;
 mod json;
+#[cfg(feature = "parquet")]
 mod parquet;
 mod prefetch;
 mod rdf;
@@ -18,6 +19,7 @@ mod sparql;
 
 use std::{
     collections::hash_map::Entry,
+    io::Read,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -41,6 +43,7 @@ use crate::{
     },
     model::{Atom, Operation, Span, Substitution, Term, Variable, VariableKind, Walk},
     pipeline::Pipeline,
+    telemetry::EngineEvent,
     values::TypeSyntax,
 };
 
@@ -235,6 +238,26 @@ impl<'a> Translator<'a> {
         self.load_dsv_batch(batch)
     }
 
+    /// Returns an error for a Parquet import in a build without the `parquet` feature,
+    /// rather than misreading it.
+    ///
+    /// A check accepts the import and marks its predicate open,
+    /// since the program may be meant for a build that can validate it.
+    #[cfg(not(feature = "parquet"))]
+    fn parquet_import(&mut self, import: &PendingImport) -> Result<(), ImportFailure> {
+        if self.purpose == super::Purpose::Check {
+            self.open.insert(import.predicate.clone());
+            return Ok(());
+        }
+
+        Err(TranslationError::FeatureUnavailable {
+            what: String::from("a Parquet import"),
+            feature: String::from("parquet"),
+        }
+        .at(import.span)
+        .into())
+    }
+
     /// Runs the checks that every import passes before its format's own.
     ///
     /// - A `@use` of the program binds an `@input` predicate,
@@ -262,11 +285,7 @@ impl<'a> Translator<'a> {
     /// or `None` if no bytes are registered under it.
     ///
     /// The stream is decompressed according to `compression` and the name.
-    fn registered_stream(
-        &self,
-        resource: &str,
-        compression: Compression,
-    ) -> Option<Box<dyn std::io::Read>> {
+    fn registered_stream(&self, resource: &str, compression: Compression) -> Option<Box<dyn Read>> {
         self.resources
             .get(resource)
             .map(|bytes| compression.open_bytes(bytes.clone(), resource))
@@ -280,7 +299,7 @@ impl<'a> Translator<'a> {
         resource: &str,
         compression: Compression,
         fetched: Option<Arc<[u8]>>,
-    ) -> Option<Box<dyn std::io::Read>> {
+    ) -> Option<Box<dyn Read>> {
         self.registered_stream(resource, compression)
             .or_else(|| fetched.map(|bytes| compression.open_bytes(bytes, resource)))
     }
@@ -556,11 +575,10 @@ impl<'a> Translator<'a> {
         self.errors.absorb(&loaded.counts.errors);
         tracing::debug!(resource, rows = loaded.rows.len(), counts = ?loaded.counts, "import read");
         if self.telemetry.enabled() {
-            self.telemetry
-                .record(&crate::telemetry::EngineEvent::Imported {
-                    resource: resource.to_owned(),
-                    rows: loaded.rows.len() as u64,
-                });
+            self.telemetry.record(&EngineEvent::Imported {
+                resource: resource.to_owned(),
+                rows: loaded.rows.len() as u64,
+            });
         }
 
         debug_assert_eq!(

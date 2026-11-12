@@ -5,9 +5,9 @@
 //! The translation then [commits](Translator::commit) with the responses,
 //! each found by the position of its import's directive.
 
-use std::sync::Arc;
+use std::{io::Read, sync::Arc};
 
-use nemo_io::{file_format::FileFormat, remote::Request};
+use nemo_io::{codes, file_format::FileFormat, remote::Request};
 use nemo_physical::{diagnostics::Diagnostic, value::ValueRef};
 
 use crate::{
@@ -268,9 +268,9 @@ fn import_on_error(import: &PendingImport) -> Result<OnError, Diagnostic> {
 /// Returns the bytes of standard input, read to its end.
 fn standard_input() -> Result<Arc<[u8]>, Diagnostic> {
     let mut bytes = Vec::new();
-    std::io::Read::read_to_end(&mut std::io::stdin().lock(), &mut bytes).map_err(|error| {
+    Read::read_to_end(&mut std::io::stdin().lock(), &mut bytes).map_err(|error| {
         Diagnostic::error(
-            nemo_io::codes::UNREADABLE,
+            codes::UNREADABLE,
             format!("could not read `<stdin>`: {error}"),
         )
         .with_resource(String::from("<stdin>"))

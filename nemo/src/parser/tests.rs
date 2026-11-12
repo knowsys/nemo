@@ -3,9 +3,12 @@
 
 use super::{cursor::MAX_NESTING, *};
 
-use nemo_physical::value::{Number, ValueDomain};
+use nemo_physical::value::{DataValue, Number, ValueDomain};
 
-use crate::model::{Directive, Identifier, Literal, Operator, TermKind};
+use crate::{
+    codes,
+    model::{Directive, Identifier, Literal, Operator, TermKind},
+};
 
 /// Statements written in their canonical form,
 /// so that each one is displayed exactly as written after it is parsed.
@@ -119,7 +122,7 @@ fn iris_in_term_syntax_read_back_as_themselves() {
         r"C:\data\u1",
         "tab	here",
     ] {
-        let source = format!("p({}) .", nemo_physical::value::DataValue::iri(iri));
+        let source = format!("p({}) .", DataValue::iri(iri));
         let (program, diagnostics) = Program::parse(&source);
         assert!(diagnostics.is_empty(), "{source}: {diagnostics:?}");
         let Statement::Fact(fact) = &program.statements[0] else {
@@ -203,7 +206,7 @@ fn imports_and_exports_take_only_their_own_connective() {
         assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
         assert_eq!(
             diagnostics[0].code(),
-            crate::codes::EXPECTED,
+            codes::EXPECTED,
             "{:?}",
             diagnostics[0]
         );
@@ -219,7 +222,7 @@ fn imports_and_exports_take_only_their_own_connective() {
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(
         diagnostics[0].code(),
-        crate::codes::EXPECTED_CONNECTIVE,
+        codes::EXPECTED_CONNECTIVE,
         "{:?}",
         diagnostics[0]
     );
@@ -273,18 +276,14 @@ fn a_module_name_is_super_steps_then_names() {
     let problem = ModuleName::parse("util::super::pairs").expect_err("`super` follows a name");
     assert_eq!(
         problem.code(),
-        crate::codes::SUPER_INSIDE_MODULE_NAME,
+        codes::SUPER_INSIDE_MODULE_NAME,
         "{problem:?}"
     );
 
     // Only `super`, a trailing `::` or nothing at all is not a module name.
     for source in ["super", "super::", "lib::", ""] {
         let problem = ModuleName::parse(source).expect_err(source);
-        assert_eq!(
-            problem.code(),
-            crate::codes::EXPECTED,
-            "{source:?}: {problem:?}"
-        );
+        assert_eq!(problem.code(), codes::EXPECTED, "{source:?}: {problem:?}");
     }
 }
 
@@ -294,7 +293,7 @@ fn a_module_name_is_super_steps_then_names() {
 fn a_use_names_its_module_rather_than_a_path() {
     let (_, diagnostics) = Program::parse("@use \"lib/tc.rls\" as t .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-    assert_eq!(diagnostics[0].code(), crate::codes::EXPECTED);
+    assert_eq!(diagnostics[0].code(), codes::EXPECTED);
     assert_eq!(
         diagnostics[0].field("expected"),
         Some("the module's name, as `lib::tc` for `lib/tc.rls`")
@@ -449,7 +448,7 @@ fn nesting_deeper_than_the_limit_returns_an_error() {
     );
     let (_, diagnostics) = Program::parse(&deep);
     let problem = diagnostics.first().expect("parsing returns an error");
-    assert_eq!(problem.code(), crate::codes::TOO_DEEP, "{problem:?}");
+    assert_eq!(problem.code(), codes::TOO_DEEP, "{problem:?}");
 }
 
 /// Format strings nested in format strings count toward the nesting limit.
@@ -464,7 +463,7 @@ fn nesting_through_format_strings_counts_too() {
     );
     let (_, diagnostics) = Program::parse(&deep);
     let problem = diagnostics.first().expect("parsing returns an error");
-    assert_eq!(problem.code(), crate::codes::TOO_DEEP, "{problem:?}");
+    assert_eq!(problem.code(), codes::TOO_DEEP, "{problem:?}");
 }
 
 /// Terms nested less deeply than [MAX_NESTING] parse.
@@ -559,7 +558,7 @@ fn unknown_directives_are_diagnosed_with_hints() {
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(
         diagnostics[0].code(),
-        crate::codes::UNKNOWN_DIRECTIVE,
+        codes::UNKNOWN_DIRECTIVE,
         "{:?}",
         diagnostics[0]
     );
@@ -620,7 +619,7 @@ fn a_where_clause_holds_atoms_and_conditions_but_no_negation() {
         "@import q(?x) from sparql { endpoint = <https://e/sparql> } where ~b(?x) .",
     );
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-    assert_eq!(diagnostics[0].code(), crate::codes::NEGATION_IN_WHERE);
+    assert_eq!(diagnostics[0].code(), codes::NEGATION_IN_WHERE);
 }
 
 /// A fact with several atoms is an error.
@@ -655,7 +654,7 @@ fn a_misplaced_token_is_quoted_only_as_far_as_a_message_shows() {
 fn a_lexical_problem_is_reported_once() {
     let (program, diagnostics) = Program::parse("p(a) & q(b) .\ngood(1) .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-    assert_eq!(diagnostics[0].code(), crate::codes::UNEXPECTED_CHARACTER);
+    assert_eq!(diagnostics[0].code(), codes::UNEXPECTED_CHARACTER);
     assert_eq!(program.to_string(), "good(1) .");
 }
 
@@ -666,7 +665,7 @@ fn a_stray_brace_is_reported_where_it_stands() {
     let source = "p(f\"a}b\") .\ngood(1) .";
     let (program, diagnostics) = Program::parse(source);
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-    assert_eq!(diagnostics[0].code(), crate::codes::STRAY_BRACE);
+    assert_eq!(diagnostics[0].code(), codes::STRAY_BRACE);
     let span = diagnostics[0].labels()[0].span;
     assert_eq!(&source[span.start as usize..span.end as usize], "}");
     assert_eq!(program.to_string(), "good(1) .");
@@ -690,7 +689,7 @@ fn the_end_of_an_embedded_expression_is_not_the_end_of_the_input() {
 fn only_a_builtin_name_in_place_of_an_atom_is_called_a_call() {
     let (_, diagnostics) = Program::parse("strlen(?x) :- p(?x) .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-    assert_eq!(diagnostics[0].code(), crate::codes::EXPECTED_ATOM);
+    assert_eq!(diagnostics[0].code(), codes::EXPECTED_ATOM);
     let label = &diagnostics[0].labels()[0].message;
     assert!(label.contains("`strlen` is a builtin"), "{label}");
 
@@ -698,7 +697,7 @@ fn only_a_builtin_name_in_place_of_an_atom_is_called_a_call() {
     for source in ["q(?x), ?x > 3 :- p(?x) .", "q(?x) :- p(?x), ~ ?x > 3 ."] {
         let (_, diagnostics) = Program::parse(source);
         assert_eq!(diagnostics.len(), 1, "{source:?}: {diagnostics:?}");
-        assert_eq!(diagnostics[0].code(), crate::codes::EXPECTED_ATOM);
+        assert_eq!(diagnostics[0].code(), codes::EXPECTED_ATOM);
         assert!(diagnostics[0].hints().is_empty(), "{:?}", diagnostics[0]);
     }
 }
@@ -707,7 +706,7 @@ fn only_a_builtin_name_in_place_of_an_atom_is_called_a_call() {
 #[test]
 fn a_statement_of_another_kind_is_quoted_as_written() {
     let problem = Fact::parse_loose("q(a) :- p(a)").expect_err("a rule is not a fact");
-    assert_eq!(problem.code(), crate::codes::EXPECTED, "{problem:?}");
+    assert_eq!(problem.code(), codes::EXPECTED, "{problem:?}");
     assert_eq!(problem.field("found"), Some("`q(a) :- p(a)`"));
 }
 
@@ -716,11 +715,7 @@ fn a_statement_of_another_kind_is_quoted_as_written() {
 fn a_radix_literal_beyond_128_bits_is_out_of_range() {
     let source = format!("0x1{}", "0".repeat(32));
     let problem = Term::parse(&source).expect_err("the value needs 129 bits");
-    assert_eq!(
-        problem.code(),
-        crate::codes::MALFORMED_NUMBER,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::MALFORMED_NUMBER, "{problem:?}");
     assert_eq!(problem.message(), "number literal is out of range");
 }
 
@@ -730,7 +725,7 @@ fn a_lone_caret_is_explained_by_what_precedes_it() {
     let hint = |source: &str| {
         let (_, diagnostics) = Program::parse(source);
         assert_eq!(diagnostics.len(), 1, "{source:?}: {diagnostics:?}");
-        assert_eq!(diagnostics[0].code(), crate::codes::LONE_CARET);
+        assert_eq!(diagnostics[0].code(), codes::LONE_CARET);
         diagnostics[0].hints().join("\n")
     };
     assert!(hint("p(\"1\"^xsd:int) .").contains("`^^`"));
@@ -774,7 +769,7 @@ fn spacing_tells_a_prefixed_name_from_a_named_argument() {
     // Among named arguments, a prefixed name gets a hint that it lacks its space.
     let (_, diagnostics) = Program::parse("person(name: \"Ann\", age:30) .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
-    assert_eq!(diagnostics[0].code(), crate::codes::MIXED_ARGUMENTS);
+    assert_eq!(diagnostics[0].code(), codes::MIXED_ARGUMENTS);
     assert_eq!(
         diagnostics[0].hints(),
         ["write `age: 30` with a space for a named argument"]
@@ -834,11 +829,7 @@ fn an_iri_cannot_spell_the_character_u0000() {
     ] {
         let (_, diagnostics) = Program::parse(source);
         assert_eq!(diagnostics.len(), 1, "{source:?}: {diagnostics:?}");
-        assert_eq!(
-            diagnostics[0].code(),
-            crate::codes::NUL_IN_IRI,
-            "{source:?}"
-        );
+        assert_eq!(diagnostics[0].code(), codes::NUL_IN_IRI, "{source:?}");
     }
 
     // Other control characters are allowed,
@@ -883,5 +874,5 @@ fn the_marker_of_a_missing_value_belongs_to_column_formats() {
     }
 
     let (_, diagnostics) = Program::parse("p(int?) .");
-    assert_eq!(diagnostics[0].code(), crate::codes::MARKER_WITHOUT_NAME);
+    assert_eq!(diagnostics[0].code(), codes::MARKER_WITHOUT_NAME);
 }

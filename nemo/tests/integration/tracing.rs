@@ -9,12 +9,16 @@
 
 mod query;
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use nemo::{
+    codes,
     engine::Engine,
     model::{Atom, Fact, Literal, Program, Rule, TermKind, VariableKind},
-    trace::{Proof, TraceResponse},
+    trace::{Proof, TraceResponse, VERSION},
 };
 use nemo_physical::value::DataValue;
 
@@ -236,7 +240,7 @@ fn derivations_are_traced_at_the_instant_of_their_run() {
     ");
 
     // The clock moves on between reasoning and tracing.
-    std::thread::sleep(std::time::Duration::from_millis(5));
+    std::thread::sleep(Duration::from_millis(5));
     let response = trace(&mut engine, "current(a) .");
     assert!(response.proof(0).is_some());
     check(&mut engine, &response);
@@ -424,7 +428,7 @@ fn added_rows_trace_to_their_leaves_and_dirty_engines_refuse() {
     let fact = Fact::parse("reach(a, b) .").expect("the fact parses");
     assert!(!engine.is_at_fixpoint());
     let refusal = engine.trace(&[fact]).expect_err("a dirty engine refuses");
-    assert_eq!(refusal.code(), nemo::codes::PENDING_UPDATES);
+    assert_eq!(refusal.code(), codes::PENDING_UPDATES);
 
     engine.reason().expect("reasoning continues");
     let response = trace(&mut engine, "reach(a, c) .");
@@ -628,12 +632,12 @@ fn a_body_of_free_variables_is_traced_by_its_first_match() {
         "{facts} g(z) :- d(?a), d(?b), d(?c), d(?d), d(?e) ."
     ));
 
-    let started = std::time::Instant::now();
+    let started = Instant::now();
     let response = trace(&mut engine, "g(z) .");
 
     // Reading one match takes milliseconds, and reading them all many seconds.
     assert!(
-        started.elapsed() < std::time::Duration::from_secs(2),
+        started.elapsed() < Duration::from_secs(2),
         "the trace took {:?}",
         started.elapsed()
     );
@@ -657,10 +661,10 @@ fn matches_with_a_fact_newer_than_the_traced_one_are_passed_over_together() {
         g(?x) :- d(?x), d(?a), d(?b), d(?c), d(?e) .
     ");
 
-    let started = std::time::Instant::now();
+    let started = Instant::now();
     let response = trace(&mut engine, "g(20) .");
     assert!(
-        started.elapsed() < std::time::Duration::from_secs(2),
+        started.elapsed() < Duration::from_secs(2),
         "the trace took {:?}",
         started.elapsed()
     );
@@ -771,7 +775,7 @@ fn stored_rows_trace_into_one_response_in_parts() {
         Fact::parse("reach(d, a) .").expect("the fact parses"),
     ];
     let mut response = TraceResponse {
-        version: nemo::trace::VERSION,
+        version: VERSION,
         facts: Vec::new(),
         nodes: Vec::new(),
         rules: Vec::new(),
@@ -818,11 +822,7 @@ fn stored_rows_trace_into_one_response_in_parts() {
     let refusal = engine
         .trace_predicates(&[String::from("nowhere")], &[], |_| Ok(()))
         .expect_err("an unknown predicate is refused");
-    assert_eq!(
-        refusal.code(),
-        nemo::codes::UNKNOWN_PREDICATE,
-        "{refusal:?}"
-    );
+    assert_eq!(refusal.code(), codes::UNKNOWN_PREDICATE, "{refusal:?}");
     assert_eq!(refusal.field("predicate"), Some("nowhere"));
 }
 
@@ -835,7 +835,7 @@ fn facts_are_checked_against_the_program_before_reasoning() {
     let refusal = engine
         .check_facts(&[fact("reach(a, b) .")])
         .expect_err("no program is loaded");
-    assert_eq!(refusal.code(), nemo::codes::NO_PROGRAM, "{refusal:?}");
+    assert_eq!(refusal.code(), codes::NO_PROGRAM, "{refusal:?}");
 
     let program = parse_into(
         &mut engine,
@@ -851,9 +851,9 @@ fn facts_are_checked_against_the_program_before_reasoning() {
 
     // The check refuses what a trace refuses.
     for (text, code) in [
-        ("nowhere(a) .", nemo::codes::UNKNOWN_PREDICATE),
-        ("reach(a) .", nemo::codes::FACT_ARITY),
-        ("reach(_:nope, b) .", nemo::codes::UNKNOWN_BLANK_NODE),
+        ("nowhere(a) .", codes::UNKNOWN_PREDICATE),
+        ("reach(a) .", codes::FACT_ARITY),
+        ("reach(_:nope, b) .", codes::UNKNOWN_BLANK_NODE),
     ] {
         let refusal = engine
             .check_facts(&[fact("reach(a, b) ."), fact(text)])
@@ -874,9 +874,5 @@ fn blank_nodes_the_program_never_created_are_refused_by_name() {
     let mut engine = run("p(_:a) . q(?x) :- p(?x) .");
     let fact = Fact::parse("q(_:nope) .").expect("a fact");
     let problem = engine.trace(&[fact]).expect_err("no such blank node");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::UNKNOWN_BLANK_NODE,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::UNKNOWN_BLANK_NODE, "{problem:?}");
 }

@@ -1,5 +1,7 @@
 //! Refused programs: the kind each problem is reported as, and what its report names.
 
+use nemo_physical::diagnostics::Code;
+
 use super::*;
 
 use crate::{
@@ -15,7 +17,7 @@ fn refusal(source: &str) -> Diagnostic {
 }
 
 /// Returns the warning of the given code that loading a source reports.
-fn warning(source: &str, code: nemo_physical::diagnostics::Code) -> Diagnostic {
+fn warning(source: &str, code: Code) -> Diagnostic {
     let mut engine = Engine::new();
     engine.load(parse(source)).expect("the program loads");
 

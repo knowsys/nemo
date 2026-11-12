@@ -1,6 +1,6 @@
 //! RDF exports: the column count the format takes, and the rows without an RDF form.
 
-use nemo::{engine::Engine, model::Program};
+use nemo::{codes, engine::Engine, model::Program};
 
 use super::run;
 
@@ -13,7 +13,7 @@ fn rdf_exports_check_the_column_count() {
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let mut engine = Engine::new();
     let problem = engine.load(program).expect_err("two columns are no triple");
-    assert_eq!(problem.code(), nemo::codes::RDF_EXPORT_ARITY, "{problem:?}");
+    assert_eq!(problem.code(), codes::RDF_EXPORT_ARITY, "{problem:?}");
     assert_eq!(problem.field("columns"), Some("3"));
     assert_eq!(problem.field("arity"), Some("2"));
 }
@@ -33,7 +33,7 @@ t("no subject", <http://example.org/p>, 2) .
         engine
             .reports()
             .iter()
-            .any(|report| report.code() == nemo::codes::EXPORT_DROPPED),
+            .any(|report| report.code() == codes::EXPORT_DROPPED),
         "the dropped row is reported: {:?}",
         engine.reports()
     );

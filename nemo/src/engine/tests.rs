@@ -5,6 +5,7 @@
 use super::*;
 
 use nemo_physical::{
+    diagnostics::Code,
     management::Revision,
     value::{DataValue, EvaluationError},
 };
@@ -78,7 +79,7 @@ fn load_resources(source: &str, resources: &[(&str, &str)]) -> Engine {
 
 /// Returns the `count` that the first warning of the given code reports,
 /// or `None` if there is no such warning.
-fn reported_count(engine: &Engine, code: nemo_physical::diagnostics::Code) -> Option<u64> {
+fn reported_count(engine: &Engine, code: Code) -> Option<u64> {
     engine.reports().iter().find_map(|report| {
         (report.code() == code).then(|| {
             report

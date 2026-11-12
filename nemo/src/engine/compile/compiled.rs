@@ -24,7 +24,7 @@ use std::collections::HashMap;
 
 use nemo_physical::{management::TableId, value::Type};
 
-use crate::model::Span;
+use crate::{engine::ExportSpec, model::Span, pipeline::StatementId};
 
 /// A rule column, which is a variable or, for a variable that an assignment binds,
 /// the assignment's computed column.
@@ -43,7 +43,7 @@ pub(crate) struct CompiledProgram {
     /// The text of each rule, rendered from the rule.
     pub(crate) texts: Vec<String>,
     /// The pipeline statement that each rule was compiled from.
-    pub(crate) statements: Vec<crate::pipeline::StatementId>,
+    pub(crate) statements: Vec<StatementId>,
     /// Per rule, the name of each rule column as written in the rule,
     /// or `None` for a column without a written name.
     pub(crate) names: Vec<Vec<Option<String>>>,
@@ -55,7 +55,7 @@ pub(crate) struct CompiledProgram {
     /// evaluated.
     pub(crate) strata: Vec<Vec<usize>>,
     /// The resolved export directives, in program order.
-    pub(crate) exports: Vec<crate::engine::ExportSpec>,
+    pub(crate) exports: Vec<ExportSpec>,
     /// Per table, the types that each column can hold,
     /// as the [type analysis](crate::engine::compile::types) inferred them.
     pub(crate) column_types: HashMap<TableId, Vec<Type>>,

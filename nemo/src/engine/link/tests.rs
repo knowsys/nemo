@@ -3,7 +3,7 @@
 
 use super::{files::identity, *};
 
-use crate::{engine::Engine, model::Program, testing::TempDirectory};
+use crate::{codes, engine::Engine, model::Program, testing::TempDirectory};
 
 /// Links, loads and reasons over a program whose modules are given in memory,
 /// under the names that their `@use`s write.
@@ -123,7 +123,7 @@ dead(?x) :- w(?x), v(?x) .",
     let instances: Vec<&str> = engine
         .reports()
         .iter()
-        .filter(|report| report.code() == crate::codes::NEVER_FIRES)
+        .filter(|report| report.code() == codes::NEVER_FIRES)
         .map(|report| {
             report
                 .labels()
@@ -161,7 +161,7 @@ fn a_name_a_module_keeps_to_itself_cannot_be_reached() {
         )],
     )
     .expect_err("`hidden` is not offered");
-    assert_eq!(problem.code(), crate::codes::NOT_OFFERED, "{problem:?}");
+    assert_eq!(problem.code(), codes::NOT_OFFERED, "{problem:?}");
     assert_eq!(problem.field("module"), Some("t"));
     assert_eq!(problem.field("name"), Some("hidden"));
 }
@@ -187,7 +187,7 @@ fn a_private_name_cannot_be_reached_by_writing_it_either() {
         &[("tc", module)],
     )
     .expect_err("`t::secret` is the module's name");
-    assert_eq!(problem.code(), crate::codes::OWNED_NAME, "{problem:?}");
+    assert_eq!(problem.code(), codes::OWNED_NAME, "{problem:?}");
     assert_eq!(problem.field("alias"), Some("t"));
 
     let injected = load(
@@ -199,7 +199,7 @@ fn a_private_name_cannot_be_reached_by_writing_it_either() {
         &[("tc", module)],
     )
     .expect_err("even a public name is the instantiation's to write");
-    assert_eq!(injected.code(), crate::codes::OWNED_NAME, "{injected:?}");
+    assert_eq!(injected.code(), codes::OWNED_NAME, "{injected:?}");
     assert_eq!(injected.field("alias"), Some("t"));
 }
 
@@ -219,7 +219,7 @@ fn a_prefix_cannot_form_a_module_name_either() {
         &[("tc", SECRETIVE)],
     )
     .expect_err("`t:secret` resolves to the module's name");
-    assert_eq!(problem.code(), crate::codes::OWNED_NAME, "{problem:?}");
+    assert_eq!(problem.code(), codes::OWNED_NAME, "{problem:?}");
     assert_eq!(problem.field("alias"), Some("t"));
 
     // Nor does the prefix have to be named after the alias.
@@ -233,7 +233,7 @@ fn a_prefix_cannot_form_a_module_name_either() {
         &[("tc", SECRETIVE)],
     )
     .expect_err("what it is called changes nothing");
-    assert_eq!(renamed.code(), crate::codes::OWNED_NAME, "{renamed:?}");
+    assert_eq!(renamed.code(), codes::OWNED_NAME, "{renamed:?}");
     assert_eq!(renamed.field("alias"), Some("t"));
 }
 
@@ -253,7 +253,7 @@ fn a_base_cannot_put_the_program_inside_a_module() {
         &[("tc", SECRETIVE)],
     )
     .expect_err("every name here resolves into the module's namespace");
-    assert_eq!(problem.code(), crate::codes::OWNED_NAME, "{problem:?}");
+    assert_eq!(problem.code(), codes::OWNED_NAME, "{problem:?}");
     assert_eq!(problem.field("alias"), Some("t"));
 }
 
@@ -279,7 +279,7 @@ fn what_a_use_passes_in_is_owned_like_anything_else() {
         ],
     )
     .expect_err("`t::secret` is the module's name wherever it is written");
-    assert_eq!(problem.code(), crate::codes::OWNED_NAME, "{problem:?}");
+    assert_eq!(problem.code(), codes::OWNED_NAME, "{problem:?}");
     assert_eq!(problem.field("alias"), Some("t"));
 }
 
@@ -298,7 +298,7 @@ fn a_module_parameter_without_a_value_is_an_error() {
     .expect_err("nothing can give `$limit` a value");
     assert_eq!(
         problem.code(),
-        crate::codes::MODULE_PARAMETER_WITHOUT_VALUE,
+        codes::MODULE_PARAMETER_WITHOUT_VALUE,
         "{problem:?}"
     );
     assert_eq!(problem.field("name"), Some("limit"));
@@ -315,11 +315,7 @@ fn a_value_binding_must_name_a_declared_parameter() {
         )],
     )
     .expect_err("the module declares no `$nonsense`");
-    assert_eq!(
-        problem.code(),
-        crate::codes::NO_SUCH_PARAMETER,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::NO_SUCH_PARAMETER, "{problem:?}");
     assert_eq!(problem.field("name"), Some("nonsense"));
 }
 
@@ -337,7 +333,7 @@ r(?x, ?y) :- edge(?x, ?y) .",
         )],
     )
     .expect_err("a module declares each input once");
-    assert_eq!(problem.code(), crate::codes::DUPLICATE_INPUT, "{problem:?}");
+    assert_eq!(problem.code(), codes::DUPLICATE_INPUT, "{problem:?}");
     assert_eq!(problem.field("predicate"), Some("edge"));
 }
 
@@ -402,7 +398,7 @@ fn a_module_cannot_write_the_names_of_the_module_it_uses() {
         ],
     )
     .expect_err("`sub::p` is the nested instantiation's name");
-    assert_eq!(problem.code(), crate::codes::OWNED_NAME, "{problem:?}");
+    assert_eq!(problem.code(), codes::OWNED_NAME, "{problem:?}");
     assert_eq!(problem.field("alias"), Some("sub"));
 }
 
@@ -427,7 +423,7 @@ fn an_owned_name_is_quoted_as_the_file_writes_it() {
         ],
     )
     .expect_err("`s:p` resolves to the nested instantiation's name");
-    assert_eq!(problem.code(), crate::codes::OWNED_NAME, "{problem:?}");
+    assert_eq!(problem.code(), codes::OWNED_NAME, "{problem:?}");
     assert!(
         problem
             .notes()
@@ -468,11 +464,7 @@ fn a_module_cannot_read_the_using_programs_globals() {
         )],
     )
     .expect_err("the module declares no `$limit` of its own");
-    assert_eq!(
-        problem.code(),
-        crate::codes::UNDEFINED_PARAMETER,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::UNDEFINED_PARAMETER, "{problem:?}");
     assert_eq!(problem.field("name"), Some("s::limit"));
 }
 
@@ -496,7 +488,7 @@ fn a_module_that_uses_itself_is_an_error() {
         )],
     )
     .expect_err("the module uses itself");
-    assert_eq!(problem.code(), crate::codes::USED_IN_CYCLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::USED_IN_CYCLE, "{problem:?}");
     assert_eq!(problem.field("module"), Some("loop"));
 }
 
@@ -513,7 +505,7 @@ fn an_input_bound_to_its_own_offer_is_a_cycle() {
         &[("pass", "@input inp . @output inp .")],
     )
     .expect_err("the binding leads back to itself");
-    assert_eq!(problem.code(), crate::codes::PASSED_IN_CYCLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::PASSED_IN_CYCLE, "{problem:?}");
     assert_eq!(problem.field("module"), Some("a"));
     assert_eq!(problem.field("name"), Some("inp"));
 }
@@ -530,14 +522,14 @@ fn inputs_bound_to_each_others_offers_are_a_cycle() {
         &[("pass", "@input inp . @output inp .")],
     )
     .expect_err("the bindings lead back to each other");
-    assert_eq!(problem.code(), crate::codes::PASSED_IN_CYCLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::PASSED_IN_CYCLE, "{problem:?}");
 }
 
 /// A `@use` that leaves an input of the module unbound is an error.
 #[test]
 fn every_parameter_must_be_bound() {
     let problem = run("@use tc {} as t .", &[("tc", CLOSURE)]).expect_err("`edge` is unbound");
-    assert_eq!(problem.code(), crate::codes::INPUTS_UNBOUND, "{problem:?}");
+    assert_eq!(problem.code(), codes::INPUTS_UNBOUND, "{problem:?}");
     assert_eq!(problem.field("inputs"), Some("`edge`"));
 }
 
@@ -549,7 +541,7 @@ fn a_reference_to_no_module_is_reported_as_one() {
     let problem = run("answer(?x) :- nope::p(?x) .", &[]).expect_err("there is no module `nope`");
     assert_eq!(
         problem.code(),
-        crate::codes::QUALIFIED_WITHOUT_MODULES,
+        codes::QUALIFIED_WITHOUT_MODULES,
         "{problem:?}"
     );
     assert_eq!(problem.field("module"), Some("nope"));
@@ -568,7 +560,7 @@ fn a_reference_to_an_alias_the_program_does_not_have_is_reported() {
         &[("tc", CLOSURE)],
     )
     .expect_err("there is no module `other`");
-    assert_eq!(problem.code(), crate::codes::UNKNOWN_MODULE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNKNOWN_MODULE, "{problem:?}");
     assert_eq!(problem.field("module"), Some("other"));
     assert!(
         problem
@@ -634,7 +626,7 @@ fn a_modules_import_reads_from_where_the_module_is() {
         .expect_err("there is no such file");
 
     // What matters is *which* path it looked for.
-    assert_eq!(problem.code(), crate::codes::UNREADABLE, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNREADABLE, "{problem:?}");
     assert!(
         problem
             .field("resource")
@@ -666,11 +658,7 @@ fn a_module_chain_deeper_than_the_limit_is_an_error() {
     let (program, diagnostics) = Program::parse_with_file(source, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let problem = engine.link(program).expect_err("the chain is too deep");
-    assert_eq!(
-        problem.code(),
-        crate::codes::MODULES_TOO_DEEP,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::MODULES_TOO_DEEP, "{problem:?}");
 }
 
 /// A name that a module offers but never writes is reported with a warning.
@@ -688,7 +676,7 @@ fn a_public_name_the_module_never_writes_is_reported() {
         engine
             .reports()
             .iter()
-            .any(|report| report.code() == crate::codes::OFFERS_UNWRITTEN
+            .any(|report| report.code() == codes::OFFERS_UNWRITTEN
                 && report.field("names") == Some("`ghost`")),
         "{:?}",
         engine.reports()
@@ -711,7 +699,7 @@ fn a_public_name_the_module_only_reads_is_reported() {
         engine
             .reports()
             .iter()
-            .any(|report| report.code() == crate::codes::OFFERS_UNWRITTEN
+            .any(|report| report.code() == codes::OFFERS_UNWRITTEN
                 && report.field("names") == Some("`echo`")),
         "{:?}",
         engine.reports()
@@ -732,7 +720,7 @@ fn a_module_used_twice_reports_its_unwritten_names_once() {
     let reports = engine
         .reports()
         .iter()
-        .filter(|report| report.code() == crate::codes::OFFERS_UNWRITTEN)
+        .filter(|report| report.code() == codes::OFFERS_UNWRITTEN)
         .count();
     assert_eq!(reports, 1, "{:?}", engine.reports());
 }
@@ -750,7 +738,7 @@ fn inputs_are_listed_as_a_use_binds_them() {
         )],
     )
     .expect_err("`edge` is unbound");
-    assert_eq!(problem.code(), crate::codes::INPUTS_UNBOUND, "{problem:?}");
+    assert_eq!(problem.code(), codes::INPUTS_UNBOUND, "{problem:?}");
     assert_eq!(problem.field("inputs"), Some("`edge`"));
 }
 
@@ -765,11 +753,7 @@ fn a_module_with_two_base_iris_is_an_error() {
         )],
     )
     .expect_err("a file declares one base IRI");
-    assert_eq!(
-        problem.code(),
-        crate::codes::CONFLICTING_BASE,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::CONFLICTING_BASE, "{problem:?}");
 }
 
 /// Loading a program that is not linked fails, with the `@use` labeled.
@@ -784,7 +768,7 @@ fn an_unlinked_program_is_an_error() {
     let (program, diagnostics) = Program::parse_with_file(source, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let problem = engine.load(program).expect_err("the program is not linked");
-    assert_eq!(problem.code(), crate::codes::NOT_LINKED);
+    assert_eq!(problem.code(), codes::NOT_LINKED);
     assert_eq!(problem.labels().len(), 1, "the `@use` is labeled");
 }
 
@@ -823,7 +807,7 @@ dead(?x) :- w(?x), v(?x) .",
     let report = engine
         .reports()
         .iter()
-        .find(|report| report.code() == crate::codes::NEVER_FIRES)
+        .find(|report| report.code() == codes::NEVER_FIRES)
         .expect("the inner rule never fires");
     let labels: Vec<&str> = report
         .labels()
@@ -918,7 +902,7 @@ fn super_cannot_lead_out_of_a_root() {
         )
         .expect("the name is a module name");
     let problem = run_in(engine, "@use shared::tc {} as t .").expect_err("`super` leaves the root");
-    assert_eq!(problem.code(), crate::codes::LEAVES_ROOT, "{problem:?}");
+    assert_eq!(problem.code(), codes::LEAVES_ROOT, "{problem:?}");
     assert_eq!(problem.field("module"), Some("super::outside"));
     assert_eq!(problem.field("root"), Some("shared"));
 }
@@ -943,7 +927,7 @@ fn a_root_and_a_directory_of_its_name_are_ambiguous() {
 
     let problem = run_in(engine, "link(1, 2) .\n@use lib::tc { edge = link } as t .")
         .expect_err("`shared` is the root and a directory next to `lib/tc.rls`");
-    assert_eq!(problem.code(), crate::codes::AMBIGUOUS_ROOT, "{problem:?}");
+    assert_eq!(problem.code(), codes::AMBIGUOUS_ROOT, "{problem:?}");
     assert_eq!(problem.field("root"), Some("shared"));
 }
 
@@ -956,13 +940,13 @@ fn a_root_is_named_by_one_plain_name() {
         let problem = engine
             .add_module_root(name, "nowhere")
             .expect_err("it is not a root name");
-        assert_eq!(problem.code(), crate::codes::NOT_A_ROOT_NAME, "{name:?}");
+        assert_eq!(problem.code(), codes::NOT_A_ROOT_NAME, "{name:?}");
     }
 
     let problem = engine
         .add_module("lib/tc.rls", CLOSURE)
         .expect_err("a path is not a module name");
-    assert_eq!(problem.code(), crate::codes::EXPECTED, "{problem:?}");
+    assert_eq!(problem.code(), codes::EXPECTED, "{problem:?}");
 }
 
 /// Registering a module text again under the same name replaces the text.
@@ -987,7 +971,7 @@ fn registering_a_module_again_replaces_its_text() {
 #[test]
 fn a_missing_module_is_named_as_written_and_located_by_its_path() {
     let problem = run("@use lib::missing {} as m .", &[]).expect_err("there is no module");
-    assert_eq!(problem.code(), crate::codes::NO_SUCH_MODULE, "{problem:?}");
+    assert_eq!(problem.code(), codes::NO_SUCH_MODULE, "{problem:?}");
     assert_eq!(problem.field("module"), Some("lib::missing"));
     assert!(
         problem
@@ -1012,7 +996,7 @@ fn module_names_match_file_names_exactly() {
             &format!("link(1, 2) .\n@use {name} {{ edge = link }} as t ."),
         )
         .expect_err(name);
-        assert_eq!(problem.code(), crate::codes::NO_SUCH_MODULE, "{problem:?}");
+        assert_eq!(problem.code(), codes::NO_SUCH_MODULE, "{problem:?}");
         assert!(
             problem.notes().iter().any(|note| note.contains(found)),
             "{problem:?}"
@@ -1028,7 +1012,7 @@ fn module_names_match_file_names_exactly() {
 
     // A directory is no module, and the note says how to name one in it.
     let problem = link_in(directory, "@use graph {} as g .").expect_err("it is a directory");
-    assert_eq!(problem.code(), crate::codes::NO_SUCH_MODULE, "{problem:?}");
+    assert_eq!(problem.code(), codes::NO_SUCH_MODULE, "{problem:?}");
     assert!(
         problem
             .notes()
@@ -1064,7 +1048,7 @@ fn a_root_reads_its_modules_from_its_directory() {
     // A directory of the root's name next to the program makes the name ambiguous.
     fs::create_dir_all(program.path().join("shared")).expect("the directory is created");
     let problem = link(source).expect_err("`shared` is a directory here too");
-    assert_eq!(problem.code(), crate::codes::AMBIGUOUS_ROOT, "{problem:?}");
+    assert_eq!(problem.code(), codes::AMBIGUOUS_ROOT, "{problem:?}");
 }
 
 /// The modules of a program whose text is not registered get file ids of their own,

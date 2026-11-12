@@ -1,7 +1,7 @@
 //! How imports name their resources: a SPARQL query checked before any fetch, the options a
 //! local resource refuses, and the directory relative imports resolve against.
 
-use nemo::{engine::Engine, model::Program};
+use nemo::{codes, engine::Engine, model::Program};
 use nemo_physical::value::DataValue;
 
 use crate::common::{TempDirectory, parse};
@@ -16,11 +16,7 @@ fn a_broken_query_is_diagnosed_before_any_fetch() {
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let mut engine = Engine::new();
     let problem = engine.load(program).expect_err("the query is broken");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::NOT_A_SPARQL_QUERY,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::NOT_A_SPARQL_QUERY, "{problem:?}");
 }
 
 /// A query selecting no variables is refused before any request is sent.
@@ -32,11 +28,7 @@ fn a_query_selecting_nothing_is_diagnosed_before_any_fetch() {
     );
     let mut engine = Engine::new();
     let problem = engine.load(program).expect_err("the query has no columns");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::SPARQL_NO_PROJECTION,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::SPARQL_NO_PROJECTION, "{problem:?}");
     assert!(engine.pending().is_empty(), "{:?}", engine.pending());
 }
 
@@ -50,11 +42,7 @@ fn an_invalid_base_of_a_query_is_the_options_fault() {
     let problem = Engine::new()
         .load(program)
         .expect_err("the base is not an IRI");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::OPTION_VALUE_TYPE,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::OPTION_VALUE_TYPE, "{problem:?}");
     assert_eq!(problem.field("option"), Some("base"), "{problem:?}");
 }
 
@@ -70,11 +58,7 @@ fn headers_on_a_local_resource_are_an_error() {
     let problem = engine
         .load(program)
         .expect_err("nothing sends these headers");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::HEADERS_NOT_REMOTE,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::HEADERS_NOT_REMOTE, "{problem:?}");
 }
 
 /// `on_error` on a local resource is an error, since no fetch can fail.
@@ -82,11 +66,7 @@ fn headers_on_a_local_resource_are_an_error() {
 fn on_error_on_a_local_resource_is_an_error() {
     let program = parse(r#"@import p from csv { resource = "local.csv", on_error = warn } ."#);
     let problem = Engine::new().load(program).expect_err("nothing is fetched");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::ON_ERROR_NOT_REMOTE,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::ON_ERROR_NOT_REMOTE, "{problem:?}");
 
     let program = parse(
         r#"@import p from csv { resource = "https://example.org/p.csv", on_error = maybe } ."#,
@@ -94,11 +74,7 @@ fn on_error_on_a_local_resource_is_an_error() {
     let problem = Engine::new()
         .load(program)
         .expect_err("the value is no behavior");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::UNKNOWN_OPTION_VALUE,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::UNKNOWN_OPTION_VALUE, "{problem:?}");
 }
 
 /// The engine's import directory resolves the program's relative imports,

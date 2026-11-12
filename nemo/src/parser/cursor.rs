@@ -9,6 +9,7 @@ use nemo_physical::{
 };
 
 use crate::{
+    codes,
     diagnostics::ParseError,
     model::{FileId, Span, Statement, Term},
     parser::lexer::{self, Token, TokenKind},
@@ -122,7 +123,7 @@ impl<'a> Parser<'a> {
                 Ok(statement) => statements.push(statement),
                 Err(diagnostic) => {
                     let repeats_lexer =
-                        parser.at(&TokenKind::Error) && diagnostic.code() == crate::codes::EXPECTED;
+                        parser.at(&TokenKind::Error) && diagnostic.code() == codes::EXPECTED;
                     if !repeats_lexer {
                         parser.diagnostics.push(diagnostic);
                     }

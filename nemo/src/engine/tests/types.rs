@@ -1,5 +1,9 @@
 //! Types: the analysis, declarations, `@type`, and named arguments.
 
+use nemo_physical::value::{Type, ValueDomain};
+#[cfg(debug_assertions)]
+use nemo_physical::{storage::StorageValue, trie::RowBuffer};
+
 use super::*;
 
 /// A type conflict over a constructor whose name is close to a builtin's hints at the builtin,
@@ -824,14 +828,6 @@ fn an_extension_that_breaks_a_declaration_is_refused() {
 #[test]
 #[should_panic(expected = "the analysis inferred")]
 fn a_stored_value_outside_the_inferred_types_panics_in_debug_builds() {
-    use std::collections::HashMap;
-
-    use nemo_physical::{
-        storage::StorageValue,
-        trie::RowBuffer,
-        value::{Type, ValueDomain},
-    };
-
     let engine = run("p(1) .");
     let &Registered { table, .. } = engine.predicates.get("p").expect("registered");
     let types = HashMap::from([(table, vec![Type::of(ValueDomain::String)])]);
@@ -847,8 +843,6 @@ fn a_stored_value_outside_the_inferred_types_panics_in_debug_builds() {
 #[test]
 #[should_panic(expected = "the analysis inferred")]
 fn a_derived_value_outside_the_inferred_types_panics_in_debug_builds() {
-    use nemo_physical::value::{Type, ValueDomain};
-
     let mut engine = Engine::new();
     engine
         .load(parse("p(1) . q(?x) :- p(?x) ."))
@@ -962,8 +956,6 @@ fn named_arguments_are_errors_where_they_cannot_resolve() {
 /// and a structured column's type is written with its shape.
 #[test]
 fn inferred_types_are_readable() {
-    use nemo_physical::value::{Type, ValueDomain};
-
     let engine = run("
         edge(1, 2) . name(\"a\") .
         reach(?x, ?y) :- edge(?x, ?y) .

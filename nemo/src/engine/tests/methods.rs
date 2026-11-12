@@ -2,7 +2,14 @@
 //! cancellation, telemetry, exports, and the errors of an engine that has not
 //! reached its fixpoint.
 
+use nemo_io::compression::Compression;
+
+use std::{io::Read, time::Duration};
+
+use nemo_physical::diagnostics::Severity;
+
 use super::*;
+use crate::telemetry::Recorder;
 
 /// A predicate's role follows from where its rows come from: rules, input facts, or both.
 ///
@@ -143,8 +150,6 @@ fn cursors_page_through_the_rows() {
 /// how many facts it derived, and the rules it applied.
 #[test]
 fn telemetry_events_account_for_the_run() {
-    use crate::telemetry::Recorder;
-
     let program = parse(
         "edge(1, 2) . edge(2, 3) . edge(3, 4) .
          reach(?x, ?y) :- edge(?x, ?y) .
@@ -173,8 +178,6 @@ fn telemetry_events_account_for_the_run() {
 /// of the rule's order, so a rule without variables, which has no order, is not observed.
 #[test]
 fn telemetry_observes_no_variant_of_a_rule_without_variables() {
-    use crate::telemetry::Recorder;
-
     let program = parse(
         "p(1) .
          found() :- p(_) .
@@ -204,8 +207,6 @@ fn telemetry_observes_no_variant_of_a_rule_without_variables() {
 /// The file name of an export under gzip compression ends with `.gz`, which is added once.
 #[test]
 fn a_gzipped_export_says_so_in_its_name() {
-    use nemo_io::compression::Compression;
-
     let specification = |resource: Option<&str>, compression| {
         let mut specification = ExportSpec::csv("p");
         specification.resource = resource.map(str::to_owned);
@@ -236,10 +237,6 @@ fn a_gzipped_export_says_so_in_its_name() {
 /// of the bytes that the same export without compression writes.
 #[test]
 fn a_gzipped_export_to_memory_holds_the_whole_export() {
-    use std::io::Read;
-
-    use nemo_io::compression::Compression;
-
     let mut engine = Engine::new();
     engine
         .load(parse("p(1, \"a\") . p(2, \"b\") ."))
@@ -498,7 +495,7 @@ fn a_text_with_errors_fails_with_what_parsing_reported() {
     assert!(
         refused
             .iter()
-            .all(|diagnostic| diagnostic.severity() == nemo_physical::diagnostics::Severity::Error)
+            .all(|diagnostic| diagnostic.severity() == Severity::Error)
     );
 
     // The spans point into the registered text.
@@ -529,7 +526,7 @@ fn a_check_collects_what_parsing_and_the_engine_report() {
 /// starts, and the run after an extension has the instant of the extension.
 #[test]
 fn a_run_evaluates_at_the_instant_its_facts_were_loaded_at() {
-    let pause = || std::thread::sleep(std::time::Duration::from_millis(5));
+    let pause = || std::thread::sleep(Duration::from_millis(5));
     let mut engine = Engine::new();
     engine
         .load(parse(

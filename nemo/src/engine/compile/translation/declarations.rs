@@ -21,9 +21,9 @@ use crate::{
         registered::Registered,
     },
     model::{
-        Atom, DeclareDirective, Fact, Identifier, InputDirective, Literal, Operator,
-        ParameterDirective, Rule, Span, Term, TermKind, TypeDirective, TypeExpression, Variable,
-        VariableKind,
+        Atom, BaseType, DeclareDirective, Fact, Identifier, InputDirective, Literal, Operator,
+        ParameterDirective, Rule, Span, Term, TermKind, TypeDirective, TypeExpression, TypeLabel,
+        Variable, VariableKind,
     },
     values::TypeSyntax,
 };
@@ -346,8 +346,6 @@ impl<'a> Translator<'a> {
         expression: &TypeExpression,
         span: Option<Span>,
     ) -> Result<Type, Diagnostic> {
-        use crate::model::{BaseType, TypeLabel};
-
         Ok(match expression {
             TypeExpression::Base(BaseType::Any) => Type::ANY,
             TypeExpression::Base(BaseType::String) => Type::of(ValueDomain::String),
@@ -430,12 +428,8 @@ impl<'a> Translator<'a> {
     }
 
     /// Returns whether a structured type's label has a `@type`.
-    fn is_declared_label(
-        &self,
-        label: &crate::model::TypeLabel,
-        span: Option<Span>,
-    ) -> Result<bool, Diagnostic> {
-        let crate::model::TypeLabel::Named(name) = label else {
+    fn is_declared_label(&self, label: &TypeLabel, span: Option<Span>) -> Result<bool, Diagnostic> {
+        let TypeLabel::Named(name) = label else {
             return Ok(false);
         };
 
@@ -447,7 +441,7 @@ impl<'a> Translator<'a> {
     /// Returns the type of the tuples of a written-out tuple type.
     fn tuple_type(
         &self,
-        label: &crate::model::TypeLabel,
+        label: &TypeLabel,
         fields: &[TypeExpression],
         span: Option<Span>,
     ) -> Result<Type, Diagnostic> {
@@ -465,7 +459,7 @@ impl<'a> Translator<'a> {
     /// Fails for a key written twice.
     fn map_type(
         &self,
-        label: &crate::model::TypeLabel,
+        label: &TypeLabel,
         fields: &[(String, TypeExpression)],
         span: Option<Span>,
     ) -> Result<Type, Diagnostic> {
@@ -496,11 +490,9 @@ impl<'a> Translator<'a> {
     /// Returns the bound on the label that a declared structured type states.
     fn declared_label(
         &self,
-        label: &crate::model::TypeLabel,
+        label: &TypeLabel,
         span: Option<Span>,
     ) -> Result<LabelBound, Diagnostic> {
-        use crate::model::TypeLabel;
-
         Ok(match label {
             TypeLabel::Unlabeled => LabelBound::Exactly(None),
             TypeLabel::Anonymous => LabelBound::Unknown,
@@ -514,8 +506,6 @@ impl<'a> Translator<'a> {
     /// The definitions are validated once every `@type` directive is recorded,
     /// so they may refer to each other in any order.
     pub(super) fn type_directive(&mut self, directive: &TypeDirective) -> Result<(), Diagnostic> {
-        use crate::model::TypeLabel;
-
         let label = match &directive.definition {
             TypeExpression::Tuple { label, .. } | TypeExpression::Map { label, .. } => label,
             _ => {
@@ -526,7 +516,7 @@ impl<'a> Translator<'a> {
             return Err(TranslationError::TypeUnnamed.at(directive.span));
         };
         if let Identifier::Bare(name) = identifier {
-            if crate::model::BaseType::from_name(name).is_some() {
+            if BaseType::from_name(name).is_some() {
                 return Err(
                     TranslationError::TypeLabelIsBaseType { name: name.clone() }.at(directive.span)
                 );
@@ -557,8 +547,6 @@ impl<'a> Translator<'a> {
 
     /// Returns the resolved label that a `@type` directive declares, if it names one.
     pub(super) fn defined_label(&self, directive: &TypeDirective) -> Option<String> {
-        use crate::model::TypeLabel;
-
         match &directive.definition {
             TypeExpression::Tuple {
                 label: TypeLabel::Named(identifier),

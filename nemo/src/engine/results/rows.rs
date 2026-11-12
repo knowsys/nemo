@@ -1,5 +1,7 @@
 //! Reading a predicate's stored rows through a cursor.
 
+use std::ops::ControlFlow;
+
 use nemo_physical::{
     diagnostics::Diagnostic,
     management::{ColumnOrder, Revision},
@@ -72,9 +74,9 @@ impl Engine {
                 chunk.push(&decoded);
                 cursor.position += 1;
                 if chunk.len() < budget {
-                    std::ops::ControlFlow::Continue(())
+                    ControlFlow::Continue(())
                 } else {
-                    std::ops::ControlFlow::Break(())
+                    ControlFlow::Break(())
                 }
             },
         );

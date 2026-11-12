@@ -1,6 +1,8 @@
 //! Tests of the pipeline: loading, commits and their provenance, stage lists,
 //! frozen statements, fresh names, and the reports.
 
+use nemo_physical::diagnostics::Code;
+
 use super::*;
 
 use crate::model::{
@@ -419,10 +421,7 @@ fn fresh_names_avoid_every_name_in_use() {
 #[test]
 fn reports_accumulate_in_one_sink() {
     let (mut pipeline, _) = loaded();
-    pipeline.report(Diagnostic::warning(
-        nemo_physical::diagnostics::Code::new(999),
-        "something noteworthy",
-    ));
+    pipeline.report(Diagnostic::warning(Code::new(999), "something noteworthy"));
     assert_eq!(pipeline.reports().len(), 1);
 }
 
@@ -459,28 +458,26 @@ fn substitutions_add_definition_labels_to_diagnostics() {
     let new = commit.substitute(ids[0], &substitution);
     commit.finish();
 
-    let inside = Diagnostic::error(nemo_physical::diagnostics::Code::new(999), "bad value")
-        .with_label(
-            Span {
-                file,
-                start: 20,
-                end: 21,
-            },
-            "here",
-        );
+    let inside = Diagnostic::error(Code::new(999), "bad value").with_label(
+        Span {
+            file,
+            start: 20,
+            end: 21,
+        },
+        "here",
+    );
     let refined = pipeline.refine(inside, new);
     assert_eq!(refined.labels().len(), 2);
     assert_eq!(refined.labels()[1].span, definition);
 
-    let outside = Diagnostic::error(nemo_physical::diagnostics::Code::new(999), "bad value")
-        .with_label(
-            Span {
-                file,
-                start: 40,
-                end: 41,
-            },
-            "here",
-        );
+    let outside = Diagnostic::error(Code::new(999), "bad value").with_label(
+        Span {
+            file,
+            start: 40,
+            end: 41,
+        },
+        "here",
+    );
     let refined = pipeline.refine(outside, new);
     assert_eq!(refined.labels().len(), 1);
 }

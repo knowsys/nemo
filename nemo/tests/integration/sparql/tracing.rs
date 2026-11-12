@@ -2,6 +2,7 @@
 //! remote premises of a rewritten program show as written, never the stage's own predicates.
 
 use nemo::{
+    codes,
     engine::Engine,
     model::Fact,
     trace::{
@@ -256,11 +257,7 @@ fn predicates_a_stage_introduced_cannot_be_traced() {
 
     let fact = Fact::parse("triple_query1(<urn:a>, <urn:b>) .").expect("parses");
     let problem = engine.trace(&[fact]).expect_err("no such predicate");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::UNKNOWN_PREDICATE,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::UNKNOWN_PREDICATE, "{problem:?}");
     assert_eq!(problem.field("predicate"), Some("triple_query1"));
 }
 
@@ -365,5 +362,5 @@ fn remote_premises_take_no_selectors() {
             }),
         })
         .expect_err("a remote premise is not stored");
-    assert_eq!(problem.code(), nemo::codes::REMOTE_SELECTORS, "{problem:?}");
+    assert_eq!(problem.code(), codes::REMOTE_SELECTORS, "{problem:?}");
 }

@@ -65,6 +65,7 @@ pub use results::{
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -88,10 +89,15 @@ use crate::{
         registered::Registered,
         remote::{Client, ClientSlot, PendingRequest, Progress, RequestId, Response, Suspension},
     },
-    model::{Fact, FileId, Program, Statement, Term},
-    pipeline::{Pipeline, RevisionId, Stages},
+    model::{Directive, Fact, FileId, Identifier, Program, Statement, Term},
+    pipeline::{Pipeline, RevisionId, Stages, StatementId},
     telemetry::{EngineEvent, EngineTimings, EventSink, SinkSlot},
-    trace::{TracePart, TraceResponse, TracedFact},
+    trace::{
+        TracePart, TraceResponse, TracedFact, WrittenRule,
+        query::{
+            NodeResponse, TableEntriesForTreeNodesQuery, TreeForTableQuery, TreeForTableResponse,
+        },
+    },
 };
 
 /// The reasoning engine over one program.
@@ -191,7 +197,7 @@ pub struct Engine {
     /// The plan skeletons of the compiled program's rules.
     skeletons: evaluate::application::PlanSkeletons,
     /// The directory that relative import resources are resolved against, if one is set.
-    import_directory: Option<std::path::PathBuf>,
+    import_directory: Option<PathBuf>,
     /// Per table, the wall time in nanoseconds of the rule applications that stored rows
     /// into it.
     ///
@@ -274,7 +280,7 @@ impl Engine {
     /// # Errors
     ///
     /// Returns N0208 if the file cannot be read, and N0480 if it is 4 GiB or larger.
-    pub fn read_source(&mut self, path: &std::path::Path) -> Result<FileId, Diagnostic> {
+    pub fn read_source(&mut self, path: &Path) -> Result<FileId, Diagnostic> {
         let name = path.display().to_string();
         let text = std::fs::read_to_string(path).map_err(|error| {
             EngineError::SourceUnreadable {
@@ -356,7 +362,7 @@ impl Engine {
     ///
     /// A module's own imports are still resolved against the module's directory,
     /// so that a module can ship the data it reads.
-    pub fn set_import_directory(&mut self, directory: impl Into<std::path::PathBuf>) {
+    pub fn set_import_directory(&mut self, directory: impl Into<PathBuf>) {
         self.import_directory = Some(directory.into());
     }
 
@@ -1147,7 +1153,7 @@ impl Engine {
     /// # Errors
     ///
     /// Returns N0482 if no program is loaded, and the failure to write a file.
-    pub fn export(&mut self, directory: impl AsRef<std::path::Path>) -> Result<(), Diagnostic> {
+    pub fn export(&mut self, directory: impl AsRef<Path>) -> Result<(), Diagnostic> {
         let specs = self.exports().to_vec();
         self.export_specs(directory, &specs)
     }
@@ -1167,7 +1173,7 @@ impl Engine {
     /// - Otherwise, returns the failure to write a file.
     pub fn export_specs(
         &mut self,
-        directory: impl AsRef<std::path::Path>,
+        directory: impl AsRef<Path>,
         specs: &[ExportSpec],
     ) -> Result<(), Diagnostic> {
         self.write_exports(directory, specs)
@@ -1294,8 +1300,8 @@ impl Engine {
     /// and an error for a query that does not fit the written program.
     pub fn tree_for_table(
         &mut self,
-        query: crate::trace::query::TreeForTableQuery,
-    ) -> Result<crate::trace::query::TreeForTableResponse, Diagnostic> {
+        query: TreeForTableQuery,
+    ) -> Result<TreeForTableResponse, Diagnostic> {
         self.traceable()?;
         trace::query::tree_for_table(self, query)
     }
@@ -1311,8 +1317,8 @@ impl Engine {
     /// and an error for a query that does not fit the written program.
     pub fn table_entries_for_tree_nodes(
         &mut self,
-        query: crate::trace::query::TableEntriesForTreeNodesQuery,
-    ) -> Result<Vec<crate::trace::query::NodeResponse>, Diagnostic> {
+        query: TableEntriesForTreeNodesQuery,
+    ) -> Result<Vec<NodeResponse>, Diagnostic> {
         self.traceable()?;
         trace::query::table_entries_for_tree_nodes(self, query)
     }
@@ -1323,11 +1329,11 @@ impl Engine {
     /// The rule is a rule of the written program or a bound import,
     /// with its text, `#[name]` and source position.
     /// Returns `None` for an id that names no such statement.
-    pub fn rule(&self, id: usize) -> Option<crate::trace::WrittenRule> {
+    pub fn rule(&self, id: usize) -> Option<WrittenRule> {
         let statement = self.written.as_ref()?.statement(id)?;
         match self.pipeline.statement(statement) {
             Statement::Rule(_) => {}
-            Statement::Directive(crate::model::Directive::Import(import)) if import.is_bound() => {}
+            Statement::Directive(Directive::Import(import)) if import.is_bound() => {}
             _ => return None,
         }
 
@@ -1364,7 +1370,7 @@ impl Engine {
         if self.translation.base_iri.is_some() {
             IriRef::new(predicate).bracketed().to_string()
         } else {
-            crate::model::Identifier::bare(predicate).to_string()
+            Identifier::bare(predicate).to_string()
         }
     }
 
@@ -1413,7 +1419,7 @@ impl Engine {
         };
 
         let mut revisions = Vec::new();
-        let mut previous: Option<&[crate::pipeline::StatementId]> = None;
+        let mut previous: Option<&[StatementId]> = None;
         for revision in self.pipeline.lineage(revision) {
             let statements = self.pipeline.revision_statements(revision);
 

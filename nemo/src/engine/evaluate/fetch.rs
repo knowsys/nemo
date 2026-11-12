@@ -13,7 +13,7 @@
 //! and completes once the responses have been passed in,
 //! through [resume](crate::engine::Engine::resume) or by the engine's client.
 
-use std::{collections::HashSet, ops::Range};
+use std::{cmp::Ordering, collections::HashSet, ops::Range};
 
 use nemo_io::{
     remote::Request,
@@ -314,9 +314,9 @@ fn requests(
     for pivot in 0..count {
         let ranges: Vec<Range<Revision>> = (0..count)
             .map(|position| match position.cmp(&pivot) {
-                std::cmp::Ordering::Less => Revision(0)..last,
-                std::cmp::Ordering::Equal => last..now,
-                std::cmp::Ordering::Greater => Revision(0)..now,
+                Ordering::Less => Revision(0)..last,
+                Ordering::Equal => last..now,
+                Ordering::Greater => Revision(0)..now,
             })
             .collect();
         let mut empty = false;

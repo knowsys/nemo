@@ -1,10 +1,22 @@
 //! Exports: a program's export directives as specifications,
 //! and writing a predicate's rows in the serialization that a specification names.
 
-use std::{io::Write, ops::ControlFlow, path::Path};
+use std::{
+    io::{ErrorKind, Write},
+    ops::ControlFlow,
+    path::Path,
+};
 
+#[cfg(feature = "parquet")]
+use nemo_io::parquet::ParquetWriter;
 use nemo_io::{
+    codes,
     compression::Compression,
+    dsv::{DsvWriter, DsvWriterOptions},
+    file_format::RdfVariant,
+    json::{JsonWriter, JsonWriterOptions},
+    rdf::{RdfWriter, RdfWriterOptions},
+    value_format::{ColumnFormat, ValueFormat},
     write::{RowSink, Writer, Written},
 };
 use nemo_physical::{diagnostics::Diagnostic, management::ColumnOrder, value::ValueRef};
@@ -64,7 +76,7 @@ pub enum ExportFormat {
         /// [Term](nemo_io::value_format::ValueFormat::Term) format.
         ///
         /// A column whose format admits a missing value writes a null as an empty cell.
-        formats: Option<Vec<nemo_io::value_format::ColumnFormat>>,
+        formats: Option<Vec<ColumnFormat>>,
         /// The names of the written columns, which are written first, as a header row,
         /// or `None` to write no header.
         columns: Option<Vec<String>>,
@@ -74,7 +86,7 @@ pub enum ExportFormat {
     /// The predicate must have three columns, or four with the graph first.
     Rdf {
         /// The serialization variant.
-        variant: nemo_io::file_format::RdfVariant,
+        variant: RdfVariant,
         /// The base IRI, which is written if the serialization supports one.
         base: Option<String>,
         /// The program's prefix declarations,
@@ -89,7 +101,7 @@ pub enum ExportFormat {
         /// The column formats, or `None` to write every column in the
         /// [Term](nemo_io::value_format::ValueFormat::Term) format,
         /// in which each value says what it is.
-        formats: Option<Vec<nemo_io::value_format::ColumnFormat>>,
+        formats: Option<Vec<ColumnFormat>>,
         /// The keys of the columns, with which a record is an object,
         /// or `None` to write each record as an array.
         columns: Option<Vec<String>>,
@@ -223,15 +235,15 @@ impl ExportSpec {
 /// The configured writer of one export.
 enum ExportWriter {
     /// Delimiter-separated values.
-    Dsv(nemo_io::dsv::DsvWriter),
+    Dsv(DsvWriter),
     /// An RDF serialization.
-    Rdf(nemo_io::rdf::RdfWriter),
+    Rdf(RdfWriter),
     /// A JSON array of row arrays.
-    Json(nemo_io::json::JsonWriter),
+    Json(JsonWriter),
     /// A Parquet file, which is written apart from the others,
     /// since its writer needs the whole target and never writes to a gzip stream.
     #[cfg(feature = "parquet")]
-    Parquet(nemo_io::parquet::ParquetWriter),
+    Parquet(ParquetWriter),
 }
 
 impl ExportWriter {
@@ -303,9 +315,9 @@ impl Engine {
                 let written = stdout.write_all(&bytes).and_then(|()| stdout.flush());
                 match written {
                     // A closed pipe means the reader has all it wants.
-                    Err(error) if error.kind() != std::io::ErrorKind::BrokenPipe => {
+                    Err(error) if error.kind() != ErrorKind::BrokenPipe => {
                         return Err(Diagnostic::error(
-                            nemo_io::codes::OUTPUT_UNWRITABLE,
+                            codes::OUTPUT_UNWRITABLE,
                             format!("could not write the output: {error}"),
                         )
                         .with_resource(String::from("<stdout>")));
@@ -413,8 +425,6 @@ impl Engine {
 
     /// Returns the configured writer of one export specification.
     fn export_writer(&self, spec: &ExportSpec) -> Result<ExportWriter, Diagnostic> {
-        use nemo_io::value_format::{ColumnFormat, ValueFormat};
-
         Ok(match &spec.format {
             ExportFormat::Dsv {
                 delimiter,
@@ -426,21 +436,21 @@ impl Engine {
                 let formats = formats
                     .clone()
                     .unwrap_or_else(|| vec![ColumnFormat::new(ValueFormat::Term); arity]);
-                let mut options = nemo_io::dsv::DsvWriterOptions::new(*delimiter, formats);
+                let mut options = DsvWriterOptions::new(*delimiter, formats);
                 options.columns = columns.clone();
                 options.compression = spec.compression;
-                ExportWriter::Dsv(nemo_io::dsv::DsvWriter::new(options))
+                ExportWriter::Dsv(DsvWriter::new(options))
             }
             ExportFormat::Rdf {
                 variant,
                 base,
                 prefixes,
             } => {
-                let mut options = nemo_io::rdf::RdfWriterOptions::new(*variant);
+                let mut options = RdfWriterOptions::new(*variant);
                 options.base = base.clone();
                 options.prefixes = prefixes.clone();
                 options.compression = spec.compression;
-                ExportWriter::Rdf(nemo_io::rdf::RdfWriter::new(options))
+                ExportWriter::Rdf(RdfWriter::new(options))
             }
             ExportFormat::Json {
                 lines,
@@ -451,14 +461,14 @@ impl Engine {
                 let formats = formats
                     .clone()
                     .unwrap_or_else(|| vec![ColumnFormat::new(ValueFormat::Term); arity]);
-                let mut options = nemo_io::json::JsonWriterOptions::new(formats);
+                let mut options = JsonWriterOptions::new(formats);
                 options.lines = *lines;
                 options.columns = columns.clone();
                 options.compression = spec.compression;
-                ExportWriter::Json(nemo_io::json::JsonWriter::new(options))
+                ExportWriter::Json(JsonWriter::new(options))
             }
             #[cfg(feature = "parquet")]
-            ExportFormat::Parquet => ExportWriter::Parquet(nemo_io::parquet::ParquetWriter::new(
+            ExportFormat::Parquet => ExportWriter::Parquet(ParquetWriter::new(
                 self.arity_of(&spec.predicate).unwrap_or(0),
             )),
             #[cfg(not(feature = "parquet"))]

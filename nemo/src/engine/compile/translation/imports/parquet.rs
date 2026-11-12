@@ -1,26 +1,31 @@
 //! Parquet imports: loading a file's columns into a predicate with as many columns.
+//!
+//! This module is part of a build with the `parquet` feature.
+
+use std::path::Path;
+
+use nemo_io::{parquet::ParquetReader, remote::Request};
+use nemo_physical::value::Type;
 
 use crate::{
     diagnostics::TranslationError,
-    engine::compile::translation::{
-        Translator,
-        imports::{ImportFailure, PendingImport},
+    engine::{
+        compile::translation::{
+            Translator,
+            imports::{ImportFailure, PendingImport, required_resource},
+            unsupported,
+        },
+        registered::Registered,
     },
 };
 
-#[cfg(feature = "parquet")]
 impl<'a> Translator<'a> {
     /// Executes one Parquet import (see [execute_imports](Self::execute_imports)).
     pub(super) fn parquet_import(&mut self, import: &PendingImport) -> Result<(), ImportFailure> {
-        use nemo_io::{parquet::ParquetReader, remote};
-        use nemo_physical::value::Type;
-
-        use crate::engine::compile::translation::{imports::required_resource, unsupported};
-
         let bindings = self.guard_bindings(&import.guards)?;
         let directive = self.plain_directive(import.format, &import.options, &bindings, true)?;
         let resource = required_resource(directive.resource, import)?;
-        if remote::Request::is_remote(&resource)
+        if Request::is_remote(&resource)
             || self.resources.contains_key(&resource)
             || resource.is_empty()
         {
@@ -87,12 +92,10 @@ impl<'a> Translator<'a> {
     fn parquet_width(
         &mut self,
         import: &PendingImport,
-        path: &std::path::Path,
+        path: &Path,
     ) -> Result<Option<usize>, ImportFailure> {
-        use nemo_io::parquet::ParquetReader;
-
         Ok(Some(match self.predicates.get(&import.predicate) {
-            Some(&crate::engine::registered::Registered { arity, .. }) => {
+            Some(&Registered { arity, .. }) => {
                 self.plan.stored_layout(&import.predicate, arity).kept()
             }
             None => match self.declarations.get(&import.predicate) {
@@ -105,29 +108,5 @@ impl<'a> Translator<'a> {
                 None => ParquetReader::width(path).map_err(ImportFailure::Reading)?,
             },
         }))
-    }
-}
-
-#[cfg(not(feature = "parquet"))]
-impl<'a> Translator<'a> {
-    /// Returns an error for a Parquet import in a build without the `parquet` feature,
-    /// rather than misreading it.
-    ///
-    /// A check accepts the import and marks its predicate open,
-    /// since the program may be meant for a build that can validate it.
-    pub(super) fn parquet_import(&mut self, import: &PendingImport) -> Result<(), ImportFailure> {
-        use crate::engine::compile::translation::Purpose;
-
-        if self.purpose == Purpose::Check {
-            self.open.insert(import.predicate.clone());
-            return Ok(());
-        }
-
-        Err(TranslationError::FeatureUnavailable {
-            what: String::from("a Parquet import"),
-            feature: String::from("parquet"),
-        }
-        .at(import.span)
-        .into())
     }
 }

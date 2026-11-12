@@ -6,6 +6,8 @@
 //! A rule's plan is built once, as a [PlanSkeleton],
 //! and its loads are set to new revision ranges before each application.
 
+use std::{cmp::Ordering, ops::Range};
+
 use nemo_physical::{
     dictionary::Dictionary,
     function::{EvaluationContext, OpCode},
@@ -17,7 +19,7 @@ use nemo_physical::{
     },
     storage::StorageValue,
     trie::{RowBuffer, Trie},
-    value::ErrorCounts,
+    value::{ErrorCounts, ValueRef},
 };
 
 use crate::{
@@ -79,7 +81,7 @@ pub(crate) struct VariantObservation {
 struct VariantLoads {
     /// The variant's loads, as a range of indices into the skeleton's
     /// loads.
-    loads: std::ops::Range<usize>,
+    loads: Range<usize>,
     /// The index of the delta atom's load among the skeleton's loads.
     delta: usize,
     /// The indices of the loads of the atoms that bind the order's first variable.
@@ -246,7 +248,7 @@ impl PlanSkeleton {
         snapping: bool,
         aggregating: bool,
         manager: &mut TableManager,
-    ) -> Vec<std::ops::Range<Revision>> {
+    ) -> Vec<Range<Revision>> {
         let mut ranges = Vec::with_capacity(self.loads.len());
         for &(_, table, role) in &self.loads {
             let start = if snapping {
@@ -292,7 +294,7 @@ impl PlanSkeleton {
     /// from the row counts of the ranges [retarget](Self::retarget) set.
     fn observe(
         &self,
-        ranges: &[std::ops::Range<Revision>],
+        ranges: &[Range<Revision>],
         manager: &TableManager,
     ) -> Vec<VariantObservation> {
         let rows = |load: usize| {
@@ -465,9 +467,9 @@ impl<'r> PlanSkeletonBuilder<'r> {
             let first_load = self.loads.len();
             for (position, atom) in rule.body.iter().enumerate() {
                 let role = match position.cmp(&pivot) {
-                    std::cmp::Ordering::Less => RangeRole::Before,
-                    std::cmp::Ordering::Equal => RangeRole::Delta,
-                    std::cmp::Ordering::Greater => RangeRole::Full,
+                    Ordering::Less => RangeRole::Before,
+                    Ordering::Equal => RangeRole::Delta,
+                    Ordering::Greater => RangeRole::Full,
                 };
                 let node = self
                     .plan
@@ -789,7 +791,7 @@ fn mint(
             .map(|_| {
                 let id = dictionary.fresh_null();
                 dictionary
-                    .encode(nemo_physical::value::ValueRef::Null(id))
+                    .encode(ValueRef::Null(id))
                     .expect("a fresh null encodes")
             })
             .collect();

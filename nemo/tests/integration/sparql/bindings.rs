@@ -1,7 +1,7 @@
 //! Bound imports follow the program's bindings to the fixpoint, one `VALUES` block per binding
 //! atom, are checked without fetching, and bind generic imports through the rewrite stage.
 
-use nemo::{engine::Engine, model::Program};
+use nemo::{codes, engine::Engine, model::Program};
 use nemo_physical::value::DataValue;
 
 use crate::common::{Responder, parse_into};
@@ -71,7 +71,7 @@ fn bound_imports_hold_any_term() {
     assert!(
         problems
             .iter()
-            .any(|problem| problem.code() == nemo::codes::IMPORT_OUTSIDE_DECLARATION),
+            .any(|problem| problem.code() == codes::IMPORT_OUTSIDE_DECLARATION),
         "{problems:?}"
     );
 
@@ -134,7 +134,7 @@ fn malformed_solutions_of_a_bound_import_are_reported_once() {
     let malformed: Vec<_> = engine
         .reports()
         .iter()
-        .filter(|report| report.code() == nemo::codes::MALFORMED_ROWS)
+        .filter(|report| report.code() == codes::MALFORMED_ROWS)
         .collect();
     assert_eq!(malformed.len(), 1, "{malformed:?}");
     assert_eq!(malformed[0].field("count"), Some("4"), "{malformed:?}");
@@ -226,7 +226,7 @@ fn checks_validate_bound_imports_without_fetching() {
     assert!(
         problems
             .iter()
-            .any(|problem| problem.code() == nemo::codes::BINDING_VARIABLE_UNKNOWN),
+            .any(|problem| problem.code() == codes::BINDING_VARIABLE_UNKNOWN),
         "{problems:?}"
     );
 
@@ -240,7 +240,7 @@ fn checks_validate_bound_imports_without_fetching() {
     assert!(
         problems
             .iter()
-            .any(|problem| problem.code() == nemo::codes::OPAQUE_QUERY_BOUND),
+            .any(|problem| problem.code() == codes::OPAQUE_QUERY_BOUND),
         "{problems:?}"
     );
 
@@ -254,7 +254,7 @@ fn checks_validate_bound_imports_without_fetching() {
     assert!(
         problems
             .iter()
-            .any(|problem| problem.code() == nemo::codes::IMPORT_COLUMN_COUNT),
+            .any(|problem| problem.code() == codes::IMPORT_COLUMN_COUNT),
         "{problems:?}"
     );
 }

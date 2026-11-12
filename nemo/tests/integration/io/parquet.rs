@@ -1,7 +1,7 @@
 //! Parquet through Arrow: the round trip through the engine, pruned and filtered imports, the
 //! values an import's columns hold, and the compression the format refuses.
 
-use nemo::{engine::Engine, model::Program};
+use nemo::{codes, engine::Engine, model::Program};
 use nemo_physical::value::DataValue;
 
 use crate::common::{TempDirectory, parse};
@@ -105,7 +105,7 @@ p(2, "beta") .
     let refusal = reader
         .load(program)
         .expect_err("the columns are not shown to be integers and strings");
-    assert_eq!(refusal.code(), nemo::codes::IMPORT_OUTSIDE_DECLARATION);
+    assert_eq!(refusal.code(), codes::IMPORT_OUTSIDE_DECLARATION);
 
     let mut reader = Engine::new();
     let program = parse(
@@ -138,7 +138,7 @@ fn parquet_rejects_stream_compression() {
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let mut engine = Engine::new();
     let problem = engine.load(program).expect_err("parquet compresses itself");
-    assert_eq!(problem.code(), nemo::codes::UNKNOWN_OPTION, "{problem:?}");
+    assert_eq!(problem.code(), codes::UNKNOWN_OPTION, "{problem:?}");
     assert_eq!(problem.field("option"), Some("compression"));
     assert_eq!(problem.field("format"), Some("parquet"));
 }
@@ -156,11 +156,7 @@ fn named_columns_are_counted_against_the_file() {
     let program = parse(r#"@import q(?n) from parquet { resource = "p.parquet" } ."#);
     reader.set_import_directory(directory);
     let problem = reader.load(program).expect_err("the file has two columns");
-    assert_eq!(
-        problem.code(),
-        nemo::codes::IMPORT_COLUMN_COUNT,
-        "{problem:?}"
-    );
+    assert_eq!(problem.code(), codes::IMPORT_COLUMN_COUNT, "{problem:?}");
     assert_eq!(
         (problem.field("declared"), problem.field("arity")),
         (Some("1"), Some("2"))

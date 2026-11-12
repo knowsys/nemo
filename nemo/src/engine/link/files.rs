@@ -6,7 +6,7 @@
 
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use nemo_physical::diagnostics::{Diagnostic, Severity};
@@ -237,8 +237,6 @@ impl Linker<'_> {
 ///
 /// The same file thus has one name however the path to it was joined.
 pub(super) fn identity(path: &Path) -> String {
-    use std::path::Component;
-
     let mut name = String::new();
     for component in path.components() {
         match component {

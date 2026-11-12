@@ -11,15 +11,30 @@ mod fetch;
 
 use std::sync::Arc;
 
-use nemo_physical::{diagnostics::Diagnostic, value::ValueRef};
+use nemo_io::{
+    remote::Request,
+    sparql::{
+        DEFAULT_QUERY, QueryError, QueryShape, SparqlQuery, SparqlReader,
+        spargebra::algebra::Expression,
+    },
+    value_format::ColumnFormat,
+};
+use nemo_physical::{
+    diagnostics::Diagnostic,
+    value::{Type, ValueRef},
+};
 
 use crate::{
     diagnostics::{AboutPredicate, AboutResource, TranslationError},
-    engine::compile::translation::{
-        Translator,
-        imports::{ImportFailure, PendingImport},
-        options::{iri_or_string, on_error, option_name, term_columns},
+    engine::compile::{
+        layout::ColumnLayout,
+        translation::{
+            Translator,
+            imports::{ImportFailure, PendingImport},
+            options::{iri_or_string, on_error, option_name, term_columns},
+        },
     },
+    model::{OnError, Operation, Span},
 };
 
 /// The resolved options of a SPARQL import.
@@ -28,7 +43,7 @@ pub(super) struct SparqlImportSpec {
     pub(super) endpoint: String,
     /// The validated query to send,
     /// with the import's condition added as far as it has a SPARQL form.
-    pub(super) query: nemo_io::sparql::SparqlQuery,
+    pub(super) query: SparqlQuery,
     /// The query text as the directive writes it, without the import's condition,
     /// preceded by a `BASE` clause if a base IRI applies to it.
     ///
@@ -42,11 +57,11 @@ pub(super) struct SparqlImportSpec {
     /// The HTTP headers sent with each request.
     pub(super) headers: Vec<(String, String)>,
     /// The layout of the projection's columns, which the directive keeps and the plan prunes.
-    pub(super) layout: crate::engine::compile::layout::ColumnLayout,
+    pub(super) layout: ColumnLayout,
     /// The largest number of rows of one atom that a request of a bound import sends.
     pub(super) page_size: usize,
     /// What happens when a request fails.
-    pub(super) on_error: crate::model::OnError,
+    pub(super) on_error: OnError,
 }
 
 /// The evaluated options of a SPARQL directive.
@@ -54,25 +69,25 @@ struct SparqlDirectiveOptions {
     /// The endpoint URL, if given.
     endpoint: Option<String>,
     /// The endpoint's source position, if given.
-    endpoint_span: Option<crate::model::Span>,
+    endpoint_span: Option<Span>,
     /// The query text, if given.
     query: Option<String>,
     /// The query's source position, or the directive's.
-    query_span: Option<crate::model::Span>,
+    query_span: Option<Span>,
     /// The HTTP headers.
     headers: Vec<(String, String)>,
     /// The base IRI against which the query is resolved, if given.
     base: Option<String>,
     /// The base IRI's source position, if given.
-    base_span: Option<crate::model::Span>,
+    base_span: Option<Span>,
     /// The column formats of the `format` option, if given.
-    formats: Option<Vec<nemo_io::value_format::ColumnFormat>>,
+    formats: Option<Vec<ColumnFormat>>,
     /// The column formats' source position, if given.
-    formats_span: Option<crate::model::Span>,
+    formats_span: Option<Span>,
     /// The largest number of rows of one atom that a request of a bound import sends.
     page_size: usize,
     /// What happens when a request fails.
-    on_error: crate::model::OnError,
+    on_error: OnError,
 }
 
 /// The largest number of rows of one atom that a request of a bound import sends,
@@ -83,7 +98,7 @@ const DEFAULT_PAGE_SIZE: usize = 10_000;
 
 impl SparqlImportSpec {
     /// Returns the request that fetches this import's solutions.
-    pub(super) fn request(&self) -> nemo_io::remote::Request {
+    pub(super) fn request(&self) -> Request {
         let mut request = self.query.request(&self.endpoint);
         request.headers.extend(self.headers.iter().cloned());
         request
@@ -108,8 +123,6 @@ impl<'a> Translator<'a> {
         import: &PendingImport,
         fetched: Option<Arc<[u8]>>,
     ) -> Result<(), ImportFailure> {
-        use nemo_physical::value::Type;
-
         let spec = self.sparql_import_spec(import)?;
         if !spec.query.keeps_names() {
             for variable in spec.query.never_bound_variables() {
@@ -148,7 +161,7 @@ impl<'a> Translator<'a> {
         let bytes = fetched
             .or_else(|| self.resources.get(&spec.resource()).cloned())
             .expect("the prefetch fetched or diagnosed every SPARQL import");
-        let loaded = nemo_io::sparql::SparqlReader::new(source_width, selection)
+        let loaded = SparqlReader::new(source_width, selection)
             .with_endpoint_blank_nodes()
             .read(&spec.endpoint, &bytes, self.dictionary, self.context)
             .map_err(ImportFailure::Reading)?;
@@ -177,15 +190,13 @@ impl<'a> Translator<'a> {
             }
             .at(import.span));
         };
-        if !nemo_io::remote::Request::is_remote(&endpoint) {
+        if !Request::is_remote(&endpoint) {
             return Err(TranslationError::EndpointNotHttp { endpoint }
                 .at(options.endpoint_span.or(import.span)));
         }
 
-        let text = options
-            .query
-            .unwrap_or_else(|| String::from(nemo_io::sparql::DEFAULT_QUERY));
-        let query = nemo_io::sparql::SparqlQuery::parse(
+        let text = options.query.unwrap_or_else(|| String::from(DEFAULT_QUERY));
+        let query = SparqlQuery::parse(
             &text,
             options.base.as_deref().or(self.base_iri.as_deref()),
             self.prefixes
@@ -194,7 +205,7 @@ impl<'a> Translator<'a> {
         )
         .map_err(|error| match error {
             // An error in a base that the directive gives is the fault of the `base` option.
-            nemo_io::sparql::QueryError::Base { reason, .. } if options.base.is_some() => {
+            QueryError::Base { reason, .. } if options.base.is_some() => {
                 TranslationError::option_type("base", "an absolute IRI")
                     .at(options.base_span.or(import.span))
                     .with_note(reason)
@@ -333,14 +344,14 @@ impl<'a> Translator<'a> {
     /// An opaque query is returned unchanged.
     fn pushed_query(
         &self,
-        condition: Option<&crate::model::Operation>,
-        query: nemo_io::sparql::SparqlQuery,
-        layout: &crate::engine::compile::layout::ColumnLayout,
-    ) -> nemo_io::sparql::SparqlQuery {
+        condition: Option<&Operation>,
+        query: SparqlQuery,
+        layout: &ColumnLayout,
+    ) -> SparqlQuery {
         let Some(condition) = condition else {
             return query;
         };
-        if matches!(query.shape(), nemo_io::sparql::QueryShape::Opaque(_)) {
+        if matches!(query.shape(), QueryShape::Opaque(_)) {
             return query;
         }
 
@@ -364,9 +375,9 @@ impl<'a> Translator<'a> {
         } else {
             query.with_values(&blocks)
         };
-        let expression = expressions.into_iter().reduce(|left, right| {
-            nemo_io::sparql::spargebra::algebra::Expression::And(Box::new(left), Box::new(right))
-        });
+        let expression = expressions
+            .into_iter()
+            .reduce(|left, right| Expression::And(Box::new(left), Box::new(right)));
         match expression {
             Some(expression) => query.with_filter(expression),
             None => query,

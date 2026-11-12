@@ -1,6 +1,6 @@
 //! The engine's holder of its installed event sink.
 
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use crate::telemetry::{EngineEvent, EventSink};
 
@@ -31,8 +31,8 @@ impl SinkSlot {
     }
 }
 
-impl std::fmt::Debug for SinkSlot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for SinkSlot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self.0 {
             Some(_) => "SinkSlot(installed)",
             None => "SinkSlot(none)",

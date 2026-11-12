@@ -1,5 +1,7 @@
 //! The requests that a suspended method needs responses to, as the engine lists them.
 
+use std::fmt;
+
 use nemo_io::remote::Request;
 
 /// The id of a request that a suspended method needs a response to.
@@ -34,8 +36,8 @@ impl From<u64> for RequestId {
     }
 }
 
-impl std::fmt::Display for RequestId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for RequestId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }

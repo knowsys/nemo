@@ -17,7 +17,7 @@ use crate::{
         import_plan::ImportPlan,
         types::{RuleSourceInfo, TableNames, written_column},
     },
-    model::{AggregateKind, Span},
+    model::{AggregateKind, Operator, Span},
     values::TypeSyntax,
 };
 
@@ -378,7 +378,7 @@ pub(super) fn variable_name(source: RuleSourceInfo<'_>, variable: usize) -> Stri
 /// since without type information a name close to a builtin's is just a name.
 pub(crate) fn builtin_hint(written: &Type) -> Option<String> {
     let label = tuple_label(written)?;
-    let builtin = crate::model::Operator::NAMES
+    let builtin = Operator::NAMES
         .iter()
         .find(|builtin| label.len() >= 3 && one_edit_apart(label, builtin))?;
 
