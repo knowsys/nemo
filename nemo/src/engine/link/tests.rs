@@ -1074,3 +1074,28 @@ fn an_unregistered_program_shares_no_file_id_with_its_modules() {
     assert!(names.contains(&"sub/b.rls"), "{names:?}");
     assert_eq!(engine.file_name(FileId::new(0)), None);
 }
+
+/// The atoms of an import's `where` clause name predicates of the module like any other
+/// statement does, so an instance renames them with the rest.
+#[test]
+fn an_instance_renames_the_where_clause_of_its_imports() {
+    let module = r#"@output anc .
+anc(<urn:a>) .
+anc(?p) :- parent(?c, ?p) .
+@import parent(?c, ?p) from sparql {
+    endpoint = <http://example.org/sparql>,
+    query = "SELECT ?c ?p WHERE { ?c <urn:parent> ?p }"
+} where anc(?c) .
+"#;
+    let mut engine = Engine::new();
+    engine
+        .add_module("family", module)
+        .expect("the name is a module name");
+    let (parsed, diagnostics) = Program::parse("@use family as f .");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+
+    let linked = engine.link(parsed).expect("the module links").to_string();
+    // The instance owns `anc` and `parent`, so no statement names them bare.
+    assert!(!linked.contains("where anc("), "{linked}");
+    assert!(linked.contains("where <f::anc>("), "{linked}");
+}

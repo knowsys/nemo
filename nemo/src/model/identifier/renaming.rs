@@ -321,6 +321,10 @@ fn directive(
                 term(value, rename)?;
             }
 
+            for binding in &mut import.bindings {
+                atom(binding, rename)?;
+            }
+
             for condition in &mut import.conditions {
                 operation(condition, rename)?;
             }
