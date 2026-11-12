@@ -98,8 +98,8 @@ fn disagreement(written: &str) -> Option<String> {
         .map(|index| format!("?a{index}"))
         .collect();
 
-    // The declaration of `out` makes the check report N0463 if the call's result does not
-    // fit the result type.
+    // The declaration of `out` makes the check report `RULE_MAY_WRITE_OUTSIDE` if the call's
+    // result does not fit the result type.
     let mut source = format!("@declare out({result}) .\ngo(1) .\n");
     let body = if arguments.is_empty() {
         String::from("go(?g)")

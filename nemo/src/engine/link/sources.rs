@@ -50,7 +50,7 @@ impl Engine {
     /// # Errors
     ///
     /// Returns a parse error if `name` is not a module name,
-    /// and N0480 for a text of 4 GiB or more.
+    /// and [SOURCE_TOO_LARGE](crate::codes::SOURCE_TOO_LARGE) for a text of 4 GiB or more.
     pub fn add_module(&mut self, name: &str, text: impl Into<String>) -> Result<(), Diagnostic> {
         let module = ModuleName::parse(name)?;
         let text: String = text.into();
@@ -74,7 +74,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0422 if `name` is not a single plain name, or is `super`.
+    /// Returns [NOT_A_ROOT_NAME](crate::codes::NOT_A_ROOT_NAME) if `name` is not a single plain
+    /// name, or is `super`.
     pub fn add_module_root(
         &mut self,
         name: &str,

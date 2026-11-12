@@ -259,7 +259,7 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0480 for a text of 4 GiB or more.
+    /// Returns [SOURCE_TOO_LARGE](crate::codes::SOURCE_TOO_LARGE) for a text of 4 GiB or more.
     pub fn add_source(
         &mut self,
         name: impl Into<String>,
@@ -279,7 +279,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0208 if the file cannot be read, and N0480 if it is 4 GiB or larger.
+    /// Returns [SOURCE_UNREADABLE](crate::codes::SOURCE_UNREADABLE) if the file cannot be read,
+    /// and [SOURCE_TOO_LARGE](crate::codes::SOURCE_TOO_LARGE) if it is 4 GiB or larger.
     pub fn read_source(&mut self, path: &Path) -> Result<FileId, Diagnostic> {
         let name = path.display().to_string();
         let text = std::fs::read_to_string(path).map_err(|error| {
@@ -511,15 +512,16 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// - Returns N0481 if the engine already holds a program
-    ///   (see [has_program](Self::has_program)).
-    /// - Returns N0490 for a program that is not linked.
-    /// - Returns N0493 if another method is suspended for data from the network
-    ///   (see [pending](Self::pending)).
-    /// - Returns N0494 if a value is [set](Self::set_parameter) for a parameter that the
-    ///   program does not declare.
-    /// - Returns N0491 if the imports need data from the network but the engine has no client,
-    ///   and N0492 if the [cancel token](Self::cancel_token) stops the wait for the responses.
+    /// - Returns [ALREADY_LOADED](crate::codes::ALREADY_LOADED) if the engine already holds a
+    ///   program (see [has_program](Self::has_program)).
+    /// - Returns [NOT_LINKED](crate::codes::NOT_LINKED) for a program that is not linked.
+    /// - Returns [METHOD_SUSPENDED](crate::codes::METHOD_SUSPENDED) if another method is suspended
+    ///   for data from the network (see [pending](Self::pending)).
+    /// - Returns [UNKNOWN_PARAMETER](crate::codes::UNKNOWN_PARAMETER) if a value is
+    ///   [set](Self::set_parameter) for a parameter that the program does not declare.
+    /// - Returns [NO_CLIENT](crate::codes::NO_CLIENT) if the imports need data from the network but
+    ///   the engine has no client, and [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED) if the
+    ///   [cancel token](Self::cancel_token) stops the wait for the responses.
     ///   The load then changes nothing.
     /// - Otherwise, returns the first problem of the program or its data.
     ///
@@ -544,7 +546,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns what [load](Self::load) returns, except N0491 and N0492.
+    /// Returns what [load](Self::load) returns, except [NO_CLIENT](crate::codes::NO_CLIENT)
+    /// and [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED).
     ///
     /// # Panics
     ///
@@ -569,16 +572,23 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// - Returns N0482 if no program is loaded, N0490 for an extension that is not linked,
-    ///   and N0493 if another method is suspended for data from the network.
-    /// - Returns N0488, N0483 or N0484 for an extension that declares a `@base` other than the
-    ///   loaded program's, binds one of its prefixes to another IRI, or declares one of its
-    ///   parameters again.
+    /// - Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
+    ///   [NOT_LINKED](crate::codes::NOT_LINKED) for an extension that is not linked,
+    ///   and [METHOD_SUSPENDED](crate::codes::METHOD_SUSPENDED) if another method is suspended for
+    ///   data from the network.
+    /// - Returns [EXTENSION_DECLARES_BASE](crate::codes::EXTENSION_DECLARES_BASE),
+    ///   [EXTENSION_REBINDS_PREFIX](crate::codes::EXTENSION_REBINDS_PREFIX) or
+    ///   [EXTENSION_REDEFINES_PARAMETER](crate::codes::EXTENSION_REDEFINES_PARAMETER) for an
+    ///   extension that declares a `@base` other than the loaded program's,
+    ///   binds one of its prefixes to another IRI, or declares one of its parameters again.
     ///   These would change the meaning of the loaded statements,
     ///   so they need [reload](Self::reload).
-    /// - Returns N0494 if a value is [set](Self::set_parameter) for a parameter that neither
-    ///   the extension nor the loaded program declares.
-    /// - Returns N0491 or N0492 as [load](Self::load) does, with the loaded program unchanged.
+    /// - Returns [UNKNOWN_PARAMETER](crate::codes::UNKNOWN_PARAMETER) if a value is
+    ///   [set](Self::set_parameter) for a parameter that neither the extension nor the loaded
+    ///   program declares.
+    /// - Returns [NO_CLIENT](crate::codes::NO_CLIENT) or
+    ///   [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED) as [load](Self::load) does,
+    ///   with the loaded program unchanged.
     /// - Otherwise, returns the first problem of the extension or its data.
     ///
     /// # Panics
@@ -600,7 +610,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns what [extend](Self::extend) returns, except N0491 and N0492.
+    /// Returns what [extend](Self::extend) returns, except [NO_CLIENT](crate::codes::NO_CLIENT)
+    /// and [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED).
     ///
     /// # Panics
     ///
@@ -629,11 +640,15 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// - Returns N0482 if no program is loaded, N0490 for a program that is not linked,
-    ///   and N0493 if another method is suspended for data from the network.
-    /// - Returns N0494 if a value is [set](Self::set_parameter) for a parameter that the
-    ///   program does not declare.
-    /// - Returns N0491 or N0492 as [load](Self::load) does, with the loaded program unchanged.
+    /// - Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
+    ///   [NOT_LINKED](crate::codes::NOT_LINKED) for a program that is not linked,
+    ///   and [METHOD_SUSPENDED](crate::codes::METHOD_SUSPENDED) if another method is suspended for
+    ///   data from the network.
+    /// - Returns [UNKNOWN_PARAMETER](crate::codes::UNKNOWN_PARAMETER) if a value is
+    ///   [set](Self::set_parameter) for a parameter that the program does not declare.
+    /// - Returns [NO_CLIENT](crate::codes::NO_CLIENT) or
+    ///   [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED) as [load](Self::load) does,
+    ///   with the loaded program unchanged.
     /// - Otherwise, returns the first problem of the program or its data.
     ///
     /// # Panics
@@ -655,7 +670,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns what [reload](Self::reload) returns, except N0491 and N0492.
+    /// Returns what [reload](Self::reload) returns, except [NO_CLIENT](crate::codes::NO_CLIENT)
+    /// and [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED).
     ///
     /// # Panics
     ///
@@ -797,14 +813,17 @@ impl Engine {
     /// A row that the program refuses gets the diagnostic that a fact with its values would
     /// get, with a note that names the row; before a load, the load returns it.
     ///
-    /// - After a load, returns N0486 for a predicate that the program does not use and that
-    ///   no rows were given to, since only [extend](Self::extend) introduces new ones.
-    /// - Returns N0487 for a row that contains a null, since nulls are only created by
-    ///   reasoning.
-    /// - Returns N0254 for a row with another number of values than the predicate's other
-    ///   rows or than the program uses it with,
-    ///   and N0460 for a value that the predicate's declaration does not allow.
-    /// - Returns N0493 if a method is suspended for data from the network.
+    /// - After a load, returns [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) for a predicate
+    ///   that the program does not use and that no rows were given to,
+    ///   since only [extend](Self::extend) introduces new ones.
+    /// - Returns [NULL_IN_ROW](crate::codes::NULL_IN_ROW) for a row that contains a null,
+    ///   since nulls are only created by reasoning.
+    /// - Returns [ARITY_MISMATCH](crate::codes::ARITY_MISMATCH) for a row with another number of
+    ///   values than the predicate's other rows or than the program uses it with,
+    ///   and [FACT_OUTSIDE_DECLARATION](crate::codes::FACT_OUTSIDE_DECLARATION) for a value that
+    ///   the predicate's declaration does not allow.
+    /// - Returns [METHOD_SUSPENDED](crate::codes::METHOD_SUSPENDED) if a method is suspended for
+    ///   data from the network.
     pub fn import_rows(
         &mut self,
         predicate: &str,
@@ -825,8 +844,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0493 if a method is suspended for data from the network,
-    /// since a suspended load reads the kept rows when it continues.
+    /// Returns [METHOD_SUSPENDED](crate::codes::METHOD_SUSPENDED) if a method is suspended for data
+    /// from the network, since a suspended load reads the kept rows when it continues.
     pub fn discard_rows(&mut self, predicate: &str) -> Result<bool, Diagnostic> {
         self.refuse_while_suspended("discard_rows")?;
         Ok(self.unloaded_rows.discard(predicate))
@@ -926,16 +945,20 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// - Returns N0482 if no program is loaded,
-    ///   and N0493 if a loading method is suspended for data from the network.
-    /// - Returns N0207 if the [cancel token](Self::cancel_token) is cancelled.
+    /// - Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
+    ///   and [METHOD_SUSPENDED](crate::codes::METHOD_SUSPENDED) if a loading method is suspended
+    ///   for data from the network.
+    /// - Returns [CANCELLED](crate::codes::CANCELLED) if the [cancel token](Self::cancel_token) is
+    ///   cancelled.
     ///   The run checks the token between rule applications,
     ///   and stops there with the tables consistent and its progress recorded.
     ///   A later call continues toward the fixpoint.
-    /// - Returns N0492 if the token stops the wait for the responses of a fetch.
+    /// - Returns [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED) if the token stops the wait for the
+    ///   responses of a fetch.
     ///   The run then stays suspended, and a later call continues it.
-    /// - Returns N0491 if a bound import needs data from the network but the engine has no
-    ///   client. The run then stops as after a cancellation.
+    /// - Returns [NO_CLIENT](crate::codes::NO_CLIENT) if a bound import needs data from the network
+    ///   but the engine has no client.
+    ///   The run then stops as after a cancellation.
     /// - Otherwise, returns the first failure of a rule application.
     pub fn reason(&mut self) -> Result<(), Diagnostic> {
         let progress = self.start_reason();
@@ -953,7 +976,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns what [reason](Self::reason) returns, except N0491 and N0492.
+    /// Returns what [reason](Self::reason) returns, except [NO_CLIENT](crate::codes::NO_CLIENT)
+    /// and [WAIT_CANCELLED](crate::codes::WAIT_CANCELLED).
     pub fn start_reason(&mut self) -> Result<Progress, Diagnostic> {
         self.cancel.clear();
         match &self.suspension {
@@ -1078,8 +1102,10 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0482 if no program is loaded, N0486 for a predicate the program does not have,
-    /// and N0489 for one the engine does not store whole, naming what is left out.
+    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
+    /// [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) for a predicate the program does not
+    /// have, and [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) for one the engine does not
+    /// store whole, naming what is left out.
     pub fn cursor(&self, predicate: &str) -> Result<PredicateCursor, Diagnostic> {
         self.open_cursor(predicate)
     }
@@ -1092,8 +1118,9 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0206 for a cursor whose table changed after the cursor was opened,
-    /// since its remaining rows would no longer match the table.
+    /// Returns [CURSOR_INVALIDATED](crate::codes::CURSOR_INVALIDATED) for a cursor whose table
+    /// changed after the cursor was opened, since its remaining rows would no longer match the
+    /// table.
     /// [is_valid](Self::is_valid) checks for this beforehand.
     pub fn read_chunk(
         &mut self,
@@ -1152,7 +1179,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0482 if no program is loaded, and the failure to write a file.
+    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
+    /// and the failure to write a file.
     pub fn export(&mut self, directory: impl AsRef<Path>) -> Result<(), Diagnostic> {
         let specs = self.exports().to_vec();
         self.export_specs(directory, &specs)
@@ -1167,9 +1195,11 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// - Returns N0482 if no program is loaded.
-    /// - Returns N0486 for a predicate that the program neither uses nor declares as an output,
-    ///   and N0489 for one that the engine does not store whole.
+    /// - Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded.
+    /// - Returns [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) for a predicate that the
+    ///   program neither uses nor declares as an output, and
+    ///   [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) for one that the engine does not store
+    ///   whole.
     /// - Otherwise, returns the failure to write a file.
     pub fn export_specs(
         &mut self,
@@ -1187,8 +1217,10 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0482, N0486 or N0489 as [export_specs](Self::export_specs) does,
-    /// and the failure to serialize the rows.
+    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM),
+    /// [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) or
+    /// [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) as [export_specs](Self::export_specs)
+    /// does, and the failure to serialize the rows.
     pub fn export_bytes(&mut self, spec: &ExportSpec) -> Result<Vec<u8>, Diagnostic> {
         self.serialize_export(spec)
     }
@@ -1203,7 +1235,7 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// - Returns N0482 if no program is loaded.
+    /// - Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded.
     /// - Returns the error that [trace](Self::trace) returns for a fact that names no
     ///   predicate of the program, or that does not fit its predicate.
     pub fn check_facts(&mut self, facts: &[Fact]) -> Result<(), Diagnostic> {
@@ -1226,9 +1258,10 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// - Returns N0482 if no program is loaded,
-    ///   N0209 if the engine holds updates that [reason](Self::reason) has not processed,
-    ///   and N0510 if the last run did not reach the fixpoint.
+    /// - Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
+    ///   [PENDING_UPDATES](crate::codes::PENDING_UPDATES) if the engine holds updates that
+    ///   [reason](Self::reason) has not processed, and [UNFINISHED](crate::codes::UNFINISHED) if
+    ///   the last run did not reach the fixpoint.
     /// - Returns an error for a fact that names no predicate of the program,
     ///   or that does not fit its predicate.
     pub fn trace(&mut self, facts: &[Fact]) -> Result<TraceResponse, Diagnostic> {
@@ -1296,8 +1329,10 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0482, N0209 or N0510 as [trace](Self::trace) does,
-    /// and an error for a query that does not fit the written program.
+    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM),
+    /// [PENDING_UPDATES](crate::codes::PENDING_UPDATES) or [UNFINISHED](crate::codes::UNFINISHED)
+    /// as [trace](Self::trace) does, and an error for a query that does not fit the written
+    /// program.
     pub fn tree_for_table(
         &mut self,
         query: TreeForTableQuery,
@@ -1313,8 +1348,10 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0482, N0209 or N0510 as [trace](Self::trace) does,
-    /// and an error for a query that does not fit the written program.
+    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM),
+    /// [PENDING_UPDATES](crate::codes::PENDING_UPDATES) or [UNFINISHED](crate::codes::UNFINISHED)
+    /// as [trace](Self::trace) does, and an error for a query that does not fit the written
+    /// program.
     pub fn table_entries_for_tree_nodes(
         &mut self,
         query: TableEntriesForTreeNodesQuery,
