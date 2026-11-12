@@ -38,6 +38,7 @@ use crate::{
         evaluate::extensional::ExtensionalOrigin,
         imported_rows::UnloadedRows,
         link::is_instance_parameter,
+        loaded::LoadedProgram,
         remote::{LoadKind, Progress, ResourceRequest, SuspendedLoad, Suspension},
         transform::sparql_rewrite,
     },
@@ -117,7 +118,7 @@ impl Engine {
         &mut self,
         program: Program,
     ) -> Result<Progress, Diagnostic> {
-        if self.program.is_some() {
+        if self.loaded.is_some() {
             return Err(EngineError::AlreadyLoaded.diagnostic().with_hint(
                 "use `extend()` to add to the loaded program, or `reload()` to replace it",
             ));
@@ -125,6 +126,13 @@ impl Engine {
 
         tracing::info!(statements = program.statements.len(), "loading a program");
         self.start_loading(LoadKind::Load, program)
+    }
+
+    /// Returns the loaded program of a method that extends or replaces it.
+    fn held(&self) -> &LoadedProgram {
+        self.loaded
+            .as_ref()
+            .expect("the method was given a loaded program to change")
     }
 
     /// Stages the program of a loading method, and translates it as far as it gets
@@ -210,9 +218,11 @@ impl Engine {
                 let (rules, strata) = (compiled.rules.len(), compiled.strata.len());
                 self.skeletons.clear();
                 self.last_applied.resize(compiled.rules.len(), 0);
-                self.program = Some(Arc::new(compiled));
-                self.revision = Some(program.revision);
-                self.written = Some(program.written);
+                self.loaded = Some(LoadedProgram {
+                    written: program.written,
+                    revision: program.revision,
+                    compiled: Arc::new(compiled),
+                });
 
                 tracing::debug!(
                     method = load.kind.method(),

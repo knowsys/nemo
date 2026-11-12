@@ -30,7 +30,7 @@ impl Engine {
         predicate: &str,
         rows: impl IntoIterator<Item = Vec<DataValue>>,
     ) -> Result<(), Diagnostic> {
-        if self.program.is_none() {
+        if self.loaded.is_none() {
             let arity = self.unloaded_rows.arity(predicate);
             if let Some(block) = RowBlock::read(predicate, rows, arity)? {
                 self.unloaded_rows.add(block)?;
@@ -72,8 +72,8 @@ impl Engine {
         if !self.seeds_within_inferred(table) {
             match self.reanalyze() {
                 Ok(column_types) => {
-                    let program = self.program.as_mut().and_then(Arc::get_mut);
-                    program
+                    let loaded = self.loaded.as_mut().expect("the program is loaded");
+                    Arc::get_mut(&mut loaded.compiled)
                         .expect("no run holds the program while rows are added")
                         .column_types = column_types;
                 }
@@ -85,8 +85,8 @@ impl Engine {
                 }
             }
         }
-        if let Some(program) = &self.program {
-            self.assert_stored_types(&program.column_types, table, &rows);
+        if let Some(loaded) = &self.loaded {
+            self.assert_stored_types(&loaded.compiled.column_types, table, &rows);
         }
 
         let revision = Revision(self.step);
@@ -105,10 +105,10 @@ impl Engine {
     ///
     /// The seeds are the column types that the table's input rows give it.
     fn seeds_within_inferred(&self, table: TableId) -> bool {
-        let (Some(program), Some(seeds)) = (&self.program, self.translation.seeds.get(&table))
-        else {
+        let (Some(loaded), Some(seeds)) = (&self.loaded, self.translation.seeds.get(&table)) else {
             return true;
         };
+        let program = &loaded.compiled;
 
         program.column_types.get(&table).is_some_and(|inferred| {
             seeds
@@ -135,10 +135,10 @@ impl Engine {
     /// Returns the inferred column types,
     /// or the error for the first declaration that the analysis cannot show the program keeps.
     fn reanalyze(&self) -> Result<HashMap<TableId, Vec<Type>>, Diagnostic> {
-        let program = self
-            .program
-            .as_ref()
-            .expect("rows widen the types of a loaded program");
+        let loaded = self.loaded.as_ref();
+        let program = &loaded
+            .expect("rows widen the types of a loaded program")
+            .compiled;
         let sources: Vec<types::RuleSourceInfo<'_>> = program
             .sources
             .iter()

@@ -168,19 +168,17 @@ fn run<T>(
     // Entry selectors are resolved against the stored order later.
     let grounded = request::ground_selectors(engine, &arenas.compiled)?;
 
-    let program = engine
-        .program
+    let loaded = engine
+        .loaded
         .as_ref()
         .expect("a query checked for a program");
+    let program = &*loaded.compiled;
     let mut context = QueryContext::new(
         &engine.pipeline,
         &engine.translation,
         &engine.predicates,
         program,
-        engine
-            .written
-            .as_ref()
-            .expect("a program has a written one"),
+        &loaded.written,
         &listings,
     );
     let mut evaluation = QueryEvaluation {
@@ -215,10 +213,8 @@ fn run<T>(
 /// Returns, for every predicate that a written rule negates,
 /// its table and arity if the engine stores it whole, and the error otherwise.
 fn listings(engine: &Engine) -> HashMap<String, Result<Registered, Diagnostic>> {
-    let written = engine
-        .written
-        .as_ref()
-        .expect("a query checked for a program");
+    let loaded = engine.loaded.as_ref();
+    let written = &loaded.expect("a query checked for a program").written;
     let mut listings = HashMap::new();
     for (_, statement) in engine.pipeline.statements(written.revision()) {
         let Statement::Rule(rule) = statement else {
@@ -246,18 +242,17 @@ fn context<'a>(
     engine: &'a Engine,
     listings: &'a HashMap<String, Result<Registered, Diagnostic>>,
 ) -> QueryContext<'a> {
+    let loaded = engine
+        .loaded
+        .as_ref()
+        .expect("a query checked for a program");
+
     QueryContext::new(
         &engine.pipeline,
         &engine.translation,
         &engine.predicates,
-        engine
-            .program
-            .as_ref()
-            .expect("a query checked for a program"),
-        engine
-            .written
-            .as_ref()
-            .expect("a program has a written one"),
+        &loaded.compiled,
+        &loaded.written,
         listings,
     )
 }

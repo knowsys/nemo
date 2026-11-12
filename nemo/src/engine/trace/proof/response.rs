@@ -212,9 +212,9 @@ pub(crate) fn written_rule(engine: &Engine, statement: StatementId) -> WrittenRu
 
     WrittenRule {
         rule: engine
-            .written
+            .loaded
             .as_ref()
-            .and_then(|program| program.id(statement))
+            .and_then(|loaded| loaded.written.id(statement))
             .expect("rule references name written statements"),
         text: written.to_string(),
         name,

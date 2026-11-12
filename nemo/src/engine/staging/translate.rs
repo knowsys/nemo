@@ -377,7 +377,10 @@ impl Engine {
                 passes: &self.passes,
                 purpose,
                 written: None,
-                previous_types: self.program.as_ref().map(|program| &program.column_types),
+                previous_types: self
+                    .loaded
+                    .as_ref()
+                    .map(|loaded| &loaded.compiled.column_types),
                 context,
                 imported: self.unloaded_rows.blocks(),
             },

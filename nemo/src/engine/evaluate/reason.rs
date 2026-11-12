@@ -31,6 +31,7 @@ use crate::{
             application::{self, Applied, DeltaWindow},
             fetch::{self, FetchOutcome, Fetched, PendingFetch},
         },
+        loaded::LoadedProgram,
         registered::Registered,
         remote::{PendingRequest, Progress, Response, Suspension},
     },
@@ -314,7 +315,7 @@ impl Engine {
     pub(in crate::engine) fn end_discarded_run(&mut self) {
         let mark = self.pipeline.mark_reports();
         self.report_fetch_tallies();
-        if let Some(written) = &self.written {
+        if let Some(LoadedProgram { written, .. }) = &self.loaded {
             self.pipeline
                 .map_reports(mark, |report| written.present(report));
         }
@@ -324,7 +325,11 @@ impl Engine {
     /// (see [reason](Self::reason)).
     pub(in crate::engine) fn reason_to_fixpoint(&mut self) -> Result<Progress, Diagnostic> {
         // The run reads the program while it changes the rest of the engine.
-        let Some(program) = self.program.as_ref().map(Arc::clone) else {
+        let Some(program) = self
+            .loaded
+            .as_ref()
+            .map(|loaded| Arc::clone(&loaded.compiled))
+        else {
             return Err(EngineError::NoProgram.diagnostic());
         };
 

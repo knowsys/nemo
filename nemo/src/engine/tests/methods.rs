@@ -426,10 +426,11 @@ fn diagnostics_name_the_literals_that_a_stage_made_predicate_stands_for() {
     );
     let mut engine = Engine::new();
     engine.load(program).expect("the program loads");
-    let written = engine
-        .written
+    let written = &engine
+        .loaded
         .as_ref()
-        .expect("a loaded program is written");
+        .expect("the program is loaded")
+        .written;
     let presented = written.present(
         Diagnostic::warning(codes::NEVER_FIRES, "a rule reads `triple_query1`")
             .with_field("predicate", "triple_query1"),

@@ -303,7 +303,7 @@ impl Engine {
         directory: impl AsRef<Path>,
         specs: &[ExportSpec],
     ) -> Result<(), Diagnostic> {
-        if self.program.is_none() {
+        if self.loaded.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
         }
 
@@ -368,7 +368,7 @@ impl Engine {
     /// for a predicate that is not stored whole,
     /// and if the sink cannot be written.
     fn feed_export(&mut self, spec: &ExportSpec, sink: &mut dyn RowSink) -> Result<(), Diagnostic> {
-        if self.program.is_none() {
+        if self.loaded.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
         }
         if self.arity_of(&spec.predicate).is_none() {

@@ -69,7 +69,7 @@ impl Engine {
         &mut self,
         program: Program,
     ) -> Result<InferredTypes, Diagnostic> {
-        if self.program.is_some() {
+        if self.loaded.is_some() {
             return Err(EngineError::AlreadyLoaded.diagnostic());
         }
 

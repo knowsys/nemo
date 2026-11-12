@@ -23,8 +23,8 @@ fn imported_rows_add_no_statements() {
     engine
         .load(parse("q(?x) :- p(?x) ."))
         .expect("the program loads");
-    let written = engine.written.as_ref().expect("loaded").revision();
-    let compiled = engine.revision.expect("loaded");
+    let loaded = engine.loaded.as_ref().expect("loaded");
+    let (written, compiled) = (loaded.written.revision(), loaded.revision);
     for revision in [written, compiled] {
         assert_eq!(
             engine.pipeline.statements(revision).count(),

@@ -45,6 +45,7 @@ mod compile;
 mod evaluate;
 mod imported_rows;
 mod link;
+mod loaded;
 mod registered;
 pub mod remote;
 mod results;
@@ -84,14 +85,14 @@ use crate::{
         render::{Renderer, SourceLookup},
     },
     engine::{
-        compile::compiled::CompiledProgram,
         compile::translation::TranslationState,
         evaluate::extensional::ExtensionalBlock,
+        loaded::LoadedProgram,
         registered::Registered,
         remote::{Client, ClientSlot, PendingRequest, Progress, RequestId, Response, Suspension},
     },
     model::{Directive, Fact, FileId, Identifier, Program, Statement, Term},
-    pipeline::{Pipeline, RegisteredSource, RevisionId, RevisionText, Stages, StatementId},
+    pipeline::{Pipeline, RegisteredSource, RevisionText, Stages, StatementId},
     telemetry::{EngineEvent, EngineTimings, EventSink, SinkSlot},
     trace::{
         TracePart, TraceResponse, TracedFact, WrittenRule,
@@ -165,10 +166,8 @@ pub struct Engine {
     /// The module roots and the module texts registered by name, which [link](Self::link)
     /// reads.
     modules: link::ModuleSources,
-    /// The compiled program, or `None` before [load](Self::load).
-    ///
-    /// A run shares it, and nothing changes it while a run holds it.
-    program: Option<Arc<CompiledProgram>>,
+    /// The program that the engine holds, or `None` before [load](Self::load).
+    loaded: Option<LoadedProgram>,
     /// Per rule of the compiled program, by index, the step of the rule's last application,
     /// or 0 before the first.
     ///
@@ -179,10 +178,6 @@ pub struct Engine {
     /// An extension, and the rows added through [import_rows](Self::import_rows) after a
     /// load, are translated against it.
     translation: TranslationState,
-    /// The pipeline revision the compiled program was translated from.
-    revision: Option<RevisionId>,
-    /// The written program, which results and diagnostics refer to.
-    written: Option<written::WrittenProgram>,
     /// The application log, with one entry per rule application that stored rows,
     /// in ascending order of step.
     ///
@@ -1009,7 +1004,7 @@ impl Engine {
     pub(in crate::engine) fn reason_until_suspended(&mut self) -> Result<Progress, Diagnostic> {
         let mark = self.pipeline.mark_reports();
         let outcome = self.reason_to_fixpoint();
-        let Some(written) = &self.written else {
+        let Some(LoadedProgram { written, .. }) = &self.loaded else {
             return outcome;
         };
 
@@ -1069,8 +1064,9 @@ impl Engine {
     pub fn column_types(&self, predicate: &str) -> Option<&[Type]> {
         let table = self.whole_predicate(predicate).ok()?.table;
 
-        self.program
+        self.loaded
             .as_ref()?
+            .compiled
             .column_types
             .get(&table)
             .map(Vec::as_slice)
@@ -1175,9 +1171,9 @@ impl Engine {
     /// Returns the program's export directives as specifications, in directive order,
     /// or none before [load](Self::load).
     pub fn exports(&self) -> &[ExportSpec] {
-        self.program
+        self.loaded
             .as_ref()
-            .map_or(&[], |program| program.exports.as_slice())
+            .map_or(&[], |loaded| loaded.compiled.exports.as_slice())
     }
 
     /// Writes the rows of every export directive into the given directory.
@@ -1249,7 +1245,7 @@ impl Engine {
     /// - Returns the error that [trace](Self::trace) returns for a fact that names no
     ///   predicate of the program, or that does not fit its predicate.
     pub fn check_facts(&mut self, facts: &[Fact]) -> Result<(), Diagnostic> {
-        if self.program.is_none() {
+        if self.loaded.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
         }
 
@@ -1377,7 +1373,7 @@ impl Engine {
     /// with its text, `#[name]` and source position.
     /// Returns `None` for an id that names no such statement.
     pub fn rule(&self, id: usize) -> Option<WrittenRule> {
-        let statement = self.written.as_ref()?.statement(id)?;
+        let statement = self.loaded.as_ref()?.written.statement(id)?;
         match self.pipeline.statement(statement) {
             Statement::Rule(_) => {}
             Statement::Directive(Directive::Import(import)) if import.is_bound() => {}
@@ -1392,7 +1388,7 @@ impl Engine {
     /// [load](Self::load) needs an engine without a program,
     /// and most other methods need one with a program.
     pub fn has_program(&self) -> bool {
-        self.program.is_some()
+        self.loaded.is_some()
     }
 
     /// Returns a value in term syntax that the program reads back as the same value,
@@ -1426,7 +1422,7 @@ impl Engine {
     ///
     /// The tracing methods, such as [trace](Self::trace), require it.
     pub fn is_at_fixpoint(&self) -> bool {
-        self.program.is_some() && self.dirty.is_empty() && self.fixpoint
+        self.loaded.is_some() && self.dirty.is_empty() && self.fixpoint
     }
 
     /// Returns the number of rule applications so far.
@@ -1460,7 +1456,7 @@ impl Engine {
     ///
     /// Returns none before [load](Self::load).
     pub fn revisions(&self) -> Vec<RevisionText> {
-        let Some(revision) = self.revision else {
+        let Some(LoadedProgram { revision, .. }) = self.loaded else {
             return Vec::new();
         };
 
@@ -1493,11 +1489,12 @@ impl Engine {
     /// A bound import is a rule here too, rendered as its directive.
     /// Returns none before [load](Self::load).
     pub fn compiled_rules(&self) -> Vec<&str> {
-        let Some(program) = &self.program else {
+        let Some(loaded) = &self.loaded else {
             return Vec::new();
         };
 
-        program
+        loaded
+            .compiled
             .sources
             .iter()
             .map(|source| source.text.as_str())
@@ -1508,8 +1505,9 @@ impl Engine {
     /// as variable ids in the order the join binds them,
     /// or `None` if there is no rule at that position.
     pub fn join_order(&self, position: usize) -> Option<Vec<usize>> {
-        self.program
+        self.loaded
             .as_ref()?
+            .compiled
             .rules
             .get(position)
             .map(|rule| rule.order.clone())

@@ -119,7 +119,7 @@ impl Engine {
             statements = program.statements.len(),
             "reloading the program"
         );
-        if self.program.is_none() {
+        if self.loaded.is_none() {
             return Err(EngineError::NoProgram
                 .diagnostic()
                 .with_hint("call `load()` first; `reload()` replaces a loaded program"));
@@ -132,7 +132,7 @@ impl Engine {
     /// [reload_staged](Self::reload_staged) first translates the program that the stages made
     /// of it, but reads no data and stores nothing.
     pub(super) fn validate_reload(&mut self, staged: &Staged) -> Result<(), Diagnostic> {
-        let held = self.revision.expect("a loaded program has a revision");
+        let held = self.held().revision;
         let new_statements = self.statements_of(staged.revision);
         let rebuild = self.rebuild_by_diff(&self.statements_of(held), &new_statements);
         let rebuilt = self.rebuilt_predicates(&rebuild, &HashSet::new(), &new_statements);
@@ -177,7 +177,7 @@ impl Engine {
         load: &mut SuspendedLoad,
         program: &StagedProgram,
     ) -> Result<Loaded, Diagnostic> {
-        let held = self.revision.expect("a loaded program has a revision");
+        let held = self.held().revision;
         let rebuild = self.rebuild_by_diff(&self.statements_of(held), &program.statements);
 
         let (translated, replaced) = loop {

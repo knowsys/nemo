@@ -38,7 +38,7 @@ impl Engine {
             statements = program.statements.len(),
             "extending the program"
         );
-        if self.program.is_none() {
+        if self.loaded.is_none() {
             return Err(EngineError::NoProgram
                 .diagnostic()
                 .with_hint("call `load()` first; `extend()` adds to a loaded program"));
@@ -58,18 +58,14 @@ impl Engine {
     /// So a rule of the extension that reads a loaded import is rewritten with the loaded
     /// program in view, and the names that the stages introduce are new to the whole program.
     pub(super) fn stage_extension(&mut self, mut program: Program) -> Result<Staged, Diagnostic> {
-        let held = self.revision.expect("a loaded program has a revision");
+        let held = self.held().revision;
         expect_linked(&program)?;
         self.supply_parameters(&mut program, true)?;
         let addition = self.pipeline.load(program);
         self.check_extension(addition)?;
         let frozen = self.pipeline.statements(held).count();
         let merged = self.pipeline.merge(held, addition);
-        let held_written = self
-            .written
-            .as_ref()
-            .expect("a loaded program has a written program")
-            .revision();
+        let held_written = self.held().written.revision();
         let written = self.pipeline.merge(held_written, addition);
         let merged = self.revive_sparql_imports(held, merged);
         let imported = self.imported_predicates();
@@ -170,11 +166,7 @@ impl Engine {
     ///
     /// The statements of the loaded program come first, and their data is stored.
     pub(super) fn validate_extension(&mut self, staged: &Staged) -> Result<(), Diagnostic> {
-        let held_written = self
-            .written
-            .as_ref()
-            .expect("a loaded program has a written program")
-            .revision();
+        let held_written = self.held().written.revision();
         let mut preloaded = vec![true; self.pipeline.statements(held_written).count()];
         preloaded.resize(self.pipeline.statements(staged.written).count(), false);
         let mut state = self.translation.clone();
@@ -199,7 +191,7 @@ impl Engine {
         load: &mut SuspendedLoad,
         program: &StagedProgram,
     ) -> Result<Loaded, Diagnostic> {
-        let held = self.revision.expect("a loaded program has a revision");
+        let held = self.held().revision;
         let mut preloaded = vec![true; self.pipeline.statements(held).count()];
         preloaded.resize(program.statements.len(), false);
 

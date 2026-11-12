@@ -99,7 +99,11 @@ fn check(source: &str) -> Vec<Diagnostic> {
 /// Returns, per rule, the number of top-level operations that its plan runs per application,
 /// which are its execution units and aggregations, read off its layout.
 fn rule_steps(engine: &Engine) -> Vec<usize> {
-    let program = engine.program.as_ref().expect("the program is loaded");
+    let program = &engine
+        .loaded
+        .as_ref()
+        .expect("the program is loaded")
+        .compiled;
 
     (0..program.rules.len())
         .map(|position| {

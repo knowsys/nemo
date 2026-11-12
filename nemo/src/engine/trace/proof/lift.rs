@@ -35,6 +35,7 @@ use crate::{
         Engine,
         compile::{compiled::CompiledProgram, translation::TranslationState},
         evaluate::body::combined_positions,
+        loaded::LoadedProgram,
         trace::proof::{Explanation, ProofNode},
     },
     model::{
@@ -248,11 +249,11 @@ pub(crate) struct Lifter<'a> {
 impl<'a> Lifter<'a> {
     /// Prepares the lifting over a loaded engine.
     pub(crate) fn new(engine: &'a Engine) -> Self {
-        let program = engine.program.as_ref().expect("a proof needs a program");
-        let written = engine
-            .written
-            .as_ref()
-            .expect("a program has a written one");
+        let LoadedProgram {
+            written,
+            compiled: program,
+            ..
+        } = engine.loaded.as_ref().expect("a proof needs a program");
 
         Self {
             pipeline: &engine.pipeline,

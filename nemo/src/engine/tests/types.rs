@@ -850,8 +850,8 @@ fn a_derived_value_outside_the_inferred_types_panics_in_debug_builds() {
 
     // The analysis inferred integers for `q`, and strings stand in for a wrong inference.
     let &Registered { table, .. } = engine.predicates.get("q").expect("registered");
-    let program = engine.program.as_mut().expect("a program is loaded");
-    Arc::get_mut(program)
+    let loaded = engine.loaded.as_mut().expect("a program is loaded");
+    Arc::get_mut(&mut loaded.compiled)
         .expect("no run holds the program")
         .column_types
         .insert(table, vec![Type::of(ValueDomain::String)]);

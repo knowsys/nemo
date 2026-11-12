@@ -107,10 +107,10 @@ impl<'a> ProofSearch<'a> {
         engine: &'a mut Engine,
         outcomes: &'a mut Outcomes,
     ) -> Result<Self, Diagnostic> {
-        let program = engine
-            .program
-            .as_ref()
-            .ok_or_else(|| EngineError::NoProgram.diagnostic())?;
+        let loaded = engine.loaded.as_ref();
+        let program = &*loaded
+            .ok_or_else(|| EngineError::NoProgram.diagnostic())?
+            .compiled;
 
         Ok(Self {
             manager: &mut engine.manager,

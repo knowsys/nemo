@@ -105,7 +105,7 @@ impl Engine {
     /// Checks that the engine can trace facts: a program is loaded,
     /// reasoning has processed every update, and the last run reached the fixpoint.
     pub(in crate::engine) fn traceable(&self) -> Result<(), Diagnostic> {
-        if self.program.is_none() {
+        if self.loaded.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
         }
         if !self.dirty.is_empty() {

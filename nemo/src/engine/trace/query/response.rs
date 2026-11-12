@@ -240,9 +240,9 @@ impl<'a> ResponseAssembly<'a> {
         QueryRule {
             id: self
                 .engine
-                .written
+                .loaded
                 .as_ref()
-                .and_then(|program| program.id(statement))
+                .and_then(|loaded| loaded.written.id(statement))
                 .expect("neighborhoods name written statements"),
             relevant_head_predicate: relevant,
             relevant_head_predicate_index: head,

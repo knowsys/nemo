@@ -16,7 +16,10 @@ use nemo_physical::{
 
 use crate::{
     diagnostics::EngineError,
-    engine::{Engine, evaluate::extensional::ExtensionalOrigin, registered::Registered},
+    engine::{
+        Engine, evaluate::extensional::ExtensionalOrigin, loaded::LoadedProgram,
+        registered::Registered,
+    },
 };
 
 /// Where a predicate's rows come from.
@@ -106,7 +109,7 @@ impl Engine {
                     .stored_layout(predicate, delivered)
                     .kept(),
             ),
-            None => self.written.as_ref()?.arity(predicate).or_else(|| {
+            None => self.loaded.as_ref()?.written.arity(predicate).or_else(|| {
                 self.translation
                     .declarations
                     .get(predicate)
@@ -117,8 +120,8 @@ impl Engine {
 
     /// Returns the names of the program's outputs (see [outputs](Self::outputs)).
     pub(in crate::engine) fn output_names(&self) -> Vec<String> {
-        match &self.written {
-            Some(written) if !written.declared_outputs().is_empty() => {
+        match &self.loaded {
+            Some(LoadedProgram { written, .. }) if !written.declared_outputs().is_empty() => {
                 written.declared_outputs().to_vec()
             }
             Some(_) => self
@@ -133,8 +136,10 @@ impl Engine {
 
     /// Returns where a predicate's rows come from (see [predicate](Self::predicate)).
     pub(in crate::engine) fn role_of(&self, name: &str) -> PredicateRole {
-        let (derives, has_input_facts) = match &self.written {
-            Some(written) => (written.derives(name), written.has_input_facts(name)),
+        let (derives, has_input_facts) = match &self.loaded {
+            Some(LoadedProgram { written, .. }) => {
+                (written.derives(name), written.has_input_facts(name))
+            }
             None => (false, true),
         };
         match (derives, has_input_facts || self.holds_imported_rows(name)) {
@@ -161,9 +166,9 @@ impl Engine {
             };
 
             let has_input_facts = self
-                .written
+                .loaded
                 .as_ref()
-                .is_none_or(|written| written.has_input_facts(&name));
+                .is_none_or(|loaded| loaded.written.has_input_facts(&name));
             let outside: usize = self.extensional.get(&table).map_or(0, |blocks| {
                 blocks
                     .iter()
@@ -214,8 +219,8 @@ impl Engine {
     /// [import_rows](crate::engine::Engine::import_rows),
     /// or every registered one if no program is loaded.
     pub(in crate::engine) fn listed(&self) -> Vec<String> {
-        match &self.written {
-            Some(written) => {
+        match &self.loaded {
+            Some(LoadedProgram { written, .. }) => {
                 let mut names: Vec<String> = written.predicates().map(str::to_owned).collect();
                 names.extend(
                     self.predicates
@@ -231,8 +236,10 @@ impl Engine {
 
     /// Returns whether a name is one of the program's predicates.
     fn names(&self, predicate: &str) -> bool {
-        match &self.written {
-            Some(written) => written.names(predicate) || self.holds_imported_rows(predicate),
+        match &self.loaded {
+            Some(LoadedProgram { written, .. }) => {
+                written.names(predicate) || self.holds_imported_rows(predicate)
+            }
             None => self.predicates.contains_key(predicate),
         }
     }
@@ -263,7 +270,7 @@ impl Engine {
     /// for a name that is not one of the program's predicates,
     /// and for a predicate that the engine does not store whole, naming what it leaves out.
     pub(crate) fn whole_predicate(&self, predicate: &str) -> Result<Registered, Diagnostic> {
-        if self.program.is_none() {
+        if self.loaded.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
         }
         let Some(arity) = self.arity_of(predicate) else {
