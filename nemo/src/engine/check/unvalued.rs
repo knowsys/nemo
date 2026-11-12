@@ -11,16 +11,12 @@
 //! Every statement that reads the parameter is then checked as for any value it may take.
 //! The translation of the check finds these parameters when it resolves the parameters.
 //! Before it translates the statements, [rewrite_unvalued] rewrites them to this end,
-//! with *hidden* predicates and variables.
-//!
-//! The hidden names begin with a NUL byte, which no program can write,
-//! and the places that name a program's variables and predicates leave them out:
-//! the compiler's `source_names` and `written_name`, and `InferredTypes::of_check`.
+//! with a [hidden](Hidden::Parameter) predicate and variable for each such parameter.
 
 use std::collections::HashSet;
 
 use crate::{
-    engine::compile::translation::ParametersWithoutValue,
+    engine::compile::{hidden::Hidden, translation::ParametersWithoutValue},
     model::{
         Atom, ColumnDeclaration, Directive, Identifier, InputDirective, Literal, Rule, Statement,
         Substitution, Term, TermKind, Variable, VariableKind, Walk,
@@ -189,21 +185,12 @@ fn rewrite_rule(mut rule: Rule, unvalued: &ParametersWithoutValue) -> Rule {
     rule
 }
 
-/// Returns the hidden predicate that replaces a parameter without a value, `\0$name`.
-///
-/// The NUL byte hides it, and the `$` keeps it apart from the compiler's hidden names,
-/// such as `\0unit` from a parameter named `unit`.
+/// Returns the hidden predicate that holds the values of a parameter without a value.
 fn hidden_predicate(name: &str) -> Identifier {
-    Identifier::Iri(format!("\u{0}${name}"))
+    Identifier::Iri(Hidden::Parameter(name).name())
 }
 
-/// Returns the hidden variable through which a rule reads a parameter without a value,
-/// `\0$name`.
-///
-/// The NUL byte hides it, and the `$` keeps it apart from the compiler's hidden variables,
-/// such as `\0expression0` from a parameter named `expression0`.
+/// Returns the hidden variable through which a rule reads a parameter without a value.
 fn hidden_variable(name: &str) -> Term {
-    Term::new(TermKind::Variable(Variable::universal(format!(
-        "\u{0}${name}"
-    ))))
+    Term::variable(Variable::universal(Hidden::Parameter(name).name()))
 }

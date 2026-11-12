@@ -25,6 +25,7 @@ use crate::{
         compile::types,
         evaluate::extensional::ExtensionalOrigin,
         imported_rows::{RowBlock, UnloadedRows},
+        link::is_instance_parameter,
         registered::Registered,
         remote::{LoadKind, Progress, SuspendedLoad, Suspension},
         transform::sparql_rewrite,
@@ -256,8 +257,7 @@ impl Engine {
     /// [set_parameter](Engine::set_parameter), whatever values they state.
     ///
     /// Only the declarations of the program itself are given values.
-    /// The parameters of a module instance have its alias in their names,
-    /// and their values come from the `@use`.
+    /// The values of a module instance's parameters come from its `@use`.
     /// For an `extension`, the parameters of the loaded program count as declared.
     /// Fails for a value whose parameter is not declared.
     fn supply_parameters(&self, program: &mut Program, extension: bool) -> Result<(), Diagnostic> {
@@ -265,7 +265,6 @@ impl Engine {
             return Ok(());
         }
 
-        let of_instance = |name: &str| name.contains("::");
         let mut declared: Vec<String> = Vec::new();
         for statement in &mut program.statements {
             let Statement::Directive(Directive::Parameter(parameter)) = statement else {
@@ -273,9 +272,10 @@ impl Engine {
             };
 
             let name = &parameter.variable.name;
-            if of_instance(name) {
+            if is_instance_parameter(name) {
                 continue;
             }
+
             if let Some(value) = self.parameters.get(name) {
                 parameter.value = Some(value.clone());
             }
@@ -285,7 +285,7 @@ impl Engine {
 
         if extension {
             let loaded = self.translation.globals.keys();
-            declared.extend(loaded.filter(|name| !of_instance(name)).cloned());
+            declared.extend(loaded.filter(|name| !is_instance_parameter(name)).cloned());
         }
 
         let Some(unknown) = self.parameters.keys().find(|name| !declared.contains(name)) else {

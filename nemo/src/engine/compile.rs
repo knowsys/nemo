@@ -4,8 +4,10 @@
 //! - [import_plan] and [layout] describe what the loads of imported predicates leave out.
 //! - [optimize] has the optimization passes, and [types] the type analysis.
 //! - [order] and [strata] choose the rules' join orders and strata.
+//! - [hidden] names what the engine adds to a program.
 
 pub(super) mod compiled;
+pub(super) mod hidden;
 pub(super) mod import_plan;
 pub(super) mod layout;
 pub(super) mod optimize;

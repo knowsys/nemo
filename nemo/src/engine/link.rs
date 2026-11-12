@@ -73,6 +73,19 @@ use crate::{
     pipeline::{NameScope, Pipeline},
 };
 
+/// What separates the alias of a `@use` from a name of the instance that it makes,
+/// as in `alias::name`.
+const INSTANCE_SEPARATOR: &str = "::";
+
+/// Returns whether a parameter of a linked program belongs to a module instance,
+/// and not to the program itself.
+///
+/// Linking names an instance's parameter `alias::name`,
+/// which no program can write as the name of a parameter.
+pub(in crate::engine) fn is_instance_parameter(name: &str) -> bool {
+    name.contains(INSTANCE_SEPARATOR)
+}
+
 /// How deep a chain of nested module instantiations may go.
 ///
 /// Without a bound, a deep chain of files would overflow the stack
@@ -257,7 +270,7 @@ fn forbid_owned_name(
     };
 
     for alias in aliases {
-        if resolved.starts_with(&format!("{alias}::")) {
+        if resolved.starts_with(&format!("{alias}{INSTANCE_SEPARATOR}")) {
             let mut problem = ModuleError::OwnedName {
                 name: resolved.clone(),
                 alias: alias.clone(),

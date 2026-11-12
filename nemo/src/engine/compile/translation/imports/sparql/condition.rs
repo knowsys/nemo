@@ -28,7 +28,7 @@ use nemo_io::sparql::{
 use nemo_physical::value::DataValue;
 
 use crate::{
-    engine::compile::translation::Translator,
+    engine::compile::{optimize::column_position, translation::Translator},
     model::{Operation, Operator, Term, TermKind, VariableKind},
 };
 
@@ -333,13 +333,11 @@ impl Translator<'_> {
     }
 }
 
-/// Returns the number `N` of the delivered column that a variable `column N` refers to,
-/// or `None` for any other term.
+/// Returns the position of the delivered column that a term stands for,
+/// or `None` for a term that is no [column variable](column_position).
 fn column_number(term: &Term) -> Option<usize> {
     match &term.kind {
-        TermKind::Variable(variable) if variable.kind == VariableKind::Universal => {
-            variable.name.strip_prefix("column ")?.parse().ok()
-        }
+        TermKind::Variable(variable) => column_position(variable),
         _ => None,
     }
 }

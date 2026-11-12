@@ -37,7 +37,7 @@ use crate::{
     engine::{
         Engine, ExportSpec,
         compile::compiled::{CompiledProgram, CompiledRule, RuleSource, VariableId},
-        compile::optimize::{ImportSurvey, OptimizationPasses},
+        compile::optimize::{ImportSurvey, OptimizationPasses, column_position},
         compile::strata,
         compile::translation::{
             imports::PendingImport,
@@ -172,23 +172,6 @@ fn unsupported(what: &str, span: Option<Span>) -> Diagnostic {
         what: what.to_owned(),
     }
     .at(span)
-}
-
-/// Collects the variables of an import's condition that stand for delivered columns,
-/// each with its column's position as its variable id.
-///
-/// Delivered column `N` is the variable `column N`
-/// (see [column_variable](crate::engine::compile::optimize::column_variable)).
-fn collect_columns(operation: &Operation, names: &mut HashMap<String, VariableId>) {
-    for variable in operation.variables() {
-        if let Some(position) = variable
-            .name
-            .strip_prefix("column ")
-            .and_then(|position| position.parse().ok())
-        {
-            names.insert(variable.name.clone(), position);
-        }
-    }
 }
 
 /// The rules of one translation as they are compiled,
@@ -922,14 +905,19 @@ impl<'a> Translator<'a> {
     /// Compiles an import's condition into a program,
     /// and returns the columns that the program reads, in input order, with the program.
     ///
-    /// The condition refers to delivered column `N` by the variable `column N`,
-    /// whose id is `N`.
+    /// The condition refers to each delivered column by its
+    /// [column variable](crate::engine::compile::optimize::column_variable),
+    /// and the column's position is the variable's id.
     pub(crate) fn condition(
         &self,
         operation: &Operation,
     ) -> Result<(Vec<VariableId>, StackProgram), Diagnostic> {
-        let mut names: HashMap<String, VariableId> = HashMap::new();
-        collect_columns(operation, &mut names);
+        let names: HashMap<String, VariableId> = operation
+            .variables()
+            .into_iter()
+            .filter_map(|variable| Some((variable.name.clone(), column_position(variable)?)))
+            .collect();
+
         let mut builder = StackProgramBuilder::default();
         builder.operation(self, VariableScope::Rule(&names), operation)?;
         let inputs = builder.inputs.clone();

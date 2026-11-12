@@ -10,8 +10,8 @@ use nemo_physical::diagnostics::Diagnostic;
 use crate::{
     diagnostics::{AboutResource, ModuleError},
     engine::link::{
-        InstanceRenaming, anchor_import_resources, directory_of, files::identity,
-        location::Location,
+        INSTANCE_SEPARATOR, InstanceRenaming, anchor_import_resources, directory_of,
+        files::identity, location::Location,
     },
     model::{Directive, Identifier, Statement, UseDirective},
     pipeline::{NameScope, Pipeline},
@@ -67,7 +67,7 @@ impl InstantiatedModule {
             scope,
             inputs,
             bindings,
-            namespace: format!("{namespace}{}::", directive.alias),
+            namespace: format!("{namespace}{}{INSTANCE_SEPARATOR}", directive.alias),
         })
     }
 

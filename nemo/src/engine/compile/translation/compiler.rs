@@ -19,6 +19,7 @@ use crate::{
             ComputedColumn, ExistentialAtom, ExistentialTerm, FilterOrigin, HeadAtom, NegatedAtom,
             NegatedColumn, RuleBinding, RuleFilter, VariableId,
         },
+        compile::hidden::{Hidden, is_hidden},
         compile::translation::{
             AGGREGATE_RESULT, StackProgramBuilder, Translator, VariableScope,
             terms::{collect_aggregates, is_pattern, mentions},
@@ -30,11 +31,6 @@ use crate::{
         VariableKind, Walk,
     },
 };
-
-/// The hidden predicate with one row, which a rule body without positive atoms reads.
-///
-/// Its name begins with a NUL byte, which no program can write.
-const UNIT: &str = "\u{0}unit";
 
 /// Returns the diagnostic of an unsafe rule, for a variable that the body does not bind.
 ///
@@ -134,16 +130,16 @@ impl RuleCompiler<'_, '_> {
     /// Returns the written name of each of the first `width` rule columns,
     /// for the messages of the type analysis.
     ///
-    /// A column without a written name has `None`.
-    /// Such columns include those of hidden variables,
-    /// whose names begin with a NUL byte, which no program can write.
+    /// A column without a written name has `None`,
+    /// which includes the column of a [hidden](Hidden) variable.
     /// A name can also belong to a computed column, for a variable that an assignment binds.
     pub(super) fn source_names(&self, width: usize) -> Vec<Option<String>> {
         let mut names = vec![None; width];
         for (name, &variable) in &self.names {
-            if name.starts_with('\u{0}') {
+            if is_hidden(name) {
                 continue;
             }
+
             if let Some(slot) = names.get_mut(variable) {
                 *slot = Some(name.clone());
             }
@@ -184,12 +180,13 @@ impl RuleCompiler<'_, '_> {
         Ok(())
     }
 
-    /// Adds the atom that a body without positive atoms reads, which matches the one row of a
-    /// hidden table.
+    /// Adds the atom that a body without positive atoms reads,
+    /// which matches the one row of the [unit predicate](Hidden::Unit).
     ///
     /// So the body's conditions are evaluated once.
     pub(super) fn unit_atom(&mut self) -> Result<(), Diagnostic> {
-        let unit = Fact::new(Identifier::Iri(UNIT.to_owned()), vec![Term::integer(0)]);
+        let predicate = Identifier::Iri(Hidden::Unit.name());
+        let unit = Fact::new(predicate, vec![Term::integer(0)]);
         self.translator.fact(&unit)?;
         let table = self.translator.table(&unit.predicate, 1, None)?;
         let variable = self.fresh();
@@ -242,10 +239,10 @@ impl RuleCompiler<'_, '_> {
             )),
             _ if mentions(term, VariableKind::Universal) || is_pattern(term) => {
                 // An expression argument, or a pattern whose only variables are anonymous.
-                // The column gets a fresh named variable, and a deferred equality with the
+                // The column gets a hidden variable, and a deferred equality with the
                 // term constrains it. An expression is compared once the operation
                 // fixpoint has bound its inputs, and a pattern is destructured.
-                let name = format!("\u{0}expression{}", self.deferred.len());
+                let name = Hidden::Expression(self.deferred.len()).name();
                 let id = self.variable(&name);
                 self.deferred.push(Operation {
                     operator: Operator::Equal,
@@ -595,12 +592,11 @@ impl RuleCompiler<'_, '_> {
     }
 
     /// Returns the written name of a variable that binds a rule column,
-    /// or `None` if only a hidden variable binds it,
-    /// such as the variable that a check binds to a parameter without a value.
+    /// or `None` if only a [hidden](Hidden) variable binds it.
     fn written_name(&self, column: usize) -> Option<String> {
         self.names
             .iter()
-            .find(|(name, id)| **id == column && !name.starts_with('\u{0}'))
+            .find(|(name, id)| **id == column && !is_hidden(name))
             .map(|(name, _)| name.clone())
     }
 

@@ -25,7 +25,7 @@ mod fold;
 mod projection;
 mod survey;
 
-pub(crate) use filter_pushdown::{column_variable, conjoin};
+pub(crate) use filter_pushdown::{column_position, column_variable, conjoin};
 pub(crate) use survey::ImportSurvey;
 
 use std::fmt;

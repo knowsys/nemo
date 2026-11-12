@@ -170,12 +170,21 @@ fn single_variable(term: &Term) -> Option<String> {
     found.map(str::to_owned)
 }
 
-/// Returns the variable that stands for a delivered column in an import's condition.
+/// What the name of a [column variable](column_variable) begins with.
 ///
-/// Its name, `column N`, contains a space, which no variable written in a program can,
-/// so it collides with no rule variable.
+/// It contains a space, which no variable written in a program can,
+/// so a column variable collides with no rule variable.
+const COLUMN_PREFIX: &str = "column ";
+
+/// Returns the variable that stands for a delivered column in an import's condition.
 pub(crate) fn column_variable(position: usize) -> Term {
-    Term::variable(Variable::universal(format!("column {position}")))
+    Term::variable(Variable::universal(format!("{COLUMN_PREFIX}{position}")))
+}
+
+/// Returns the position of the delivered column that a [column variable](column_variable)
+/// stands for, or `None` for any other variable.
+pub(crate) fn column_position(variable: &Variable) -> Option<usize> {
+    variable.name.strip_prefix(COLUMN_PREFIX)?.parse().ok()
 }
 
 /// Returns, per variable, the body comparisons between a ground value and an expression over
