@@ -359,9 +359,11 @@ impl Engine {
     }
 
     /// Forgets what the runs of the replaced program left behind:
-    /// no table is marked as having gained input facts, the fixpoint is not reached,
+    /// no rule was applied, no table is marked as having gained input facts,
+    /// the fixpoint is not reached,
     /// and the application log, the run contexts and the derivation times are empty.
     fn forget_runs(&mut self) {
+        self.last_applied.clear();
         self.dirty.clear();
         self.fixpoint = false;
         self.applications.clear();

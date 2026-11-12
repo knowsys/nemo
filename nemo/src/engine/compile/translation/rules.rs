@@ -85,7 +85,6 @@ impl<'a> Translator<'a> {
             existential: head.existential,
             never_fires: compiler.never_fires,
             nondeterministic,
-            last_applied: 0,
             fetch: None,
         };
 

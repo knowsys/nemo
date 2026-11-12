@@ -174,7 +174,17 @@ pub(crate) struct PlanSkeleton {
     probe: Option<usize>,
 }
 
-/// Applies one rule at the given step.
+/// The delta window of one rule application:
+/// the steps between which the tables of the rule's body gained the rows that are new to it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct DeltaWindow {
+    /// The step of the rule's last application, or 0 before the first.
+    pub(crate) last: u64,
+    /// The step of this application.
+    pub(crate) now: u64,
+}
+
+/// Applies one rule over its delta window.
 ///
 /// Returns the derived rows per head table, without the rows already stored,
 /// and the evaluation-error counts.
@@ -189,7 +199,7 @@ pub(crate) struct PlanSkeleton {
 pub(crate) fn apply(
     rule: &CompiledRule,
     skeleton: &mut PlanSkeleton,
-    step: u64,
+    window: DeltaWindow,
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
@@ -200,9 +210,9 @@ pub(crate) fn apply(
     let last = if rule.aggregate.is_some() {
         Revision(0)
     } else {
-        Revision(rule.last_applied)
+        Revision(window.last)
     };
-    let now = Revision(step);
+    let now = Revision(window.now);
 
     // A delta window starts at the table's block boundary at or before
     // the rule's last application. The rows it reads again are derived again

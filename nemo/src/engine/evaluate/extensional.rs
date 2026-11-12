@@ -72,7 +72,7 @@ impl Engine {
     ///
     /// A reset rule starts over, as if it had never been applied.
     /// Programs without negation or aggregation never drop a row.
-    pub(super) fn drop_invalidated(&mut self, program: &mut CompiledProgram) {
+    pub(super) fn drop_invalidated(&mut self, program: &CompiledProgram) {
         if self.dirty.is_empty() {
             return;
         }
@@ -129,9 +129,9 @@ impl Engine {
             removed += self.drop_derived(table);
         }
 
-        for (rule, flag) in program.rules.iter_mut().zip(&reset) {
+        for (last_applied, flag) in self.last_applied.iter_mut().zip(&reset) {
             if *flag {
-                rule.last_applied = 0;
+                *last_applied = 0;
             }
         }
 

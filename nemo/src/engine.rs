@@ -166,7 +166,14 @@ pub struct Engine {
     /// reads.
     modules: link::ModuleSources,
     /// The compiled program, or `None` before [load](Self::load).
-    program: Option<CompiledProgram>,
+    ///
+    /// A run shares it, and nothing changes it while a run holds it.
+    program: Option<Arc<CompiledProgram>>,
+    /// Per rule of the compiled program, by index, the step of the rule's last application,
+    /// or 0 before the first.
+    ///
+    /// A rule reads the rows that its body's tables gained since then.
+    last_applied: Vec<u64>,
     /// The translation state kept between translations.
     ///
     /// An extension, and the rows added through [import_rows](Self::import_rows) after a

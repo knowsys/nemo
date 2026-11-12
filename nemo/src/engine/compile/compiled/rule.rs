@@ -46,8 +46,6 @@ pub(crate) struct CompiledRule {
     /// since reading a body row again would compute a new value,
     /// and deduplication against the head cannot remove a row with a fresh value.
     pub(crate) nondeterministic: bool,
-    /// The engine step of the rule's last application, or 0 before the first.
-    pub(crate) last_applied: u64,
     /// The fetch that the rule performs instead of a join,
     /// if the rule is compiled from a SPARQL import with a `where` clause.
     ///
@@ -90,7 +88,6 @@ impl CompiledRule {
             existential: None,
             never_fires: true,
             nondeterministic: false,
-            last_applied: 0,
             fetch: None,
         }
     }

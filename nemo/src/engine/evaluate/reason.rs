@@ -11,7 +11,7 @@
 //! A run is suspended if a fetch rule needs data from the network,
 //! and continues at the rule application where it was suspended.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -28,7 +28,7 @@ use crate::{
         Engine,
         compile::compiled::{CompiledFetch, CompiledProgram, CompiledRule},
         evaluate::{
-            application::{self, Applied},
+            application::{self, Applied, DeltaWindow},
             fetch::{self, FetchOutcome, Fetched, PendingFetch},
         },
         registered::Registered,
@@ -171,18 +171,23 @@ impl Engine {
     /// `observe` asks for observations of the semi-naive variants, for telemetry.
     fn apply_rule(
         &mut self,
-        rule: &mut CompiledRule,
+        rule: &CompiledRule,
         index: usize,
         step: u64,
         context: EvaluationContext,
         observe: bool,
         suspended: Option<Box<PendingFetch>>,
     ) -> Result<ApplicationOutcome, Diagnostic> {
+        let window = DeltaWindow {
+            last: self.last_applied[index],
+            now: step,
+        };
+
         if let Some(fetch) = &rule.fetch {
             let outcome = fetch::apply(
                 rule,
                 index,
-                step,
+                window,
                 &mut self.manager,
                 &mut self.dictionary,
                 context,
@@ -216,7 +221,7 @@ impl Engine {
         Ok(ApplicationOutcome::Applied(application::apply(
             rule,
             skeleton,
-            step,
+            window,
             &mut self.manager,
             &mut self.dictionary,
             context,
@@ -318,7 +323,8 @@ impl Engine {
     /// Starts or continues a run, until the fixpoint, a cancellation or a suspension
     /// (see [reason](Self::reason)).
     pub(in crate::engine) fn reason_to_fixpoint(&mut self) -> Result<Progress, Diagnostic> {
-        let Some(mut program) = self.program.take() else {
+        // The run reads the program while it changes the rest of the engine.
+        let Some(program) = self.program.as_ref().map(Arc::clone) else {
             return Err(EngineError::NoProgram.diagnostic());
         };
 
@@ -345,18 +351,13 @@ impl Engine {
         };
 
         // New input facts first invalidate the derived facts that depend
-        // on them through negation or aggregation (see `drop_invalidated`). The
-        // strata are moved out for the iterations and put back afterwards,
-        // so the engine keeps its program even if an application fails.
-        let strata = std::mem::take(&mut program.strata);
+        // on them through negation or aggregation (see `drop_invalidated`).
         if resumed.is_none() {
-            self.drop_invalidated(&mut program);
+            self.drop_invalidated(&program);
             self.contexts.begin(self.step, context);
         }
 
-        let outcome = self.iterate_strata(&mut program, &strata, context, resumed);
-        program.strata = strata;
-        self.program = Some(program);
+        let outcome = self.iterate_strata(&program, context, resumed);
         let ended = match outcome {
             Ok(RunOutcome::Suspended(suspended)) => {
                 return Ok(self.suspend(Suspension::Reason(suspended)));
@@ -399,11 +400,12 @@ impl Engine {
     /// Returns how the run ended.
     fn iterate_strata(
         &mut self,
-        program: &mut CompiledProgram,
-        strata: &[Vec<usize>],
+        program: &CompiledProgram,
         context: EvaluationContext,
         resumed: Option<SuspendedReasoning>,
     ) -> Result<RunOutcome, Diagnostic> {
+        let strata = &program.strata;
+
         // The token is cleared where a public method starts or continues a run, not here.
         // One `reason()` continues its run after every fetch, and a cancellation that arrives
         // in between must stop it.
@@ -528,7 +530,7 @@ impl Engine {
     /// Returns the number of rows that the iteration stored, and how it ended.
     fn run_iteration(
         &mut self,
-        program: &mut CompiledProgram,
+        program: &CompiledProgram,
         active: &[usize],
         from: usize,
         context: EvaluationContext,
@@ -546,7 +548,7 @@ impl Engine {
                 return Ok((stored, IterationOutcome::Cancelled));
             }
 
-            let rule = &mut rules[index];
+            let rule = &rules[index];
             match self.apply_and_store(rule, index, column_types, context, suspended.take())? {
                 StoreOutcome::Stored(rows) => stored += rows,
                 StoreOutcome::Suspended(fetch) => {
@@ -566,11 +568,12 @@ impl Engine {
     ///
     /// The tables' last nonempty revisions give the exact answer,
     /// however their blocks have merged.
-    fn has_fresh_input(&self, rule: &CompiledRule) -> bool {
+    fn has_fresh_input(&self, rule: &CompiledRule, index: usize) -> bool {
+        let last = Revision(self.last_applied[index]);
         rule.body.iter().any(|atom| {
             self.manager
                 .last_added(atom.table)
-                .is_some_and(|added| added >= Revision(rule.last_applied))
+                .is_some_and(|added| added >= last)
         })
     }
 
@@ -584,14 +587,14 @@ impl Engine {
     /// `column_types` are the program's inferred column types, by table.
     fn apply_and_store(
         &mut self,
-        rule: &mut CompiledRule,
+        rule: &CompiledRule,
         index: usize,
         column_types: &HashMap<TableId, Vec<Type>>,
         context: EvaluationContext,
         suspended: Option<Box<PendingFetch>>,
     ) -> Result<StoreOutcome, Diagnostic> {
-        if suspended.is_none() && !self.has_fresh_input(rule) {
-            rule.last_applied = self.step;
+        if suspended.is_none() && !self.has_fresh_input(rule, index) {
+            self.last_applied[index] = self.step;
             return Ok(StoreOutcome::Stored(0));
         }
 
@@ -624,7 +627,7 @@ impl Engine {
         self.timings.apply += applied;
         self.timings.execution.absorb(&timings);
         self.timings.counts.absorb(&counts);
-        rule.last_applied = step;
+        self.last_applied[index] = step;
         let dropped = errors.total();
         self.errors.absorb(&errors);
 
@@ -737,7 +740,7 @@ impl Engine {
     /// The price is merges that rewrite more rows than doubling merges do.
     fn consolidate(&mut self, program: &CompiledProgram, iteration_start: u64) {
         let begun = Stopwatch::start();
-        let mut walls = Self::exact_walls(program);
+        let mut walls = self.exact_walls(program);
         walls.push(Revision(iteration_start));
         let tables: Vec<TableId> = self
             .predicates
@@ -761,7 +764,7 @@ impl Engine {
     /// and every later read of it pays for each of its blocks.
     fn consolidate_finished(&mut self, program: &CompiledProgram, tables: &[TableId]) {
         let begun = Stopwatch::start();
-        let walls = Self::exact_walls(program);
+        let walls = self.exact_walls(program);
         for &table in tables {
             self.consolidate_table(table, &walls, MergePolicy::Whole);
         }
@@ -777,12 +780,13 @@ impl Engine {
     /// So the block boundary at their last application must survive every merge in every
     /// stratum, since a later stratum's rule reads this stratum's tables from its own last
     /// application on.
-    fn exact_walls(program: &CompiledProgram) -> Vec<Revision> {
+    fn exact_walls(&self, program: &CompiledProgram) -> Vec<Revision> {
         program
             .rules
             .iter()
-            .filter(|rule| rule.exact_windows())
-            .map(|rule| Revision(rule.last_applied))
+            .zip(&self.last_applied)
+            .filter(|(rule, _)| rule.exact_windows())
+            .map(|(_, &last_applied)| Revision(last_applied))
             .collect()
     }
 

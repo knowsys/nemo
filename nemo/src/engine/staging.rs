@@ -17,6 +17,8 @@ mod reload;
 mod rows;
 mod translate;
 
+use std::sync::Arc;
+
 use nemo_physical::{
     diagnostics::{Diagnostic, Severity},
     management::{ColumnOrder, Revision, TableId},
@@ -207,7 +209,8 @@ impl Engine {
             Ok(Loaded::Done(compiled)) => {
                 let (rules, strata) = (compiled.rules.len(), compiled.strata.len());
                 self.skeletons.clear();
-                self.program = Some(compiled);
+                self.last_applied.resize(compiled.rules.len(), 0);
+                self.program = Some(Arc::new(compiled));
                 self.revision = Some(program.revision);
                 self.written = Some(program.written);
 

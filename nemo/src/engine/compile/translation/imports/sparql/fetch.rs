@@ -116,7 +116,6 @@ impl<'a> Translator<'a> {
             existential: None,
             never_fires: false,
             nondeterministic: false,
-            last_applied: 0,
             fetch: Some(CompiledFetch {
                 endpoint: spec.endpoint.clone(),
                 query: spec.query.clone(),

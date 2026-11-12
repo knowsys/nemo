@@ -15,7 +15,7 @@ use crate::{
     diagnostics::EngineError,
     engine::{
         Engine,
-        compile::{compiled::CompiledProgram, translation::Purpose},
+        compile::translation::Purpose,
         evaluate::extensional::ExtensionalOrigin,
         remote::{LoadKind, Progress, SuspendedLoad},
         staging::{
@@ -209,7 +209,7 @@ impl Engine {
             Translated::Missing(missing) => return Ok(Loaded::Missing(missing)),
             Translated::Unstable(unstable) => return Err(refuse_unstable(&unstable)),
         };
-        let mut compiled = translated.compiled;
+        let compiled = translated.compiled;
 
         // The extension's rows go into one new revision.
         self.assert_stored_types_of(&compiled, &translated.facts);
@@ -220,32 +220,19 @@ impl Engine {
         }
 
         self.dirty.extend(grown);
-        self.adopt_extension(&mut compiled);
+
+        // The loaded statements come first in the staged program, so the loaded rules keep
+        // their indices, and with them the steps of their last applications:
+        // their semi-naive evaluation continues where it left off.
+        // A new rule may add facts to its head predicates for the first time.
+        // Their tables are conservatively marked as gaining input facts,
+        // so the derived facts that depend on them through negation or aggregation are
+        // dropped and derived again.
+        let added = compiled.rules.iter().skip(self.last_applied.len());
+        let heads: Vec<TableId> = added.flat_map(Self::head_tables).collect();
+        self.dirty.extend(heads);
         self.fixpoint = false;
 
         Ok(Loaded::Done(compiled))
-    }
-
-    /// Copies the semi-naive progress of each loaded rule into the extended program.
-    ///
-    /// The loaded statements come first in the merged program,
-    /// so the loaded rules keep their indices and the step of their last application,
-    /// and semi-naive evaluation continues where it left off.
-    /// A new rule may add facts to its head predicates for the first time.
-    /// Their tables are conservatively marked as gaining input facts,
-    /// so the derived facts that depend on them through negation or aggregation are dropped
-    /// and derived again.
-    fn adopt_extension(&mut self, compiled: &mut CompiledProgram) {
-        let loaded = self
-            .program
-            .as_ref()
-            .expect("an extension extends a program");
-        for (rule, previous) in compiled.rules.iter_mut().zip(&loaded.rules) {
-            rule.last_applied = previous.last_applied;
-        }
-
-        let added = compiled.rules.iter().skip(loaded.rules.len());
-        let heads: Vec<TableId> = added.flat_map(Self::head_tables).collect();
-        self.dirty.extend(heads);
     }
 }

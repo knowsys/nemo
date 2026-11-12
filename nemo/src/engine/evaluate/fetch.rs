@@ -34,7 +34,10 @@ use crate::{
     diagnostics::AboutResource,
     engine::{
         compile::compiled::{BodyAtom, CompiledFetch, CompiledRule, FetchColumn},
-        evaluate::{application::Applied, body::BodySpace},
+        evaluate::{
+            application::{Applied, DeltaWindow},
+            body::BodySpace,
+        },
         remote::RequestSlots,
     },
     model::OnError,
@@ -126,7 +129,7 @@ pub(super) enum FetchOutcome {
     Suspended(PendingFetch),
 }
 
-/// Applies a fetch rule at the given step.
+/// Applies a fetch rule over its delta window.
 ///
 /// The binding atoms' rows since the rule's last application are sent to the endpoint,
 /// and the solutions become the head table's new rows,
@@ -144,13 +147,14 @@ pub(super) enum FetchOutcome {
 pub(super) fn apply(
     rule: &CompiledRule,
     index: usize,
-    step: u64,
+    window: DeltaWindow,
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
     resumed: Option<PendingFetch>,
     ids: &mut u64,
 ) -> Result<FetchOutcome, Diagnostic> {
+    let step = window.now;
     let fetch = rule.fetch.as_ref().expect("a fetch rule carries its fetch");
     let head = rule.heads.first().expect("a fetch rule has its head");
     let arity = head.columns.len();
@@ -167,7 +171,7 @@ pub(super) fn apply(
             let ApplicationRequests {
                 requests,
                 blank_bindings,
-            } = requests(rule, fetch, step, manager, dictionary, context)?;
+            } = requests(rule, fetch, window, manager, dictionary, context)?;
             if requests.is_empty() {
                 let fetched = Fetched {
                     blank_bindings,
@@ -301,13 +305,13 @@ impl PendingFetch {
 fn requests(
     rule: &CompiledRule,
     fetch: &CompiledFetch,
-    step: u64,
+    window: DeltaWindow,
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
 ) -> Result<ApplicationRequests, Diagnostic> {
-    let last = Revision(rule.last_applied);
-    let now = Revision(step);
+    let last = Revision(window.last);
+    let now = Revision(window.now);
     let count = rule.body.len();
     let mut requests = Vec::new();
     let mut blank_bindings = 0;

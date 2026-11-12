@@ -1,6 +1,6 @@
 //! Adding rows through [import_rows](crate::engine::Engine::import_rows).
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use nemo_physical::{
     diagnostics::{Diagnostic, Severity},
@@ -72,9 +72,10 @@ impl Engine {
         if !self.seeds_within_inferred(table) {
             match self.reanalyze() {
                 Ok(column_types) => {
-                    if let Some(program) = &mut self.program {
-                        program.column_types = column_types;
-                    }
+                    let program = self.program.as_mut().and_then(Arc::get_mut);
+                    program
+                        .expect("no run holds the program while rows are added")
+                        .column_types = column_types;
                 }
                 Err(problem) => {
                     self.restore_seeds(table, seeds_before);
