@@ -7,10 +7,13 @@
 //! - a format name is matched by its spelling.
 //!
 //! An [IdentifierRenaming] decides what each name becomes,
-//! and returns `None` to leave a name unchanged,
-//! so the same walk can also inspect the names without allocating.
+//! and returns `None` to leave a name unchanged.
 //! The walk also visits the names of global variables and the labels of blank nodes,
 //! which are not [Identifier]s, through separate methods.
+//!
+//! A caller that only reads the names does so through the same walk
+//! ([visit_identifiers](Statement::visit_identifiers)),
+//! so that one walk decides where the names of a statement are.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -81,6 +84,39 @@ impl Statement {
         rename: &mut impl IdentifierRenaming,
     ) -> Result<(), Diagnostic> {
         statement(self, rename)
+    }
+
+    /// Calls `visit` on every name of the statement, with its role.
+    ///
+    /// The names are those that [rename_identifiers](Self::rename_identifiers) visits.
+    /// That walk renames in place, so it runs over a copy of the statement.
+    pub(crate) fn visit_identifiers(&self, mut visit: impl FnMut(&Identifier, IdentifierRole)) {
+        let mut look = |identifier: &Identifier,
+                        role: IdentifierRole,
+                        _: Option<Span>|
+         -> Result<Option<Identifier>, Diagnostic> {
+            visit(identifier, role);
+            Ok(None)
+        };
+
+        self.clone()
+            .rename_identifiers(&mut look)
+            .expect("a walk that renames nothing fails nowhere");
+    }
+
+    /// Calls `visit` on every predicate that the statement names.
+    pub(crate) fn visit_predicates(&self, mut visit: impl FnMut(&Identifier)) {
+        // A fact names one predicate, and the walk would copy its terms to find no other.
+        if let Statement::Fact(fact) = self {
+            visit(&fact.predicate);
+            return;
+        }
+
+        self.visit_identifiers(|identifier, role| {
+            if role == IdentifierRole::Predicate {
+                visit(identifier);
+            }
+        });
     }
 }
 

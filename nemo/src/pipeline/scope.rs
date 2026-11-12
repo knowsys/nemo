@@ -29,7 +29,7 @@ impl NameScope {
     /// The first `@base` counts,
     /// and [check_base](Self::check_base) rejects a later one with a different IRI.
     /// A later `@prefix` for the same prefix replaces an earlier one.
-    pub(crate) fn of(statements: &[Statement]) -> Self {
+    pub(crate) fn of<'s>(statements: impl IntoIterator<Item = &'s Statement>) -> Self {
         let mut scope = Self::default();
         for statement in statements {
             match statement {

@@ -2,9 +2,7 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use nemo_physical::diagnostics::Diagnostic;
-
-use crate::model::{Directive, Identifier, IdentifierRole, Span, Statement};
+use crate::model::{Directive, Identifier, Statement};
 
 /// A construct of the rule language that [linking](crate::engine::Engine::link) resolves,
 /// so that a loaded program never contains it.
@@ -29,17 +27,10 @@ impl UnlinkedConstruct {
             UnlinkedConstruct::Use => matches!(statement, Statement::Directive(Directive::Use(_))),
             UnlinkedConstruct::QualifiedName => {
                 let mut found = false;
-                let mut look = |identifier: &Identifier,
-                                _: IdentifierRole,
-                                _: Option<Span>|
-                 -> Result<Option<Identifier>, Diagnostic> {
+                statement.visit_identifiers(|identifier, _| {
                     found |= matches!(identifier, Identifier::Qualified { .. });
-                    Ok(None)
-                };
-                statement
-                    .clone()
-                    .rename_identifiers(&mut look)
-                    .expect("looking at names fails nowhere");
+                });
+
                 found
             }
         }

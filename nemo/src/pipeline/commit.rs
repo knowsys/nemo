@@ -30,7 +30,7 @@ use std::{cell::OnceCell, collections::HashSet};
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
-    model::{Directive, Identifier, IdentifierRole, Span, Statement},
+    model::{Directive, Identifier, Statement},
     pipeline::{
         NameScope, Pipeline, RevisionId, StatementId, UnlinkedConstruct,
         provenance::ProvenanceEdge, revision::ProgramRevision,
@@ -463,12 +463,11 @@ impl<'a> Commit<'a> {
     /// Returns the name scope of the base revision.
     fn scope(&self) -> &NameScope {
         self.scope.get_or_init(|| {
-            let statements: Vec<Statement> = self
-                .pipeline
-                .statements(self.base)
-                .map(|(_, statement)| statement.clone())
-                .collect();
-            NameScope::of(&statements)
+            NameScope::of(
+                self.pipeline
+                    .statements(self.base)
+                    .map(|(_, statement)| statement),
+            )
         })
     }
 
@@ -479,31 +478,11 @@ impl<'a> Commit<'a> {
         let scope = self.scope();
         let mut names = HashSet::new();
         for &id in ids {
-            // A fact names only its predicate, so it is not cloned for the walk below.
-            if let Statement::Fact(fact) = self.pipeline.statement(id) {
-                if let Ok(name) = scope.resolve(&fact.predicate, None) {
+            self.pipeline.statement(id).visit_predicates(|predicate| {
+                if let Ok(name) = scope.resolve(predicate, None) {
                     names.insert(name);
                 }
-
-                continue;
-            }
-
-            let mut note = |identifier: &Identifier,
-                            role: IdentifierRole,
-                            _: Option<Span>|
-             -> Result<Option<Identifier>, Diagnostic> {
-                if role == IdentifierRole::Predicate
-                    && let Ok(name) = scope.resolve(identifier, None)
-                {
-                    names.insert(name);
-                }
-                Ok(None)
-            };
-            self.pipeline
-                .statement(id)
-                .clone()
-                .rename_identifiers(&mut note)
-                .expect("noting names fails nowhere");
+            });
         }
 
         names

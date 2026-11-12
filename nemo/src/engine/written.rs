@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
-    model::{Atom, Directive, Identifier, IdentifierRole, Rule, Span, Statement},
+    model::{Atom, Directive, Identifier, Rule, Statement},
     pipeline::{NameScope, Pipeline, RevisionId, RewriteDeclaration, StatementId},
 };
 
@@ -72,14 +72,11 @@ impl WrittenProgram {
             .enumerate()
             .map(|(position, &id)| (id, position))
             .collect();
-        let texts: Vec<Statement> = pipeline
-            .statements(written)
-            .map(|(_, statement)| statement.clone())
-            .collect();
-        let scope = NameScope::of(&texts);
-        let outputs = declared_outputs(&texts, &scope);
+        let texts = || pipeline.statements(written).map(|(_, statement)| statement);
+        let scope = NameScope::of(texts());
+        let outputs = declared_outputs(texts(), &scope);
         let mut predicates = HashMap::new();
-        for statement in texts {
+        for statement in texts() {
             note_statement(&mut predicates, &scope, statement);
         }
 
@@ -178,7 +175,10 @@ impl WrittenProgram {
 
 /// Returns the predicates statements declare `@output` or export, by
 /// resolved name, each once, in declaration order.
-fn declared_outputs(statements: &[Statement], scope: &NameScope) -> Vec<String> {
+fn declared_outputs<'s>(
+    statements: impl IntoIterator<Item = &'s Statement>,
+    scope: &NameScope,
+) -> Vec<String> {
     let mut outputs: Vec<String> = Vec::new();
     for statement in statements {
         let predicates: Vec<&Identifier> = match statement {
@@ -203,7 +203,7 @@ fn declared_outputs(statements: &[Statement], scope: &NameScope) -> Vec<String> 
 fn note_statement(
     predicates: &mut HashMap<String, WrittenPredicate>,
     scope: &NameScope,
-    mut statement: Statement,
+    statement: &Statement,
 ) {
     let mut note = |identifier: &Identifier, usage: PredicateUse, arity: Option<usize>| {
         let Ok(name) = scope.resolve(identifier, None) else {
@@ -216,7 +216,7 @@ fn note_statement(
         predicate.arity = predicate.arity.or(arity);
     };
     let by_position = |atom: &Atom| atom.labels.is_none().then_some(atom.terms.len());
-    match &statement {
+    match statement {
         Statement::Fact(fact) => {
             let arity = fact.labels.is_none().then_some(fact.terms.len());
             note(&fact.predicate, PredicateUse::Input, arity);
@@ -246,18 +246,7 @@ fn note_statement(
 
     // Every other predicate the statement names, as a declaration or an
     // output does.
-    let mut named = |identifier: &Identifier,
-                     role: IdentifierRole,
-                     _: Option<Span>|
-     -> Result<Option<Identifier>, Diagnostic> {
-        if role == IdentifierRole::Predicate {
-            note(identifier, PredicateUse::Read, None);
-        }
-        Ok(None)
-    };
-    statement
-        .rename_identifiers(&mut named)
-        .expect("noting names fails nowhere");
+    statement.visit_predicates(|predicate| note(predicate, PredicateUse::Read, None));
 }
 
 /// Returns, per name of a predicate that a stage introduced on the way to a revision,

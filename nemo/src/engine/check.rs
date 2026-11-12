@@ -24,7 +24,7 @@ use crate::{
         compile::translation::{Purpose, TranslationState},
         written::WrittenProgram,
     },
-    model::{Program, Statement},
+    model::Program,
     pipeline::NameScope,
 };
 
@@ -84,14 +84,13 @@ impl Engine {
             Purpose::Check,
         )?;
         let written = WrittenProgram::new(&self.pipeline, staged.written, staged.revision);
-        let texts: Vec<Statement> = self
+        let texts = self
             .pipeline
             .statements(staged.written)
-            .map(|(_, statement)| statement.clone())
-            .collect();
+            .map(|(_, statement)| statement);
 
         Ok(InferredTypes::of_check(
-            NameScope::of(&texts),
+            NameScope::of(texts),
             written.predicates(),
             &tables,
             &compiled,
