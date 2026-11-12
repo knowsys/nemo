@@ -7,16 +7,14 @@
 
 use std::{sync::Arc, time::Duration};
 
-use nemo::{
-    engine::Engine,
-    telemetry::{ErrorCount, PredicateSize, Recorder, ReportDocument, RunFacts},
-};
+use nemo::{engine::Engine, telemetry::Recorder};
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
     arguments::Report,
     dashboard::Dashboard,
     error::CliError,
+    report::{ErrorCount, PredicateSize, ReportDocument, RunFacts},
     run::{Part, Run, Times},
     stdout,
 };

@@ -30,7 +30,7 @@ pub(super) fn render(document: &str, live: bool) -> String {
 mod tests {
     use super::*;
 
-    use crate::telemetry::ReportDocument;
+    use crate::report::ReportDocument;
 
     /// A page embeds the document and sets the live flag.
     #[test]

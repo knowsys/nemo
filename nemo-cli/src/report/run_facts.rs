@@ -2,12 +2,9 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::{
+use nemo::{
     pipeline::RevisionText,
-    telemetry::{
-        EngineTimings,
-        report::tables::{NamedCounts, PhaseTable, WorkTable},
-    },
+    telemetry::{EngineTimings, NamedCounts, PhaseTable, WorkTable},
 };
 
 /// The facts about a run of a program that exist only once it is over.
@@ -15,62 +12,62 @@ use crate::{
 /// A run here is the parsing, loading, reasoning and exporting of one program.
 /// The facts are the wall times of these parts, the final sizes,
 /// and the row counts of the predicates.
-/// They are the part of the [document](crate::telemetry::ReportDocument)
+/// They are the part of the [document](crate::report::ReportDocument)
 /// beside the recorder's snapshot.
 /// Times are in nanoseconds and sizes in bytes.
 #[derive(Debug, Clone, Default)]
-pub struct RunFacts {
+pub(crate) struct RunFacts {
     /// The wall time of reading and parsing the programs.
-    pub parse: u64,
+    pub(crate) parse: u64,
     /// The wall time of loading the imported data.
-    pub load: u64,
+    pub(crate) load: u64,
     /// The wall time of reasoning to the fixpoint.
-    pub reason: u64,
+    pub(crate) reason: u64,
     /// The wall time of writing the exports.
-    pub export: u64,
+    pub(crate) export: u64,
     /// The wall time of the run, from its start until its results are written.
-    pub total: u64,
+    pub(crate) total: u64,
     /// The wall time of tracing, if the run traced.
     ///
     /// A trace follows the results, so the total does not include it.
-    pub trace: Option<u64>,
+    pub(crate) trace: Option<u64>,
     /// The number of facts stored by loading.
-    pub loaded: u64,
+    pub(crate) loaded: u64,
     /// The number of new facts derived beyond the loaded ones.
-    pub derived: u64,
+    pub(crate) derived: u64,
     /// The number of rule applications,
-    /// as the engine [counts them](crate::engine::Engine::applications).
-    pub applications: u64,
+    /// as the engine [counts them](nemo::engine::Engine::applications).
+    pub(crate) applications: u64,
     /// The bytes used by the stored tables and the dictionary.
-    pub memory: u64,
+    pub(crate) memory: u64,
     /// The engine's cumulative accounting of its reasoning.
-    pub timings: EngineTimings,
+    pub(crate) timings: EngineTimings,
     /// The evaluation errors by kind, for the kinds that occurred.
-    pub errors: Vec<ErrorCount>,
+    pub(crate) errors: Vec<ErrorCount>,
     /// The stored predicates.
-    pub predicates: Vec<PredicateSize>,
+    pub(crate) predicates: Vec<PredicateSize>,
     /// The program as loaded, and after every pipeline stage that rewrote it, in order.
-    pub programs: Vec<RevisionText>,
+    pub(crate) programs: Vec<RevisionText>,
 }
 
 /// The evaluation errors of one kind.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ErrorCount {
+pub(crate) struct ErrorCount {
     /// The kind's name.
-    pub kind: String,
+    pub(crate) kind: String,
     /// The number of rows that errors of this kind dropped.
-    pub count: u64,
+    pub(crate) count: u64,
 }
 
 /// The size of one stored predicate.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct PredicateSize {
+pub(crate) struct PredicateSize {
     /// The predicate's name.
-    pub name: String,
+    pub(crate) name: String,
     /// Its number of columns.
-    pub columns: usize,
+    pub(crate) columns: usize,
     /// Its number of rows.
-    pub rows: u64,
+    pub(crate) rows: u64,
 }
 
 /// The wall times of the parts of a run, as the document nests them.

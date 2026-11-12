@@ -9,7 +9,7 @@ use crate::telemetry::{
         curves::{BoundedCurve, IterationPoint, TimelinePoint},
         orders::VariantOrderStats,
     },
-    report::tables::{NamedCount, NamedCounts, PhaseTable, WorkTable},
+    tables::{NamedCount, NamedCounts, PhaseTable, WorkTable},
 };
 
 /// The number of timeline entries at which the curve coarsens into wider time windows.

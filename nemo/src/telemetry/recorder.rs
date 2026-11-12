@@ -285,7 +285,7 @@ mod tests {
     /// The snapshot after one event of every kind, at synthetic stamps,
     /// has every key in order, byte for byte.
     ///
-    /// Readers of the snapshot, such as the report page, rely on its shape.
+    /// Readers of the snapshot rely on its shape.
     #[test]
     fn snapshots_keep_their_shape() {
         let mut state = RecorderState::default();

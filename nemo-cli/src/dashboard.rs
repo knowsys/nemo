@@ -2,7 +2,7 @@
 //!
 //! It listens on the loopback interface, with one thread that accepts connections
 //! and one thread per connection.
-//! It serves the [report page](nemo::telemetry::ReportDocument::page) in live mode at `/`,
+//! It serves the [report page](crate::report::ReportDocument::page) in live mode at `/`,
 //! and at `/events` a stream of server-sent events that sends the current report document
 //! whenever the [Recorder] changes.
 //! The engine's thread only writes to the recorder,
@@ -16,7 +16,9 @@ use std::{
     time::Duration,
 };
 
-use nemo::telemetry::{Recorder, ReportDocument, RunFacts};
+use nemo::telemetry::Recorder;
+
+use crate::report::{ReportDocument, RunFacts};
 
 /// How often the event stream checks for changes, which limits how often it sends a document.
 const POLL: Duration = Duration::from_millis(250);

@@ -9,9 +9,8 @@
 //! - The [LogSink] emits each event as a `tracing` event under the [TARGET] target,
 //!   where a `tracing` subscriber receives it along with the engine's log lines.
 //!
-//! A [ReportDocument] combines a recorder with the [RunFacts] of a finished run into one JSON
-//! document, which it can also render as an HTML page.
-//! The [PhaseTable] lists the phase accounting under the names that the documents use.
+//! The [PhaseTable] and the [WorkTable] list the engine's accounting under the names that the
+//! recorder's snapshots use, for other reports of a run to use the same.
 //!
 //! A sink can be installed on the engine directly, without a `tracing` subscriber:
 //!
@@ -42,17 +41,17 @@
 mod event;
 mod event_sink;
 mod recorder;
-mod report;
 mod sink_slot;
 mod stream;
+mod tables;
 mod timings;
 
 pub use self::{
     event::EngineEvent,
     event_sink::EventSink,
     recorder::{Recorder, RuleSummary},
-    report::{ErrorCount, NamedCount, PhaseTable, PredicateSize, ReportDocument, RunFacts},
     stream::{LogSink, TARGET},
+    tables::{NamedCount, NamedCounts, PhaseTable, WorkTable},
     timings::EngineTimings,
 };
 pub use nemo_physical::stopwatch::Stopwatch;

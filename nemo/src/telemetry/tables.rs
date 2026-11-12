@@ -12,7 +12,8 @@ use crate::telemetry::EngineTimings;
 pub type NamedCount = (&'static str, u64);
 
 /// Named numbers serialized as one JSON object, in their order.
-pub(crate) struct NamedCounts<'a>(pub(crate) &'a [NamedCount]);
+#[derive(Debug, Clone, Copy)]
+pub struct NamedCounts<'a>(pub &'a [NamedCount]);
 
 impl Serialize for NamedCounts<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -86,7 +87,7 @@ impl PhaseTable {
 
 /// The work table, which lists what plan execution counted, with the peak buffer size last.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkTable(Vec<NamedCount>);
+pub struct WorkTable(Vec<NamedCount>);
 
 impl WorkTable {
     /// Returns the table of the counters of plan execution.
@@ -98,7 +99,7 @@ impl WorkTable {
 
     /// Returns the table of the counters of a whole run:
     /// those of plan execution, then the engine's own.
-    pub(crate) fn of_run(timings: &EngineTimings) -> Self {
+    pub fn of_run(timings: &EngineTimings) -> Self {
         let mut rows = Self::counted(&timings.counts);
         rows.extend([
             ("consolidated", timings.consolidated_rows),
@@ -120,7 +121,7 @@ impl WorkTable {
     }
 
     /// Returns the rows, in order.
-    pub(crate) fn rows(&self) -> &[NamedCount] {
+    pub fn rows(&self) -> &[NamedCount] {
         &self.0
     }
 }

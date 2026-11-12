@@ -11,6 +11,7 @@ mod dashboard;
 mod error;
 mod explain;
 mod logging;
+mod report;
 mod run;
 mod stdout;
 
