@@ -8,13 +8,14 @@ use crate::{
     compression::Compression,
     load::{
         Loaded, Resource,
-        batch::{self, RunSource, WINDOW_BYTES},
+        batch::{self, Cuts, RunSource, WINDOW_BYTES},
         run::RunPool,
     },
 };
 
 use super::{
     ColumnLayout, DsvReader, DsvReaderOptions,
+    record_ends::QuotedRecordEnds,
     run::{DsvLoad, DsvRun},
 };
 
@@ -65,11 +66,18 @@ impl RunSource for DsvResource {
         self.options.compression
     }
 
-    /// A resource is not cut under quoting, since a newline is then not always the end of a
-    /// record, nor under a row limit, which counts rows in the resource's order across all
-    /// windows.
-    fn cuts_at_lines(&self) -> bool {
-        !self.options.quoting && self.options.limit.is_none()
+    /// A resource is not cut under a row limit, which counts rows in the resource's order
+    /// across all windows.
+    /// Under quoting, a line end inside a quoted field does not end a record,
+    /// so the resource is cut only where a scan from its start finds a record to end.
+    fn cuts(&self) -> Cuts {
+        if self.options.limit.is_some() {
+            Cuts::Nowhere
+        } else if self.options.quoting {
+            Cuts::RowEnds(Box::new(QuotedRecordEnds::new(self.options.delimiter)))
+        } else {
+            Cuts::Lines
+        }
     }
 
     /// Returns where the records have the cells of the named columns, read from the header,
@@ -125,8 +133,10 @@ impl RunSource for DsvResource {
 /// A batch of delimiter-separated resources loaded together.
 ///
 /// The resources are parsed in parallel, window by window.
-/// A large resource that is unquoted, uncompressed and without a row limit is cut into windows
+/// A large resource that is uncompressed and without a row limit is cut into windows
 /// at record boundaries, so that one bulk resource keeps every worker busy.
+/// A resource with quoted fields is read once more before that, to find the line ends that
+/// end a record.
 /// Each window hands its rows on in runs of bounded size,
 /// and the calling thread interns the runs into the dictionary as they arrive,
 /// in the order of the resources and their windows.

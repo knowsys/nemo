@@ -1,7 +1,7 @@
 //! Batches of resources that are parsed in parallel and interned in resource order.
 //!
-//! A large resource is cut into *windows*, byte ranges that end at line ends and are parsed in
-//! parallel.
+//! A large resource is cut into *windows*, byte ranges that end where a row ends and are parsed
+//! in parallel.
 //! Each window hands its rows on in runs of bounded size,
 //! and the calling thread interns the runs into the dictionary as they arrive,
 //! in the order of the resources and their windows.
@@ -18,7 +18,7 @@ use nemo_physical::{
     diagnostics::Diagnostic,
     dictionary::Dictionary,
     function::EvaluationContext,
-    parallel::{self, Tasks},
+    parallel::{self, Tasks, Workers},
 };
 
 use crate::{
@@ -59,6 +59,35 @@ const AHEAD_BYTES: usize = 4 * 1024 * 1024;
 /// Room for a couple of runs keeps its parse running alongside its interning.
 const WHOLE_AHEAD_BYTES: usize = 4 * 1024 * 1024;
 
+/// The size of one read of a scan for the row ends of a resource.
+const SCAN_CHUNK: usize = 1 << 18;
+
+/// Where a resource may be cut into windows.
+pub(crate) enum Cuts {
+    /// Nowhere, so the resource is one window.
+    Nowhere,
+    /// After any line end.
+    ///
+    /// A line end is then a boundary between rows, and no row depends on the rows before it.
+    Lines,
+    /// After the line ends that end a row, where other line ends are part of a row.
+    ///
+    /// Which line ends these are depends on the bytes before them,
+    /// so the resource is read once from its start to find them.
+    RowEnds(Box<dyn RowEnds>),
+}
+
+/// Finds the line ends of a resource that end a row.
+///
+/// The bytes of the resource are passed in order, from its start.
+pub(crate) trait RowEnds {
+    /// Reads the next bytes of the resource, up to and including the first line end that ends
+    /// a row and is at index `from` or after it, and returns how many bytes that is.
+    ///
+    /// Returns `None` if the bytes have no such line end, and reads all of them then.
+    fn advance(&mut self, bytes: &[u8], from: usize) -> Option<usize>;
+}
+
 /// One unit of parallel parsing: a whole resource, or a window of one.
 #[derive(Debug)]
 pub(crate) struct Window {
@@ -70,6 +99,17 @@ pub(crate) struct Window {
     ///
     /// A whole resource is opened as a reader opens a file, with decompression.
     range: Option<Range<u64>>,
+}
+
+impl Window {
+    /// Returns the window that is the whole resource at index `source`.
+    fn whole(source: usize) -> Self {
+        Self {
+            source,
+            position: 0,
+            range: None,
+        }
+    }
 }
 
 /// A resource of a format whose rows are parsed into runs away from the dictionary.
@@ -92,11 +132,8 @@ pub(crate) trait RunSource: Sync {
     /// Returns the compression of the resource's stream.
     fn compression(&self) -> Compression;
 
-    /// Returns whether the resource's format allows cutting it into windows at line ends.
-    ///
-    /// A line end is then a boundary between rows,
-    /// and no row depends on the rows before it.
-    fn cuts_at_lines(&self) -> bool;
+    /// Returns where the resource may be cut into windows.
+    fn cuts(&self) -> Cuts;
 
     /// Reads what the parse of every window needs from the start of the resource.
     fn preface(&self) -> Result<Self::Preface, Diagnostic>;
@@ -147,22 +184,19 @@ pub(crate) fn open(
     }
 }
 
-/// Returns the windows of the resource at `index`: byte ranges cut at line ends,
+/// Returns the windows of the resource at `index`: byte ranges cut where a row ends,
 /// or the whole resource if it cannot be cut.
 ///
 /// A resource is not cut
-/// - if its format does not [allow](RunSource::cuts_at_lines) it,
+/// - if it may be cut [nowhere](RunSource::cuts),
 /// - under compression, since a compressed stream cannot be read from its middle,
 /// - if it is small, or
-/// - if a scan finds no line end.
+/// - if no row is found to end where a window should.
 pub(crate) fn windows<S: RunSource>(source: &S, index: usize, window_bytes: u64) -> Vec<Window> {
-    let whole = vec![Window {
-        source: index,
-        position: 0,
-        range: None,
-    }];
+    let whole = vec![Window::whole(index)];
     let input = source.input();
-    if !source.cuts_at_lines() || input.compressed(source.compression()) {
+    let cuts = source.cuts();
+    if matches!(cuts, Cuts::Nowhere) || input.compressed(source.compression()) {
         return whole;
     }
 
@@ -178,12 +212,40 @@ pub(crate) fn windows<S: RunSource>(source: &S, index: usize, window_bytes: u64)
         return whole;
     }
 
-    let mut file = match input {
-        Resource::Path(path) => match File::open(path) {
-            Ok(file) => Some(file),
-            Err(_) => return whole,
-        },
-        Resource::Bytes { .. } => None,
+    let mut starts: Box<dyn FnMut(u64) -> Option<u64> + '_> = match cuts {
+        Cuts::Nowhere => return whole,
+        Cuts::Lines => {
+            let mut file = match input {
+                Resource::Path(path) => match File::open(path) {
+                    Ok(file) => Some(file),
+                    Err(_) => return whole,
+                },
+                Resource::Bytes { .. } => None,
+            };
+
+            Box::new(move |target| match (&mut file, input) {
+                (Some(file), _) => next_line_start(file, target, size),
+                (None, Resource::Bytes { bytes, .. }) => bytes
+                    [usize::try_from(target).expect("bytes are in memory")..]
+                    .iter()
+                    .position(|&byte| byte == b'\n')
+                    .map(|newline| target + newline as u64 + 1)
+                    .filter(|&boundary| boundary < size),
+                (None, Resource::Path(_)) => unreachable!("paths opened their file above"),
+            })
+        }
+        Cuts::RowEnds(row_ends) => {
+            let stream: Box<dyn Read + '_> = match input {
+                Resource::Path(path) => match File::open(path) {
+                    Ok(file) => Box::new(file),
+                    Err(_) => return whole,
+                },
+                Resource::Bytes { bytes, .. } => Box::new(&bytes[..]),
+            };
+            let mut scan = RowScan::new(stream, row_ends);
+
+            Box::new(move |target| scan.row_start(target).filter(|&boundary| boundary < size))
+        }
     };
 
     let count = usize::try_from(size / window_bytes)
@@ -192,25 +254,17 @@ pub(crate) fn windows<S: RunSource>(source: &S, index: usize, window_bytes: u64)
     let mut bounds = vec![0u64];
     for split in 1..count {
         let target = size * split as u64 / count as u64;
-        let boundary = match (&mut file, input) {
-            (Some(file), _) => next_line_start(file, target, size),
-            (None, Resource::Bytes { bytes, .. }) => bytes
-                [usize::try_from(target).expect("bytes are in memory")..]
-                .iter()
-                .position(|&byte| byte == b'\n')
-                .map(|newline| target + newline as u64 + 1)
-                .filter(|&boundary| boundary < size),
-            (None, Resource::Path(_)) => unreachable!("paths opened their file above"),
-        };
-        match boundary {
+        match starts(target) {
             Some(boundary) if boundary > *bounds.last().expect("bounds start filled") => {
                 bounds.push(boundary)
             }
             Some(_) => {}
-            // No line end within reach, so keep the windows found so far.
+            // No row end within reach, so keep the windows found so far.
             None => break,
         }
     }
+
+    drop(starts);
 
     bounds.push(size);
     if bounds.len() <= 2 {
@@ -226,6 +280,63 @@ pub(crate) fn windows<S: RunSource>(source: &S, index: usize, window_bytes: u64)
             range: Some(pair[0]..pair[1]),
         })
         .collect()
+}
+
+/// A scan of a resource from its start for the positions at which rows start.
+struct RowScan<'a> {
+    /// The bytes of the resource.
+    stream: Box<dyn Read + 'a>,
+    /// What finds the line ends that end a row.
+    row_ends: Box<dyn RowEnds>,
+    /// The bytes read from the stream, of which those from `start` on are not scanned yet.
+    buffer: Vec<u8>,
+    /// The index in the buffer of the first byte that is not scanned yet.
+    start: usize,
+    /// The position in the resource of that byte.
+    position: u64,
+}
+
+impl<'a> RowScan<'a> {
+    /// Creates a scan of the given bytes, which start the resource.
+    fn new(stream: Box<dyn Read + 'a>, row_ends: Box<dyn RowEnds>) -> Self {
+        Self {
+            stream,
+            row_ends,
+            buffer: Vec::new(),
+            start: 0,
+            position: 0,
+        }
+    }
+
+    /// Returns the position of the first byte after the first line end that ends a row and is
+    /// at `target` or after it.
+    ///
+    /// The targets of successive calls must not decrease.
+    /// Returns `None` if there is no such line end, or if the resource cannot be read.
+    fn row_start(&mut self, target: u64) -> Option<u64> {
+        loop {
+            if self.start == self.buffer.len() {
+                self.buffer.resize(SCAN_CHUNK, 0);
+                let read = self.stream.read(&mut self.buffer).ok()?;
+                self.buffer.truncate(read);
+                self.start = 0;
+                if read == 0 {
+                    return None;
+                }
+            }
+
+            let bytes = &self.buffer[self.start..];
+            let from = usize::try_from(target.saturating_sub(self.position))
+                .map_or(bytes.len(), |from| from.min(bytes.len()));
+            let scanned = self.row_ends.advance(bytes, from);
+            let read = scanned.unwrap_or(bytes.len());
+            self.start += read;
+            self.position += read as u64;
+            if scanned.is_some() {
+                return Some(self.position);
+            }
+        }
+    }
 }
 
 /// Returns the size of the input of resources:
@@ -317,10 +428,20 @@ pub(crate) fn load<S: RunSource>(
                 .map_err(|diagnostic| diagnostic.with_resource(source.input().name()))
         })
         .collect::<Result<_, _>>()?;
+
+    // A single thread parses the windows one after another, as it parses a whole resource,
+    // so a scan of the resource for its windows would gain nothing.
+    let single = Workers::get().threads() <= 1;
     let windows: Vec<Window> = sources
         .iter()
         .enumerate()
-        .flat_map(|(index, source)| windows(source, index, window_bytes))
+        .flat_map(|(index, source)| {
+            if single && matches!(source.cuts(), Cuts::RowEnds(_)) {
+                vec![Window::whole(index)]
+            } else {
+                windows(source, index, window_bytes)
+            }
+        })
         .collect();
 
     // Several windows go to the worker pool whatever their size, so only

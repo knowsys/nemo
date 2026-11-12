@@ -10,7 +10,7 @@ use crate::{
     compression::Compression,
     load::{
         Loaded, Resource,
-        batch::{self, RunSource, WINDOW_BYTES},
+        batch::{self, Cuts, RunSource, WINDOW_BYTES},
         run::{Run, RunPool},
     },
 };
@@ -65,10 +65,13 @@ impl RunSource for RdfResource {
     /// while a prefix or a base of another variant holds for the statements after it.
     /// A resource is not cut under a statement limit either,
     /// which counts statements in the resource's order across all windows.
-    fn cuts_at_lines(&self) -> bool {
+    fn cuts(&self) -> Cuts {
         let options = self.reader.options();
-
-        options.variant.line_based() && options.limit.is_none()
+        if options.variant.line_based() && options.limit.is_none() {
+            Cuts::Lines
+        } else {
+            Cuts::Nowhere
+        }
     }
 
     /// Returns the parser of the resource's variant, which checks the base.

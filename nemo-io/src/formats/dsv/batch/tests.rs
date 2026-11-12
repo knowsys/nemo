@@ -310,6 +310,48 @@ fn windowed_malformed_rows_keep_their_global_lines() {
     assert_eq!(loaded[0].counts.first_malformed, Some(401));
 }
 
+/// A file with quoted fields is cut into windows only where a record ends.
+///
+/// A line end inside a quoted field stays inside its record,
+/// and a malformed row in a later window is reported at its line in the file.
+#[test]
+fn quoted_files_are_cut_where_their_records_end() {
+    let temporary = TempDirectory::new();
+    let directory = temporary.path();
+    let path = directory.join("nemo_io_quoted.csv");
+
+    // Every record has a quoted field of two lines, with a comma and a quote character in it.
+    let mut content: String = (0..400)
+        .map(|index| format!("{index},\"first, \"\"{index}\"\"\nsecond\"\n"))
+        .collect();
+    content.push_str("broken\n");
+    content.push_str("400,\"tail\"\n");
+    fs::write(&path, &content).expect("the temp file writes");
+    let options = DsvReaderOptions::csv(vec![ValueFormat::Integer, ValueFormat::String]);
+    assert!(options.quoting);
+
+    let mut batch = DsvBatch::new(vec![DsvResource::path(path.clone(), options.clone())]);
+    batch.window_bytes = 64;
+    let mut windowed_dictionary = Dictionary::new();
+    let windowed = batch
+        .load(&mut windowed_dictionary, EvaluationContext::now())
+        .expect("the batch loads");
+
+    let mut sequential_dictionary = Dictionary::new();
+    let sequential = DsvReader::new(options)
+        .read_path(&path, &mut sequential_dictionary, EvaluationContext::now())
+        .expect("the source reads");
+
+    assert!(batch.windows(0) > 50, "the file split into many windows");
+    assert_eq!(sequential.rows.len(), 401);
+    assert_eq!(sequential.counts.first_malformed, Some(801));
+    assert_eq!(
+        windowed[0].decoded(&windowed_dictionary),
+        sequential.decoded(&sequential_dictionary)
+    );
+    assert_eq!(windowed[0].counts, sequential.counts);
+}
+
 /// A batch counts malformed and excluded rows as a streaming read does.
 #[test]
 fn rows_are_counted_alike_in_both_paths() {

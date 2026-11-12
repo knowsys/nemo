@@ -1577,6 +1577,7 @@ dependencies = [
  "arrow",
  "csv",
  "flate2",
+ "memchr",
  "nemo-physical",
  "oxrdf",
  "oxrdfio",

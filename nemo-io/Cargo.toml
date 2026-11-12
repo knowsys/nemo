@@ -21,6 +21,7 @@ parquet = ["arrow", "dep:parquet"]
 [dependencies]
 csv = "1.4"
 flate2 = "1.1"
+memchr = "2.7"
 oxrdf = "0.3"
 oxrdfio = "0.2"
 nemo-physical = { path = "../nemo-physical" }

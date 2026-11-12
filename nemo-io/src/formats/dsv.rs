@@ -6,6 +6,7 @@
 mod batch;
 mod layout;
 mod reader;
+mod record_ends;
 mod run;
 mod writer;
 
