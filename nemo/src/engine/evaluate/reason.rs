@@ -345,12 +345,12 @@ impl Engine {
         };
 
         // New input facts first invalidate the derived facts that depend
-        // on them through negation or aggregation (see `recover`). The
+        // on them through negation or aggregation (see `drop_invalidated`). The
         // strata are moved out for the iterations and put back afterwards,
         // so the engine keeps its program even if an application fails.
         let strata = std::mem::take(&mut program.strata);
         if resumed.is_none() {
-            self.recover(&mut program);
+            self.drop_invalidated(&mut program);
             self.contexts.begin(self.step, context);
         }
 
@@ -475,7 +475,7 @@ impl Engine {
                 self.consolidate(program, iteration_start);
             }
 
-            self.finish(program, &finished[stratum_index]);
+            self.consolidate_finished(program, &finished[stratum_index]);
         }
 
         Ok(RunOutcome::Fixpoint)
@@ -759,7 +759,7 @@ impl Engine {
     /// so that its merges stay cheap.
     /// A table that no later stratum writes is not merged again,
     /// and every later read of it pays for each of its blocks.
-    fn finish(&mut self, program: &CompiledProgram, tables: &[TableId]) {
+    fn consolidate_finished(&mut self, program: &CompiledProgram, tables: &[TableId]) {
         let begun = Stopwatch::start();
         let walls = Self::exact_walls(program);
         for &table in tables {

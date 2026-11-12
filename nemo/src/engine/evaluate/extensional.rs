@@ -3,7 +3,7 @@
 //!
 //! Consolidation never merges these blocks with derived rows,
 //! so that exactly the derived rows can be dropped,
-//! when new input facts invalidate them ([recover](Engine::recover))
+//! when new input facts invalidate them ([drop_invalidated](Engine::drop_invalidated))
 //! or when a reload replaces the program.
 
 use std::{collections::HashSet, ops::Range};
@@ -72,7 +72,7 @@ impl Engine {
     ///
     /// A reset rule starts over, as if it had never been applied.
     /// Programs without negation or aggregation never drop a row.
-    pub(super) fn recover(&mut self, program: &mut CompiledProgram) {
+    pub(super) fn drop_invalidated(&mut self, program: &mut CompiledProgram) {
         if self.dirty.is_empty() {
             return;
         }

@@ -33,7 +33,8 @@
 //! - `results` reads the stored facts back.
 //!
 //! Alongside them:
-//! - `staging` implements the loading methods and the check of a program.
+//! - `staging` implements the loading methods.
+//! - `check` implements the check of a program.
 //! - `imported_rows` keeps the rows given through [import_rows](Engine::import_rows).
 //! - [remote] implements the methods suspended for data from the network.
 //! - `cancel` implements cancellation.
@@ -209,7 +210,7 @@ pub struct Engine {
     /// or may gain facts through new rules.
     ///
     /// The next run first drops the derived facts that depend on them through negation or
-    /// aggregation, so that it derives them again (see [recover](Self::recover)).
+    /// aggregation, so that it derives them again (see `drop_invalidated`).
     dirty: HashSet<TableId>,
     /// The step counter, which is the revision that the next stored rows go into.
     ///

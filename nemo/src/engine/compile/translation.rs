@@ -479,7 +479,7 @@ impl<'a> Translator<'a> {
     ///
     /// Panics in the translation of a program that the pipeline stages made from a written
     /// program that passed, since the stages then wrote something that translation refuses.
-    fn recover(&mut self, problem: Diagnostic) -> Result<(), Diagnostic> {
+    fn report_or_fail(&mut self, problem: Diagnostic) -> Result<(), Diagnostic> {
         match self.purpose {
             Purpose::Check => {
                 self.pipeline.report(problem);
@@ -631,7 +631,7 @@ impl<'a> Translator<'a> {
     /// and `@type` definitions may refer to each other in any order.
     fn namespace(&mut self, statements: &[Statement]) -> Result<(), Diagnostic> {
         if let Err(problem) = NameScope::check_base(statements) {
-            self.recover(problem)?;
+            self.report_or_fail(problem)?;
         }
 
         let mut parameters = Vec::new();
@@ -658,7 +658,7 @@ impl<'a> Translator<'a> {
             if let Statement::Directive(Directive::Type(directive)) = statement
                 && let Err(problem) = self.type_directive(directive)
             {
-                self.recover(problem)?;
+                self.report_or_fail(problem)?;
             }
         }
 
@@ -673,7 +673,7 @@ impl<'a> Translator<'a> {
                             self.label_types.declare(&label, declared);
                         }
                     }
-                    Err(problem) => self.recover(problem)?,
+                    Err(problem) => self.report_or_fail(problem)?,
                 }
             }
         }
@@ -710,13 +710,13 @@ impl<'a> Translator<'a> {
                 _ => Ok(()),
             };
             if let Err(problem) = outcome {
-                self.recover(problem)?;
+                self.report_or_fail(problem)?;
             }
         }
 
         for (name, span) in fresh {
             if let Err(problem) = self.check_declaration_against_store(&name, span) {
-                self.recover(problem)?;
+                self.report_or_fail(problem)?;
             }
         }
 
@@ -790,7 +790,7 @@ impl<'a> Translator<'a> {
                 .label_instances_in_reports(already, ids[index]);
             if let Err(problem) = outcome {
                 let problem = self.pipeline.label_instances(problem, ids[index]);
-                self.recover(problem)?;
+                self.report_or_fail(problem)?;
             }
         }
 
@@ -838,7 +838,7 @@ impl<'a> Translator<'a> {
                 None => diagnostic,
             };
             if problem.severity() == Severity::Error {
-                self.recover(problem)?;
+                self.report_or_fail(problem)?;
             } else {
                 self.warn(problem);
             }
@@ -854,7 +854,7 @@ impl<'a> Translator<'a> {
         let strata = match strata::stratify(&compiled.rules, &compiled.spans) {
             Ok(strata) => strata,
             Err(problem) => {
-                self.recover(problem)?;
+                self.report_or_fail(problem)?;
                 Vec::new()
             }
         };

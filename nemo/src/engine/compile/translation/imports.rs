@@ -225,7 +225,7 @@ impl<'a> Translator<'a> {
                 });
             match outcome {
                 Ok(()) => {}
-                Err(ImportFailure::Directive(problem)) => self.recover(problem)?,
+                Err(ImportFailure::Directive(problem)) => self.report_or_fail(problem)?,
                 Err(ImportFailure::Reading(problem)) => return Err(problem),
             }
         }

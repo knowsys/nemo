@@ -1,4 +1,4 @@
-//! Loading, extending, reloading and checking a program,
+//! Loading, extending and reloading a program,
 //! and adding rows through [import_rows](crate::engine::Engine::import_rows).
 //!
 //! A loading method first *stages* its program: it adds the program to the pipeline as the
@@ -18,7 +18,7 @@ use nemo_physical::{
 use crate::{
     diagnostics::EngineError,
     engine::{
-        CheckReport, Engine, InferredTypes,
+        Engine,
         check::rewrite_unvalued,
         compile::compiled::CompiledProgram,
         compile::translation::{self, Purpose, TranslationState},
@@ -31,7 +31,7 @@ use crate::{
         written::WrittenProgram,
     },
     model::{Directive, Program, Statement},
-    pipeline::{NameScope, RevisionId, Stages, StatementId},
+    pipeline::{RevisionId, Stages, StatementId},
 };
 
 /// A program staged in the pipeline: its written revision,
@@ -943,74 +943,5 @@ impl Engine {
         self.link(program)
             .and_then(|linked| call(self, linked))
             .map_err(|failed| vec![failed])
-    }
-
-    /// Registers, parses, links and checks a program text
-    /// (see [check_source](Engine::check_source)).
-    pub(in crate::engine) fn check_text(
-        &mut self,
-        name: impl Into<String>,
-        text: impl Into<String>,
-    ) -> CheckReport {
-        let file = match self.add_source(name, text) {
-            Ok(file) => file,
-            Err(refused) => return CheckReport::new(vec![refused], None),
-        };
-        let (program, mut diagnostics) = self.parse_source(file);
-        let already = self.reports().len();
-        let linked = self.link(program);
-        diagnostics.extend(self.reports()[already..].iter().cloned());
-        self.pipeline.withdraw_reports(already);
-        let types = match linked {
-            Ok(linked) => {
-                let (checked, types) = self.check(linked).into_parts();
-                diagnostics.extend(checked);
-                types
-            }
-            Err(problem) => {
-                diagnostics.push(problem);
-                None
-            }
-        };
-
-        CheckReport::new(diagnostics, types)
-    }
-
-    /// Runs a check: stages the program,
-    /// and translates the written program into scratch stores.
-    ///
-    /// Returns the types that the translation's type analysis inferred.
-    /// Fails for a problem that ends the check early:
-    /// the engine holds a program, the program is not linked, or a pipeline stage fails.
-    pub(in crate::engine) fn check_inner(
-        &mut self,
-        program: Program,
-    ) -> Result<InferredTypes, Diagnostic> {
-        if self.program.is_some() {
-            return Err(EngineError::AlreadyLoaded.diagnostic());
-        }
-
-        tracing::debug!(statements = program.statements.len(), "checking a program");
-        let staged = self.stage(program, &[])?;
-        let (compiled, tables) = self.translate_written(
-            staged.written,
-            TranslationState::default(),
-            HashMap::new(),
-            Vec::new(),
-            Purpose::Check,
-        )?;
-        let written = WrittenProgram::new(&self.pipeline, staged.written, staged.revision);
-        let texts: Vec<Statement> = self
-            .pipeline
-            .statements(staged.written)
-            .map(|(_, statement)| statement.clone())
-            .collect();
-
-        Ok(InferredTypes::of_check(
-            NameScope::of(&texts),
-            written.predicates(),
-            &tables,
-            &compiled,
-        ))
     }
 }

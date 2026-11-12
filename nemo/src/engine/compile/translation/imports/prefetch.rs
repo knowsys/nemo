@@ -59,7 +59,7 @@ impl<'a> Translator<'a> {
                 Ok(None) => {}
                 Err(problem) => {
                     let problem = self.pipeline.label_instances(problem, ids[index]);
-                    self.recover(problem)?;
+                    self.report_or_fail(problem)?;
                 }
             }
         }
@@ -99,7 +99,7 @@ impl<'a> Translator<'a> {
             match self.resource_name(import) {
                 Ok(Some(resource)) if resource.is_empty() => piped.push(index),
                 Ok(_) => {}
-                Err(problem) => self.recover(problem)?,
+                Err(problem) => self.report_or_fail(problem)?,
             }
 
             if let Some(FetchedResource { request, response }) =
@@ -115,7 +115,7 @@ impl<'a> Translator<'a> {
             match self.import_request(import) {
                 Ok(Some(request)) => missing.push(request),
                 Ok(None) => {}
-                Err(problem) => self.recover(problem)?,
+                Err(problem) => self.report_or_fail(problem)?,
             }
         }
 

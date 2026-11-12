@@ -121,7 +121,7 @@ impl<'a> Translator<'a> {
     /// A parameter has a problem if it is declared twice, if its declared type is refused,
     /// or if its value reads an undeclared parameter, fails to evaluate, is outside the
     /// declared type, or reads the parameter itself, directly or through other parameters.
-    /// Each problem is handled as [recover](Self::recover) handles it:
+    /// Each problem is handled as [report_or_fail](Self::report_or_fail) handles it:
     /// a check reports it and goes on, and any other translation fails with it.
     /// Any other translation also fails for a parameter without a value.
     ///
@@ -139,7 +139,7 @@ impl<'a> Translator<'a> {
                 .filter(|other| other.variable.name == *name)
                 .count();
             if declarations > 1 && !self.unvalued.contains(name) {
-                self.recover(
+                self.report_or_fail(
                     TranslationError::DuplicateParameter { name: name.clone() }.at(parameter.span),
                 )?;
                 self.unvalued.insert(name);
@@ -162,7 +162,7 @@ impl<'a> Translator<'a> {
                     && !parameters.iter().any(|other| other.variable.name == *read)
             });
             if let Some(read) = undefined {
-                self.recover(
+                self.report_or_fail(
                     TranslationError::UndefinedParameter {
                         name: read.to_owned(),
                     }
@@ -187,7 +187,7 @@ impl<'a> Translator<'a> {
             if waiting.len() == pending.len() {
                 // Every parameter left waits for another one of them.
                 let parameter = parameter_on_cycle(&waiting);
-                self.recover(
+                self.report_or_fail(
                     TranslationError::ParameterCycle {
                         name: parameter.variable.name.clone(),
                     }
@@ -215,7 +215,7 @@ impl<'a> Translator<'a> {
         let name = &parameter.variable.name;
         let Some(value) = &parameter.value else {
             if self.purpose != Purpose::Check {
-                self.recover(
+                self.report_or_fail(
                     TranslationError::ParameterWithoutValue { name: name.clone() }
                         .at(parameter.span),
                 )?;
@@ -240,7 +240,7 @@ impl<'a> Translator<'a> {
                 self.globals.insert(name.clone(), grounded);
             }
             Err(problem) => {
-                self.recover(problem)?;
+                self.report_or_fail(problem)?;
                 self.unvalued.insert(name);
             }
         }

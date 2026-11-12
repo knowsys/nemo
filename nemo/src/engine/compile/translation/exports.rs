@@ -217,7 +217,7 @@ impl<'a> Translator<'a> {
         }
 
         for problem in problems {
-            self.recover(problem)?;
+            self.report_or_fail(problem)?;
         }
 
         Ok(())
