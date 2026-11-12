@@ -3,6 +3,9 @@
 //!
 //! Every label of a report has its location if its file is registered,
 //! since the functions that add a report or a label [locate](Pipeline::locate) it.
+//!
+//! A call that wants its own reports apart from the earlier ones takes a [ReportMark] when
+//! it begins. The reports *since* the mark are then the call's own.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -11,6 +14,10 @@ use crate::{
     pipeline::{Pipeline, RewriteDeclaration, StatementId},
 };
 
+/// A position in a pipeline's reports, after the reports made when it was taken.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ReportMark(usize);
+
 impl Pipeline {
     /// Adds a diagnostic to the reports.
     pub fn report(&mut self, diagnostic: Diagnostic) {
@@ -18,9 +25,14 @@ impl Pipeline {
         self.reports.push(diagnostic);
     }
 
-    /// Drops the reports from index `from` on.
-    pub(crate) fn withdraw_reports(&mut self, from: usize) {
-        self.reports.truncate(from);
+    /// Returns the position after the reports made so far.
+    pub(crate) fn mark_reports(&self) -> ReportMark {
+        ReportMark(self.reports.len())
+    }
+
+    /// Takes the reports made since `mark` out of the reports, and returns them.
+    pub(crate) fn take_reports(&mut self, mark: ReportMark) -> Vec<Diagnostic> {
+        self.reports.split_off(mark.0)
     }
 
     /// Returns a diagnostic about a statement version, labeled with the `@use` directives that
@@ -39,16 +51,15 @@ impl Pipeline {
             })
     }
 
-    /// Labels the reports from index `from` on with the `@use` directives that
+    /// Labels the reports made since `mark` with the `@use` directives that
     /// instantiated a statement version, if it belongs to a module instance.
-    pub(crate) fn label_instances_in_reports(&mut self, from: usize, statement: StatementId) {
+    pub(crate) fn label_instances_in_reports(&mut self, mark: ReportMark, statement: StatementId) {
         let labels = self.instance_labels(statement);
         if labels.is_empty() {
             return;
         }
 
-        let fresh: Vec<Diagnostic> = self.reports.drain(from..).collect();
-        for report in fresh {
+        for report in self.take_reports(mark) {
             let report = labels.iter().fold(report, |report, (span, label)| {
                 report.with_label(*span, label.clone())
             });
@@ -57,35 +68,35 @@ impl Pipeline {
         }
     }
 
-    /// Maps the reports from index `from` on through `present`, and drops repeats among them.
+    /// Replaces each report made since `mark` by what `present` makes of it,
+    /// and drops the repeats among the results.
     ///
     /// Several statements of the compiled program can come from one statement
     /// of the written program, so a check over the statements can report
     /// one problem once per copy.
     pub(crate) fn present_reports(
         &mut self,
-        from: usize,
+        mark: ReportMark,
         mut present: impl FnMut(Diagnostic) -> Diagnostic,
     ) {
-        let fresh: Vec<Diagnostic> = self.reports.drain(from..).collect();
-        for report in fresh {
+        for report in self.take_reports(mark) {
             let report = present(report);
-            if !self.reports[from..].contains(&report) {
+            if !self.reports[mark.0..].contains(&report) {
                 self.reports.push(report);
             }
         }
     }
 
-    /// Maps the reports from index `from` on through `present`, and keeps repeats.
+    /// Replaces each report made since `mark` by what `present` makes of it, and keeps repeats.
     ///
     /// Reasoning can report the same problem more than once.
     pub(crate) fn map_reports(
         &mut self,
-        from: usize,
+        mark: ReportMark,
         present: impl FnMut(Diagnostic) -> Diagnostic,
     ) {
-        let fresh: Vec<Diagnostic> = self.reports.drain(from..).map(present).collect();
-        self.reports.extend(fresh);
+        let presented = self.take_reports(mark).into_iter().map(present);
+        self.reports.extend(presented);
     }
 
     /// Returns the spans of the `@use` directives that instantiated a statement version,

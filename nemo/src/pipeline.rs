@@ -23,6 +23,7 @@
 //! A module instance is registered as a source of its own,
 //! so that a span says which instance a statement belongs to.
 
+mod arena;
 mod commit;
 mod construct;
 mod matching;
@@ -46,22 +47,24 @@ pub(crate) use self::{
     construct::UnlinkedConstruct,
     matching::{Correspondence, grouped_paths},
     provenance::RewriteDeclaration,
+    reports::ReportMark,
     rewrites::{Definition, DefinitionKind, Rewrites},
     scope::NameScope,
 };
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
-    model::{FileId, Program, Span, Statement},
-    pipeline::{provenance::ProvenanceEdge, revision::ProgramRevision, sources::SourceFile},
+    model::{Program, Span, Statement},
+    pipeline::{
+        arena::Arena, provenance::ProvenanceEdge, revision::ProgramRevision, sources::Sources,
+    },
 };
 
 /// The id of one statement version in a pipeline's arena.
 ///
-/// An id stays valid for the pipeline's lifetime.
 /// Replaced and removed versions stay in the arena, so that provenance edges can point at them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StatementId(u32);
@@ -75,24 +78,14 @@ impl StatementId {
 
 /// The program pipeline.
 ///
-/// It keeps the arena of statement versions, the revisions, the provenance edges,
-/// the registered source texts, and the reports.
+/// It has three parts: the registered source texts,
+/// the arena of statement versions, provenance edges and revisions, and the reports.
 #[derive(Debug, Default)]
 pub struct Pipeline {
-    /// The registered source texts, by file id.
-    files: BTreeMap<FileId, SourceFile>,
-    /// The file ids that the spans of loaded statements use although no source is registered
-    /// under them (see [reserve_files](Self::reserve_files)).
-    reserved_files: BTreeSet<FileId>,
-    /// Every statement version, by id, including the replaced and removed ones.
-    statements: Vec<Statement>,
-    /// For each statement version, the index of the edge that created it,
-    /// or `None` for a loaded statement.
-    created_by: Vec<Option<usize>>,
-    /// The provenance edges, by index.
-    edges: Vec<ProvenanceEdge>,
-    /// The revisions, by id, in the order they were created.
-    revisions: Vec<ProgramRevision>,
+    /// The registered source texts.
+    sources: Sources,
+    /// The statement versions, the provenance edges and the revisions.
+    arena: Arena,
     /// The reports collected so far: warnings and non-fatal errors.
     reports: Vec<Diagnostic>,
 }
@@ -125,7 +118,7 @@ impl Pipeline {
 
     /// Returns the statement version with the given id, even a replaced or removed one.
     pub fn statement(&self, id: StatementId) -> &Statement {
-        &self.statements[id.index()]
+        &self.arena.statements[id.index()]
     }
 
     /// Returns the live statements of a revision, in program order.
@@ -133,7 +126,7 @@ impl Pipeline {
         &self,
         revision: RevisionId,
     ) -> impl Iterator<Item = (StatementId, &Statement)> {
-        self.revisions[revision.index()]
+        self.arena.revisions[revision.index()]
             .statements
             .iter()
             .map(|&id| (id, self.statement(id)))
@@ -155,8 +148,8 @@ impl Pipeline {
     /// so the stages that `base` has been through count as run for it.
     /// The statements of both revisions keep their provenance.
     pub fn merge(&mut self, base: RevisionId, extension: RevisionId) -> RevisionId {
-        let mut statements = self.revisions[base.index()].statements.clone();
-        statements.extend_from_slice(&self.revisions[extension.index()].statements);
+        let mut statements = self.arena.revisions[base.index()].statements.clone();
+        statements.extend_from_slice(&self.arena.revisions[extension.index()].statements);
 
         self.push_revision(ProgramRevision {
             parent: Some(base),
@@ -266,7 +259,7 @@ impl Pipeline {
         let mut current = Some(revision);
         while let Some(revision) = current {
             chain.push(revision);
-            current = self.revisions[revision.index()].parent;
+            current = self.arena.revisions[revision.index()].parent;
         }
 
         chain.reverse();
@@ -275,14 +268,14 @@ impl Pipeline {
 
     /// Returns the stage that produced a revision, or `None` for a loaded or merged revision.
     pub fn stage(&self, revision: RevisionId) -> Option<&'static str> {
-        self.revisions[revision.index()].stage
+        self.arena.revisions[revision.index()].stage
     }
 
     /// Returns whether a revision or one of its ancestors was produced by the named stage.
     pub(crate) fn ran(&self, revision: RevisionId, stage: &str) -> bool {
         let mut current = Some(revision);
         while let Some(revision) = current {
-            let entry = &self.revisions[revision.index()];
+            let entry = &self.arena.revisions[revision.index()];
             if entry.stage == Some(stage) {
                 return true;
             }
@@ -300,7 +293,7 @@ impl Pipeline {
     #[cfg(test)]
     pub(crate) fn origins(&self, statement: StatementId) -> Vec<StatementId> {
         self.ancestry(statement)
-            .filter(|id| self.created_by[id.index()].is_none())
+            .filter(|id| self.arena.created_by[id.index()].is_none())
             .collect()
     }
 
@@ -328,17 +321,17 @@ impl Pipeline {
     /// `edge` is the index of the edge that created it, or `None` for a loaded statement.
     pub(crate) fn intern(&mut self, statement: Statement, edge: Option<usize>) -> StatementId {
         let id = StatementId(
-            u32::try_from(self.statements.len()).expect("statement counts stay below u32"),
+            u32::try_from(self.arena.statements.len()).expect("statement counts stay below u32"),
         );
-        self.statements.push(statement);
-        self.created_by.push(edge);
+        self.arena.statements.push(statement);
+        self.arena.created_by.push(edge);
         id
     }
 
     /// Records a provenance edge, and returns its index.
     pub(crate) fn record_edge(&mut self, edge: ProvenanceEdge) -> usize {
-        self.edges.push(edge);
-        self.edges.len() - 1
+        self.arena.edges.push(edge);
+        self.arena.edges.len() - 1
     }
 
     /// Returns the rewrite declaration made about a statement version when it was created,
@@ -350,33 +343,33 @@ impl Pipeline {
         &self,
         statement: StatementId,
     ) -> Option<(&RewriteDeclaration, &[StatementId])> {
-        let edge = &self.edges[self.created_by[statement.index()]?];
+        let edge = &self.arena.edges[self.arena.created_by[statement.index()]?];
         Some((edge.declaration.as_ref()?, &edge.sources))
     }
 
     /// Returns the index of the edge that created a statement version,
     /// or `None` for a loaded statement.
     pub(crate) fn creating_edge(&self, statement: StatementId) -> Option<usize> {
-        self.created_by[statement.index()]
+        self.arena.created_by[statement.index()]
     }
 
     /// Returns the edge with the given index mutably,
     /// so that its targets and rewrite declaration can be filled in.
     pub(crate) fn edge_mut(&mut self, edge: usize) -> &mut ProvenanceEdge {
-        &mut self.edges[edge]
+        &mut self.arena.edges[edge]
     }
 
     /// Returns the ids of the live statements of a revision, in program order.
     pub(crate) fn revision_statements(&self, revision: RevisionId) -> &[StatementId] {
-        &self.revisions[revision.index()].statements
+        &self.arena.revisions[revision.index()].statements
     }
 
     /// Appends a revision, and returns its id.
     pub(crate) fn push_revision(&mut self, revision: ProgramRevision) -> RevisionId {
         let id = RevisionId::new(
-            u32::try_from(self.revisions.len()).expect("revision counts stay below u32"),
+            u32::try_from(self.arena.revisions.len()).expect("revision counts stay below u32"),
         );
-        self.revisions.push(revision);
+        self.arena.revisions.push(revision);
         id
     }
 }
@@ -402,9 +395,9 @@ impl Iterator for Ancestry<'_> {
                 continue;
             }
 
-            if let Some(edge) = self.pipeline.created_by[id.index()] {
+            if let Some(edge) = self.pipeline.arena.created_by[id.index()] {
                 self.pending
-                    .extend(self.pipeline.edges[edge].sources.iter().rev());
+                    .extend(self.pipeline.arena.edges[edge].sources.iter().rev());
             }
 
             return Some(id);

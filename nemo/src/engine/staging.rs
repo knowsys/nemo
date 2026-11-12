@@ -32,7 +32,7 @@ use crate::{
         written::WrittenProgram,
     },
     model::{Directive, Program, Statement},
-    pipeline::{RevisionId, Stages, StatementId},
+    pipeline::{ReportMark, RevisionId, Stages, StatementId},
 };
 
 /// A program staged in the pipeline: its written revision,
@@ -100,7 +100,7 @@ impl Engine {
         // The stages are told which predicates have rows added through `import_rows`,
         // which no statement shows.
         // The translation checks the rows after the program's statements, as it checks facts.
-        let already = self.pipeline.reports().len();
+        let already = self.pipeline.mark_reports();
         let imported = self.imported_predicates();
         let staged = self.stage(program, &imported)?;
         if !self.rewriting_stages(&staged).is_empty() {
@@ -130,7 +130,7 @@ impl Engine {
     pub(super) fn load_staged(
         &mut self,
         mut load: SuspendedLoad,
-        already: usize,
+        already: ReportMark,
     ) -> Result<Progress, Diagnostic> {
         load.take_responses();
         if load.slots.has_pending() {
@@ -524,7 +524,7 @@ impl Engine {
         }
 
         let held = self.revision.expect("a loaded program has a revision");
-        let already = self.pipeline.reports().len();
+        let already = self.pipeline.mark_reports();
         let staged = self.stage_extension(program, held)?;
         if !self.rewriting_stages(&staged).is_empty() {
             self.translate_written_extension(&staged)?;
@@ -568,7 +568,7 @@ impl Engine {
     pub(super) fn extend_staged(
         &mut self,
         mut load: SuspendedLoad,
-        already: usize,
+        already: ReportMark,
     ) -> Result<Progress, Diagnostic> {
         load.take_responses();
         if load.slots.has_pending() {

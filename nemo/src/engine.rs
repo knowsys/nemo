@@ -701,14 +701,13 @@ impl Engine {
     /// Like a load, it needs a [linked](Self::link) program and an engine without a program.
     /// Otherwise, the report contains the error that [load](Self::load) would return.
     pub fn check(&mut self, program: Program) -> CheckReport {
-        let already = self.pipeline.reports().len();
+        let mark = self.pipeline.mark_reports();
         let checked = self.check_inner(program);
         let (types, aborted) = match self.located(checked) {
             Ok(types) => (Some(types), None),
             Err(problem) => (None, Some(problem)),
         };
-        let mut reports = self.pipeline.reports()[already..].to_vec();
-        self.pipeline.withdraw_reports(already);
+        let mut reports = self.pipeline.take_reports(mark);
         reports.extend(aborted);
         CheckReport::new(reports, types)
     }
@@ -998,14 +997,14 @@ impl Engine {
     ///
     /// The run's reports and error are rewritten to refer to the written program.
     pub(in crate::engine) fn reason_until_suspended(&mut self) -> Result<Progress, Diagnostic> {
-        let already = self.pipeline.reports().len();
+        let mark = self.pipeline.mark_reports();
         let outcome = self.reason_to_fixpoint();
         let Some(written) = &self.written else {
             return outcome;
         };
 
         self.pipeline
-            .map_reports(already, |report| written.present(report));
+            .map_reports(mark, |report| written.present(report));
         outcome.map_err(|problem| written.present(problem))
     }
 

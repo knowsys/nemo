@@ -32,7 +32,7 @@ use crate::{
         written::WrittenProgram,
     },
     model::{Directive, Identifier, Program, Statement},
-    pipeline::{RevisionId, StatementId},
+    pipeline::{ReportMark, RevisionId, StatementId},
 };
 
 /// What a reload must rebuild, according to its comparison of the statements.
@@ -152,7 +152,7 @@ impl Engine {
                 .with_hint("call `load()` first; `reload()` replaces a loaded program"));
         }
 
-        let already = self.pipeline.reports().len();
+        let already = self.pipeline.mark_reports();
 
         // The rows added through `import_rows` stay, unless their predicate is rebuilt,
         // so the stages are told which predicates have them.
@@ -211,7 +211,7 @@ impl Engine {
     pub(in crate::engine) fn reload_staged(
         &mut self,
         mut load: SuspendedLoad,
-        already: usize,
+        already: ReportMark,
     ) -> Result<Progress, Diagnostic> {
         load.take_responses();
         if load.slots.has_pending() {

@@ -1,7 +1,10 @@
 //! The source texts that a pipeline registers: the texts that programs were read from,
 //! and the module instances made of them.
 
-use std::sync::{Arc, OnceLock};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, OnceLock},
+};
 
 use nemo_physical::diagnostics::{Diagnostic, Location};
 
@@ -10,7 +13,6 @@ use crate::{
     pipeline::Pipeline,
 };
 
-/// One registered source text, with the name that diagnostics show for it.
 /// A source text registered with a pipeline, as [Pipeline::sources] lists it.
 #[derive(Debug, Clone, Copy)]
 pub struct RegisteredSource<'a> {
@@ -22,8 +24,19 @@ pub struct RegisteredSource<'a> {
     pub text: &'a str,
 }
 
+/// The source texts registered with a pipeline.
+#[derive(Debug, Default)]
+pub(super) struct Sources {
+    /// The registered source texts, by file id.
+    files: BTreeMap<FileId, SourceFile>,
+    /// The file ids that the spans of loaded statements use although no source is registered
+    /// under them (see [reserve_files](Pipeline::reserve_files)).
+    reserved: BTreeSet<FileId>,
+}
+
+/// One registered source text, with the name that diagnostics show for it.
 #[derive(Debug)]
-pub(super) struct SourceFile {
+struct SourceFile {
     /// The name that diagnostics show, as given to [Pipeline::add_source], such as a path.
     name: Arc<str>,
     /// The text, shared by the instances of a module file.
@@ -118,9 +131,9 @@ impl Pipeline {
     pub(crate) fn reserve_files(&mut self, program: &Program) {
         for statement in &program.statements {
             if let Some(span) = statement.span()
-                && !self.files.contains_key(&span.file)
+                && !self.sources.files.contains_key(&span.file)
             {
-                self.reserved_files.insert(span.file);
+                self.sources.reserved.insert(span.file);
             }
         }
     }
@@ -129,15 +142,16 @@ impl Pipeline {
     fn push_source(&mut self, source: SourceFile) -> FileId {
         let after = |index: u32| index.checked_add(1).expect("file counts stay below u32");
         let mut index = self
+            .sources
             .files
             .last_key_value()
             .map_or(0, |(last, _)| after(last.index()));
-        while self.reserved_files.contains(&FileId::new(index)) {
+        while self.sources.reserved.contains(&FileId::new(index)) {
             index = after(index);
         }
 
         let id = FileId::new(index);
-        self.files.insert(id, source);
+        self.sources.files.insert(id, source);
         id
     }
 
@@ -179,11 +193,14 @@ impl Pipeline {
 
     /// Returns every registered source.
     pub fn sources(&self) -> impl Iterator<Item = RegisteredSource<'_>> {
-        self.files.iter().map(|(&file, source)| RegisteredSource {
-            file,
-            name: &source.name,
-            text: &source.text,
-        })
+        self.sources
+            .files
+            .iter()
+            .map(|(&file, source)| RegisteredSource {
+                file,
+                name: &source.name,
+                text: &source.text,
+            })
     }
 
     /// Returns the source text a span covers,
@@ -196,6 +213,6 @@ impl Pipeline {
 
     /// Returns the registered source a file id addresses.
     fn source(&self, file: FileId) -> Option<&SourceFile> {
-        self.files.get(&file)
+        self.sources.files.get(&file)
     }
 }

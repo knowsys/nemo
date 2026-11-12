@@ -48,6 +48,7 @@ use crate::{
         Engine, compile::translation::TranslationState, evaluate::reason::SuspendedReasoning,
         staging::Staged,
     },
+    pipeline::ReportMark,
 };
 
 /// A remote resource that a loading method needs: the import that reads it, its name,
@@ -184,16 +185,16 @@ pub(super) struct SuspendedLoad {
     ///
     /// The choice is undone if the method fails or is discarded.
     pub(super) chose_context: bool,
-    /// The index of the method's first report.
+    /// Where the method's reports begin.
     ///
-    /// If the method is discarded, its reports from this index on are withdrawn.
-    pub(super) reports_from: usize,
+    /// If the method is discarded, its reports are withdrawn.
+    pub(super) reports_from: ReportMark,
 }
 
 impl SuspendedLoad {
     /// Creates the state of a loading method, before any request,
-    /// whose reports begin at index `reports_from`.
-    pub(super) fn new(kind: LoadKind, staged: Staged, reports_from: usize) -> Self {
+    /// whose reports begin at `reports_from`.
+    pub(super) fn new(kind: LoadKind, staged: Staged, reports_from: ReportMark) -> Self {
         Self {
             kind,
             staged,
@@ -487,7 +488,7 @@ impl Engine {
             None => Ok(Progress::Done),
             Some(Suspension::Load(load)) => {
                 let chose = load.chose_context;
-                let already = self.pipeline.reports().len();
+                let already = self.pipeline.mark_reports();
                 let outcome = match load.kind {
                     LoadKind::Load => self.load_staged(load, already),
                     LoadKind::Extend => self.extend_staged(load, already),
@@ -521,7 +522,7 @@ impl Engine {
             self.next_context = None;
         }
 
-        self.pipeline.withdraw_reports(load.reports_from);
+        self.pipeline.take_reports(load.reports_from);
     }
 
     /// Records a suspended method, and returns [Progress::Suspended] with the requests it is

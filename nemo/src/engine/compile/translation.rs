@@ -599,7 +599,7 @@ impl<'a> Translator<'a> {
     ) -> Result<CompiledRules, Diagnostic> {
         let mut compiled = CompiledRules::default();
         for (index, statement) in statements.iter().enumerate() {
-            let already = self.stores.pipeline.reports().len();
+            let mark = self.stores.pipeline.mark_reports();
             let outcome = match statement {
                 // A preloaded fact's rows and seeds are already stored.
                 Statement::Fact(_) if self.is_preloaded(index) => Ok(()),
@@ -638,7 +638,7 @@ impl<'a> Translator<'a> {
             // and so, in a module instance, about that instance.
             self.stores
                 .pipeline
-                .label_instances_in_reports(already, ids[index]);
+                .label_instances_in_reports(mark, ids[index]);
             if let Err(problem) = outcome {
                 let problem = self.stores.pipeline.label_instances(problem, ids[index]);
                 self.report_or_fail(problem)?;

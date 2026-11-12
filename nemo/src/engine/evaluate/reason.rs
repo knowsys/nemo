@@ -307,11 +307,11 @@ impl Engine {
     ///
     /// It reports what the run's fetches skipped, against the written program.
     pub(in crate::engine) fn end_discarded_run(&mut self) {
-        let already = self.pipeline.reports().len();
+        let mark = self.pipeline.mark_reports();
         self.report_fetch_tallies();
         if let Some(written) = &self.written {
             self.pipeline
-                .map_reports(already, |report| written.present(report));
+                .map_reports(mark, |report| written.present(report));
         }
     }
 

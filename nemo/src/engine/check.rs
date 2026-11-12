@@ -41,10 +41,9 @@ impl Engine {
             Err(refused) => return CheckReport::new(vec![refused], None),
         };
         let (program, mut diagnostics) = self.parse_source(file);
-        let already = self.reports().len();
+        let mark = self.pipeline.mark_reports();
         let linked = self.link(program);
-        diagnostics.extend(self.reports()[already..].iter().cloned());
-        self.pipeline.withdraw_reports(already);
+        diagnostics.extend(self.pipeline.take_reports(mark));
         let types = match linked {
             Ok(linked) => {
                 let (checked, types) = self.check(linked).into_parts();
