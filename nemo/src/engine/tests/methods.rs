@@ -636,6 +636,51 @@ fn a_discarded_load_withdraws_its_reports() {
     assert_eq!(unsupplied(&engine), 1, "{:?}", engine.reports());
 }
 
+/// A loading method that fails, or that is discarded while it is suspended,
+/// leaves none of its program's statements in the pipeline.
+#[test]
+fn an_abandoned_loading_method_leaves_no_statements_behind() {
+    let mut engine = Engine::new();
+    let empty = engine.pipeline.mark();
+
+    engine
+        .load(parse("@use lib as l ."))
+        .expect_err("the program is not linked");
+    assert_eq!(engine.pipeline.mark(), empty);
+
+    engine
+        .load(parse("r(1, 2) . q(?x) :- r(?x) ."))
+        .expect_err("`r` is used with two numbers of columns");
+    assert_eq!(engine.pipeline.mark(), empty);
+
+    let progress = engine
+        .start_load(parse(
+            "@import p from csv { resource = \"http://example.org/p.csv\" } .",
+        ))
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert!(matches!(progress, Progress::Suspended(_)));
+    assert_ne!(engine.pipeline.mark(), empty);
+    assert!(engine.discard_pending());
+    assert_eq!(engine.pipeline.mark(), empty);
+
+    engine
+        .load(parse("r(1) . q(?x) :- r(?x) ."))
+        .expect("the program loads");
+    let loaded = engine.pipeline.mark();
+    engine
+        .extend(parse("r(1, 2) ."))
+        .expect_err("`r` has one column");
+    assert_eq!(engine.pipeline.mark(), loaded);
+    engine
+        .reload(parse("r(1, 2) . q(?x) :- r(?x) ."))
+        .expect_err("`r` is used with two numbers of columns");
+    assert_eq!(engine.pipeline.mark(), loaded);
+
+    // The loaded program is still the one that runs.
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "q"), [["1"]]);
+}
+
 /// A load that fails registers no predicate, so that a corrected program loads,
 /// even one that uses a predicate of the failed program with another number of columns.
 #[test]

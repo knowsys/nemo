@@ -48,7 +48,7 @@ use crate::{
         Engine, compile::translation::TranslationState, evaluate::reason::SuspendedReasoning,
         staging::Staged,
     },
-    pipeline::ReportMark,
+    pipeline::{ArenaMark, ReportMark},
 };
 
 /// A remote resource that a loading method needs: the import that reads it, its name,
@@ -154,6 +154,17 @@ pub(super) enum LoadKind {
     Reload,
 }
 
+impl LoadKind {
+    /// Returns the name of the loading method.
+    pub(super) fn method(self) -> &'static str {
+        match self {
+            LoadKind::Load => "load",
+            LoadKind::Extend => "extend",
+            LoadKind::Reload => "reload",
+        }
+    }
+}
+
 /// The state of a loading method after the pipeline stages ran:
 /// its prepared translation, and the remote resources it fetched and still needs.
 ///
@@ -189,16 +200,28 @@ pub(super) struct SuspendedLoad {
     ///
     /// If the method is discarded, its reports are withdrawn.
     pub(super) reports_from: ReportMark,
+    /// The pipeline's arena before the method staged its program.
+    ///
+    /// If the method fails or is discarded, the statements of its program are removed.
+    pub(super) statements_from: ArenaMark,
 }
 
 impl SuspendedLoad {
-    /// Creates the state of a loading method, before any request,
-    /// whose reports begin at `reports_from`.
-    pub(super) fn new(kind: LoadKind, staged: Staged, reports_from: ReportMark) -> Self {
+    /// Creates the state of a loading method, before any request.
+    ///
+    /// Its reports begin at `reports_from`,
+    /// and the statements of its program in the pipeline at `statements_from`.
+    pub(super) fn new(
+        kind: LoadKind,
+        staged: Staged,
+        reports_from: ReportMark,
+        statements_from: ArenaMark,
+    ) -> Self {
         Self {
             kind,
             staged,
             reports_from,
+            statements_from,
             prepared: None,
             unstable: HashSet::new(),
             fetched: HashMap::new(),
@@ -304,11 +327,7 @@ impl Suspension {
     /// Returns the name of the suspended method.
     fn method(&self) -> &'static str {
         match self {
-            Suspension::Load(load) => match load.kind {
-                LoadKind::Load => "load",
-                LoadKind::Extend => "extend",
-                LoadKind::Reload => "reload",
-            },
+            Suspension::Load(load) => load.kind.method(),
             Suspension::Reason(_) => "reason",
         }
     }
@@ -488,12 +507,8 @@ impl Engine {
             None => Ok(Progress::Done),
             Some(Suspension::Load(load)) => {
                 let chose = load.chose_context;
-                let already = self.pipeline.mark_reports();
-                let outcome = match load.kind {
-                    LoadKind::Load => self.load_staged(load, already),
-                    LoadKind::Extend => self.extend_staged(load, already),
-                    LoadKind::Reload => self.reload_staged(load, already),
-                };
+                let reports = self.pipeline.mark_reports();
+                let outcome = self.continue_loading(load, reports);
                 self.settle_context(chose, &outcome);
                 outcome
             }
@@ -506,8 +521,8 @@ impl Engine {
 
     /// Discards the suspended method, if any, with its requests and their responses.
     ///
-    /// A suspended loading method withdraws its reports and undoes its choice of the
-    /// evaluation context.
+    /// A suspended loading method withdraws its reports, removes the statements of its program
+    /// from the pipeline, and undoes its choice of the evaluation context.
     /// A suspended run ends as a cancelled one does, and reports what its fetches skipped.
     pub(super) fn abandon(&mut self) {
         let load = match self.suspension.take() {
@@ -523,6 +538,7 @@ impl Engine {
         }
 
         self.pipeline.take_reports(load.reports_from);
+        self.pipeline.rewind(load.statements_from);
     }
 
     /// Records a suspended method, and returns [Progress::Suspended] with the requests it is

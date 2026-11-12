@@ -35,7 +35,7 @@ pub(crate) use state::TranslationState;
 use crate::{
     diagnostics::{EngineError, TraceError, TranslationError},
     engine::{
-        Engine, ExportSpec,
+        ExportSpec,
         compile::compiled::{CompiledProgram, CompiledRule, RuleSource, VariableId},
         compile::import_plan::Instability,
         compile::optimize::{ImportSurvey, OptimizationPasses, column_position},
@@ -47,7 +47,7 @@ use crate::{
         compile::types,
         imported_rows::RowBlock,
         registered::Registered,
-        remote::{FetchedResource, Progress, ResourceRequest, Suspension},
+        remote::{FetchedResource, ResourceRequest},
         written::WrittenProgram,
     },
     model::{Directive, Fact, Identifier, ImportDirective, Operation, Span, Statement, Walk},
@@ -1043,165 +1043,5 @@ impl<'a> Translator<'a> {
             .predicates
             .insert(name, Registered { table, arity });
         Ok(table)
-    }
-}
-
-/// Stores that a translation writes to in place of the engine's,
-/// so that the engine's stores stay as they were.
-///
-/// They are the engine's tables without their rows, a dictionary, registered predicates
-/// and error counts.
-pub(in crate::engine) struct ScratchStores {
-    /// The engine's tables, under their ids, without their rows.
-    manager: TableManager,
-    /// A dictionary separate from the engine's.
-    dictionary: Dictionary,
-    /// The registered predicates that the translation starts from.
-    predicates: HashMap<String, Registered>,
-    /// Error counts separate from the engine's.
-    errors: ErrorCounts,
-}
-
-impl ScratchStores {
-    /// Returns the predicates registered in these stores.
-    pub(in crate::engine) fn into_predicates(self) -> HashMap<String, Registered> {
-        self.predicates
-    }
-}
-
-impl Engine {
-    /// Returns the evaluation context in which a loading method translates.
-    ///
-    /// If no loading method has chosen a context since the last run began,
-    /// it chooses one at the current instant.
-    /// The next run evaluates in the same context.
-    pub(in crate::engine) fn loading_context(&mut self) -> EvaluationContext {
-        *self.next_context.get_or_insert_with(EvaluationContext::now)
-    }
-
-    /// Runs a loading method, and settles its choice of the context by how it ended
-    /// (see [settle_context](Self::settle_context)).
-    pub(in crate::engine) fn choosing_context(
-        &mut self,
-        call: impl FnOnce(&mut Self) -> Result<Progress, Diagnostic>,
-    ) -> Result<Progress, Diagnostic> {
-        let chose = self.next_context.is_none();
-        let outcome = call(self);
-        self.settle_context(chose, &outcome);
-        outcome
-    }
-
-    /// Settles a loading method's choice of the context by how the method ended.
-    ///
-    /// `chose` says whether the method chose the context.
-    /// A method suspended for data from the network keeps the choice until it is resumed
-    /// or discarded.
-    /// A method that failed undoes the choice, so that the next loading method chooses again.
-    pub(in crate::engine) fn settle_context(
-        &mut self,
-        chose: bool,
-        outcome: &Result<Progress, Diagnostic>,
-    ) {
-        if !chose {
-            return;
-        }
-
-        match outcome {
-            Ok(Progress::Done) => {}
-            Ok(Progress::Suspended(_)) => {
-                if let Some(Suspension::Load(load)) = &mut self.suspension {
-                    load.chose_context = true;
-                }
-            }
-            Err(_) => self.next_context = None,
-        }
-    }
-
-    /// Returns the stores and the setup of one translation.
-    ///
-    /// They are borrowed separately,
-    /// so that the translation can write the stores while it reads the rest of the engine.
-    /// The translation evaluates its ground expressions in `context`.
-    pub(in crate::engine) fn translation_parts<'a>(
-        &'a mut self,
-        purpose: Purpose<'a>,
-        context: EvaluationContext,
-    ) -> (TranslationStores<'a>, TranslationSetup<'a>) {
-        self.parts(purpose, None, context)
-    }
-
-    /// Returns scratch stores beside the engine's tables,
-    /// which start from the given registered predicates.
-    pub(in crate::engine) fn scratch_stores(
-        &self,
-        predicates: HashMap<String, Registered>,
-    ) -> ScratchStores {
-        ScratchStores {
-            manager: self.manager.without_rows(),
-            dictionary: Dictionary::new(),
-            predicates,
-            errors: ErrorCounts::default(),
-        }
-    }
-
-    /// Returns the stores and the setup of a translation that writes to `scratch`,
-    /// so that the engine's stores stay as they were.
-    ///
-    /// The translation still reports to the engine's pipeline.
-    /// Its ground expressions are evaluated at the instant chosen for the next run,
-    /// if one is chosen, and otherwise at the current instant, which this does not choose.
-    pub(in crate::engine) fn scratch_translation_parts<'a>(
-        &'a mut self,
-        purpose: Purpose<'a>,
-        scratch: &'a mut ScratchStores,
-    ) -> (TranslationStores<'a>, TranslationSetup<'a>) {
-        let context = self.next_context.unwrap_or_else(EvaluationContext::now);
-        self.parts(purpose, Some(scratch), context)
-    }
-
-    /// Returns the stores and the setup of a translation.
-    ///
-    /// The stores are `scratch` if it is given, and the engine's otherwise.
-    fn parts<'a>(
-        &'a mut self,
-        purpose: Purpose<'a>,
-        scratch: Option<&'a mut ScratchStores>,
-        context: EvaluationContext,
-    ) -> (TranslationStores<'a>, TranslationSetup<'a>) {
-        let (manager, dictionary, predicates, errors) = match scratch {
-            Some(scratch) => (
-                &mut scratch.manager,
-                &mut scratch.dictionary,
-                &mut scratch.predicates,
-                &mut scratch.errors,
-            ),
-            None => (
-                &mut self.manager,
-                &mut self.dictionary,
-                &mut self.predicates,
-                &mut self.errors,
-            ),
-        };
-
-        (
-            TranslationStores {
-                manager,
-                dictionary,
-                predicates,
-                pipeline: &mut self.pipeline,
-                errors,
-            },
-            TranslationSetup {
-                import_directory: self.import_directory.as_deref(),
-                resources: &self.resources,
-                telemetry: &self.telemetry,
-                passes: &self.passes,
-                purpose,
-                written: None,
-                previous_types: self.program.as_ref().map(|program| &program.column_types),
-                context,
-                imported: self.unloaded_rows.blocks(),
-            },
-        )
     }
 }

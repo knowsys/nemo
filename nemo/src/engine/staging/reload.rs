@@ -5,33 +5,32 @@
 //! The predicates whose defining statements changed are *rebuilt*:
 //! their tables are dropped, and the new program loads them anew.
 //! So is every predicate without input facts to keep,
-//! which the new program may then use with another number of columns.
+//! which the new program may then use with another number of columns,
+//! and every imported predicate that was stored without something the new program reads.
 //! Every other predicate keeps its input facts and loses its derived facts.
 
 use std::collections::{HashMap, HashSet};
 
 use nemo_physical::{
     diagnostics::Diagnostic,
-    management::{ColumnOrder, Revision, TableId},
-    trie::RowBuffer,
-    value::Type,
+    management::{Revision, TableId},
 };
 
 use crate::{
     diagnostics::EngineError,
     engine::{
         Engine,
-        compile::{
-            compiled::CompiledProgram,
-            translation::{self, Prepared, Purpose, TranslationState},
-        },
-        evaluate::extensional::{ExtensionalBlock, ExtensionalOrigin},
+        compile::translation::{Purpose, TranslationState},
+        evaluate::extensional::ExtensionalOrigin,
         registered::Registered,
-        remote::{LoadKind, Progress, ResourceRequest, SuspendedLoad, Suspension},
-        written::WrittenProgram,
+        remote::{LoadKind, Progress, SuspendedLoad},
+        staging::{
+            Loaded, Staged,
+            translate::{StagedProgram, Translated},
+        },
     },
     model::{Directive, Identifier, Program, Statement},
-    pipeline::{ReportMark, RevisionId, StatementId},
+    pipeline::RevisionId,
 };
 
 /// What a reload must rebuild, according to its comparison of the statements.
@@ -43,15 +42,6 @@ struct RebuildScope {
     predicates: HashSet<String>,
 }
 
-/// How a reload's translation ended: done, or prepared and suspended for remote resources.
-enum TranslationOutcome<T> {
-    /// The translation is done, with this result.
-    Done(T),
-    /// The translation is prepared, with the engine as it was,
-    /// and needs the responses to these requests.
-    Missing(Vec<ResourceRequest>),
-}
-
 /// A table that a reload replaces: the old table of a rebuilt predicate,
 /// or the scratch table of its bound import.
 struct ReplacedTable {
@@ -59,22 +49,6 @@ struct ReplacedTable {
     predicate: String,
     /// The table.
     table: TableId,
-}
-
-/// What a reload's translation leaves to apply to the engine.
-struct Retranslated {
-    /// The new compiled program.
-    compiled: CompiledProgram,
-    /// The rows of the new program's facts and imports, by table.
-    facts: HashMap<TableId, RowBuffer>,
-    /// The old tables of the rebuilt predicates,
-    /// including the scratch tables of bound imports.
-    replaced: Vec<ReplacedTable>,
-    /// The extensional blocks from before the translation.
-    ///
-    /// They show which of the old tables hold rows added through
-    /// [import_rows](crate::engine::Engine::import_rows).
-    extensional: HashMap<TableId, Vec<ExtensionalBlock>>,
 }
 
 /// Removes the predicates named in `names` from a translation state and the registered
@@ -151,24 +125,13 @@ impl Engine {
                 .with_hint("call `load()` first; `reload()` replaces a loaded program"));
         }
 
-        let already = self.pipeline.mark_reports();
-
-        // The rows added through `import_rows` stay, unless their predicate is rebuilt,
-        // so the stages are told which predicates have them.
-        let imported = self.imported_predicates();
-        let staged = self.stage(program, &imported)?;
-        if !self.rewriting_stages(&staged).is_empty() {
-            self.translate_written_reload(&staged)?;
-        }
-
-        let load = SuspendedLoad::new(LoadKind::Reload, staged, already);
-        self.reload_staged(load, already)
+        self.start_loading(LoadKind::Reload, program)
     }
 
     /// Translates the written program of a staged replacement as
     /// [reload_staged](Self::reload_staged) first translates the program that the stages made
     /// of it, but reads no data and stores nothing.
-    fn translate_written_reload(&mut self, staged: &super::Staged) -> Result<(), Diagnostic> {
+    pub(super) fn validate_reload(&mut self, staged: &Staged) -> Result<(), Diagnostic> {
         let held = self.revision.expect("a loaded program has a revision");
         let new_statements = self.statements_of(staged.revision);
         let rebuild = self.rebuild_by_diff(&self.statements_of(held), &new_statements);
@@ -202,70 +165,64 @@ impl Engine {
 
     /// Translates a staged replacement and rebuilds the stored data.
     ///
-    /// The translation is first prepared, which registers and stores nothing.
-    /// If it needs remote resources that are not fetched yet, the reload is suspended for them
-    /// with the loaded program as it was, and commits from the prepared translation state
-    /// once every response is in.
-    /// The reports from index `already` on are rewritten to refer to the written program.
-    pub(in crate::engine) fn reload_staged(
+    /// The new program is translated against the kept predicates,
+    /// whose facts and imports are preloaded:
+    /// their rows are kept, and their resources are not read again.
+    /// A kept import may have been stored without columns or rows that the new rules read.
+    /// The translation then lists these imports,
+    /// and is repeated with their predicates rebuilt as well.
+    /// `load` keeps them, for a reload that is suspended before it commits.
+    pub(super) fn reload_staged(
         &mut self,
-        mut load: SuspendedLoad,
-        already: ReportMark,
-    ) -> Result<Progress, Diagnostic> {
-        load.take_responses();
-        if load.slots.has_pending() {
-            return Ok(self.suspend(Suspension::Load(load)));
-        }
-
-        let old = self.program.take().expect("a reload replaces a program");
+        load: &mut SuspendedLoad,
+        program: &StagedProgram,
+    ) -> Result<Loaded, Diagnostic> {
         let held = self.revision.expect("a loaded program has a revision");
-        let staged = load.staged;
-        let written = WrittenProgram::new(&self.pipeline, staged.written, staged.revision);
+        let rebuild = self.rebuild_by_diff(&self.statements_of(held), &program.statements);
 
-        let old_statements = self.statements_of(held);
-        let (new_ids, new_statements): (Vec<_>, Vec<Statement>) = self
-            .pipeline
-            .statements(staged.revision)
-            .map(|(id, statement)| (id, statement.clone()))
-            .unzip();
-        let rebuild = self.rebuild_by_diff(&old_statements, &new_statements);
-        let previous = &old.column_types;
-        let stages = self.rewriting_stages(&staged);
-        let retranslated = self.reload_translation(
-            &mut load,
-            &written,
-            &new_ids,
-            &new_statements,
-            &rebuild,
-            previous,
-            &stages,
-        );
-        self.pipeline
-            .present_reports(already, |report| written.present(report));
-        let retranslated = match retranslated {
-            Ok(TranslationOutcome::Done(retranslated)) => retranslated,
-            Ok(TranslationOutcome::Missing(missing)) => {
-                self.program = Some(old);
-                load.add_requests(missing, &mut self.request_ids);
-                return Ok(self.suspend(Suspension::Load(load)));
-            }
-            Err(problem) => {
-                self.program = Some(old);
-                return Err(written.present(problem));
+        let (translated, replaced) = loop {
+            let rebuilt = self.rebuilt_predicates(&rebuild, &load.unstable, &program.statements);
+
+            // The rebuilt predicates are unregistered, so that the new program registers
+            // them anew. Their tables are dropped only once the translation is done.
+            let checkpoint = self.checkpoint();
+            let replaced = unregister_from(&mut self.translation, &mut self.predicates, &rebuilt);
+            let preloaded = preloaded(
+                &program.statements,
+                &checkpoint.translation,
+                &self.predicates,
+            );
+
+            match self.translate(load, program, preloaded, checkpoint)? {
+                Translated::Done(translated) => break (*translated, replaced),
+                Translated::Missing(missing) => return Ok(Loaded::Missing(missing)),
+                Translated::Unstable(unstable) => {
+                    // A rebuilt predicate has no stored import,
+                    // so each repetition rebuilds more predicates than the one before.
+                    let before = load.unstable.len();
+                    let names = unstable.iter().map(|import| import.predicate.clone());
+                    load.unstable.extend(names);
+                    if load.unstable.len() == before {
+                        return Err(super::refuse_unstable(&unstable));
+                    }
+                }
             }
         };
-        self.replace_store(retranslated.replaced, &retranslated.extensional);
-        for (&table, rows) in &retranslated.facts {
-            self.assert_stored_types(&retranslated.compiled.column_types, table, rows);
+
+        self.replace_store(replaced);
+        self.assert_stored_types_of(&translated.compiled, &translated.facts);
+
+        // The new rows go into one new revision, after the revision of the first load.
+        self.step = self.step.max(1);
+        let revision = Revision(self.step);
+        let grown = self.store_input(translated.facts, revision, ExtensionalOrigin::Load);
+        if !grown.is_empty() {
+            self.step += 1;
         }
 
-        self.store_reloaded(retranslated.facts);
         self.forget_runs();
-        self.skeletons.clear();
-        self.program = Some(retranslated.compiled);
-        self.revision = Some(staged.revision);
-        self.written = Some(written);
-        Ok(Progress::Done)
+
+        Ok(Loaded::Done(translated.compiled))
     }
 
     /// Returns what a reload rebuilds, by comparing the old and the new statements.
@@ -331,145 +288,6 @@ impl Engine {
         rebuild
     }
 
-    /// Unregisters the predicates named in `names`, so that the new program registers them
-    /// anew, and returns their old tables, including the scratch tables of bound imports.
-    ///
-    /// It also forgets the extensional blocks of these tables.
-    /// The old tables themselves are dropped only if the reload succeeds.
-    fn unregister(&mut self, names: &[String]) -> Vec<ReplacedTable> {
-        let replaced = unregister_from(&mut self.translation, &mut self.predicates, names);
-        for ReplacedTable { table, .. } in &replaced {
-            self.extensional.remove(table);
-        }
-
-        replaced
-    }
-
-    /// Translates the new program against the kept predicates,
-    /// whose facts and imports are preloaded:
-    /// their rows are kept, and their resources are not read again.
-    ///
-    /// A kept import may have been stored without columns or rows that the new rules read.
-    /// The preparation lists these imports,
-    /// and the translation is repeated with their predicates rebuilt as well.
-    /// A failed translation restores the previous state.
-    /// So does a prepared translation that needs remote resources that are not fetched yet.
-    /// `load` then keeps the prepared translation state and the predicates rebuilt so far,
-    /// and the next call commits from them.
-    /// The remote resources are read from those that `load` fetched,
-    /// and a repetition reads them again.
-    /// `previous` gives the column types the replaced program was analyzed with,
-    /// and `stages` the pipeline stages that made the program.
-    #[expect(clippy::too_many_arguments, reason = "the parts of one reload")]
-    fn reload_translation(
-        &mut self,
-        load: &mut SuspendedLoad,
-        written: &WrittenProgram,
-        new_ids: &[StatementId],
-        new_statements: &[Statement],
-        rebuild: &RebuildScope,
-        previous: &HashMap<TableId, Vec<Type>>,
-        stages: &[&'static str],
-    ) -> Result<TranslationOutcome<Retranslated>, Diagnostic> {
-        let mut unstable: HashSet<String> = std::mem::take(&mut load.unstable);
-        loop {
-            let rebuilt = self.rebuilt_predicates(rebuild, &unstable, new_statements);
-
-            // Everything below must be undoable until translation succeeds.
-            let saved_state = self.translation.clone();
-            let saved_predicates = self.predicates.clone();
-            let saved_extensional = self.extensional.clone();
-            let replaced = self.unregister(&rebuilt);
-            let preloaded = preloaded(new_statements, &saved_state, &self.predicates);
-            let context = self.loading_context();
-
-            let state = match load.prepared.take() {
-                Some(state) => state,
-                None => {
-                    let mut state = self.translation.clone();
-                    state.clear_statement_state();
-                    let (stores, mut setup) =
-                        self.translation_parts(Purpose::of_load(stages), context);
-                    setup.written = Some(written);
-                    setup.previous_types = Some(previous);
-                    let mut translator =
-                        translation::Translator::new(stores, setup, state, preloaded.clone());
-                    let prepared = translator.prepare(new_statements, new_ids);
-                    let (state, _) = translator.finish();
-                    let prepared = prepared.map(|prepared| Prepared {
-                        requests: load.missing(prepared.requests),
-                        ..prepared
-                    });
-                    match prepared {
-                        Ok(prepared)
-                            if prepared.requests.is_empty() && prepared.unstable.is_empty() =>
-                        {
-                            state
-                        }
-                        outcome => {
-                            // Nothing was registered or stored, but the rebuilt
-                            // predicates were unregistered.
-                            self.forget_registrations(&saved_predicates, &saved_state);
-                            self.translation = saved_state;
-                            self.extensional = saved_extensional;
-                            let prepared = outcome?;
-                            let Some(first) = prepared.unstable.first() else {
-                                load.prepared = Some(state);
-                                load.unstable = unstable;
-                                return Ok(TranslationOutcome::Missing(prepared.requests));
-                            };
-
-                            // The unstable imports are read again, with their predicates
-                            // rebuilt. A rebuilt predicate has no stored import, so each
-                            // repetition rebuilds more.
-                            let before = unstable.len();
-                            let refusal = first.diagnostic();
-                            unstable.extend(
-                                prepared
-                                    .unstable
-                                    .into_iter()
-                                    .map(|instability| instability.predicate),
-                            );
-                            if unstable.len() == before {
-                                return Err(refusal);
-                            }
-
-                            continue;
-                        }
-                    }
-                }
-            };
-
-            let (stores, mut setup) = self.translation_parts(Purpose::of_load(stages), context);
-            setup.written = Some(written);
-            setup.previous_types = Some(previous);
-            let mut translator = translation::Translator::new(stores, setup, state, preloaded);
-
-            // A repetition reads the fetched resources again.
-            let outcome = translator.commit(new_statements, new_ids, load.fetched.clone());
-            let (state, facts) = translator.finish();
-            self.translation = state;
-            match outcome {
-                Ok(compiled) => {
-                    return Ok(TranslationOutcome::Done(Retranslated {
-                        compiled,
-                        facts,
-                        replaced,
-                        extensional: saved_extensional,
-                    }));
-                }
-                Err(problem) => {
-                    // Undo the registrations of this translation and
-                    // restore the previous state.
-                    self.forget_registrations(&saved_predicates, &saved_state);
-                    self.translation = saved_state;
-                    self.extensional = saved_extensional;
-                    return Err(problem);
-                }
-            }
-        }
-    }
-
     /// Returns the registered predicates that a reload rebuilds.
     ///
     /// They are every registered predicate if `rebuild` says so.
@@ -510,22 +328,17 @@ impl Engine {
             .collect()
     }
 
-    /// Drops the replaced tables, and the derived rows of every kept table.
+    /// Drops the replaced tables with their extensional blocks,
+    /// and the derived rows of every kept table.
     ///
-    /// `extensional` gives the extensional blocks from before the reload.
     /// The rows that were added through [import_rows](crate::engine::Engine::import_rows) to a
     /// replaced table cannot be reproduced from statements,
     /// so dropping them is reported with a warning.
-    fn replace_store(
-        &mut self,
-        replaced: Vec<ReplacedTable>,
-        extensional: &HashMap<TableId, Vec<ExtensionalBlock>>,
-    ) {
+    fn replace_store(&mut self, replaced: Vec<ReplacedTable>) {
         for ReplacedTable { predicate, table } in replaced {
-            if extensional
-                .get(&table)
-                .into_iter()
-                .flatten()
+            let blocks = self.extensional.remove(&table).unwrap_or_default();
+            if blocks
+                .iter()
                 .any(|block| block.origin == ExtensionalOrigin::ImportRows)
             {
                 self.pipeline
@@ -542,28 +355,6 @@ impl Engine {
             .collect();
         for table in tables {
             self.drop_derived(table);
-        }
-    }
-
-    /// Stores the rows of the new program's facts and imports at one new revision,
-    /// as an extensional block of each table that gains rows.
-    fn store_reloaded(&mut self, facts: HashMap<TableId, RowBuffer>) {
-        let revision = Revision(self.step.max(1));
-        let mut grew = false;
-        for (table, rows) in facts {
-            let arity = rows.arity();
-            let stored = self
-                .manager
-                .add_rows(table, revision, ColumnOrder::identity(arity), rows);
-            if stored > 0 {
-                grew = true;
-                self.record_extensional(table, revision, ExtensionalOrigin::Load);
-            }
-        }
-
-        self.step = self.step.max(1);
-        if grew {
-            self.step += 1;
         }
     }
 
