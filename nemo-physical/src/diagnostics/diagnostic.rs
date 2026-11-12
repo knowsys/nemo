@@ -192,19 +192,18 @@ impl Diagnostic {
         self
     }
 
-    /// Rewrites every text that the diagnostic shows:
-    /// its message, the messages of its labels, the values of its fields, its notes and its hints.
+    /// Rewrites every sentence of the diagnostic:
+    /// its message, the messages of its labels, its notes and its hints.
     ///
     /// `rewrite` returns the new form of a text,
     /// for example with other names for the things that it names.
+    /// The fields are values, not sentences, and stay as they are;
+    /// [with_field](Self::with_field) replaces the value of one.
     pub fn map_text(mut self, mut rewrite: impl FnMut(&str) -> String) -> Self {
         let details = &mut *self.0;
         details.message = rewrite(&details.message);
         for label in &mut details.labels {
             label.message = rewrite(&label.message);
-        }
-        for field in &mut details.fields {
-            field.value = rewrite(&field.value);
         }
         for text in details.notes.iter_mut().chain(&mut details.hints) {
             *text = rewrite(text);
@@ -293,9 +292,10 @@ mod tests {
 
     use crate::diagnostics::{FileId, Span};
 
-    /// Mapping the text rewrites the message, the labels, the fields, the notes and the hints.
+    /// Mapping the text rewrites the message, the labels, the notes and the hints,
+    /// and leaves the fields as they are.
     #[test]
-    fn mapping_text_reaches_every_text() {
+    fn mapping_text_reaches_every_sentence() {
         let span = Span {
             file: FileId::new(0),
             start: 0,
@@ -309,7 +309,7 @@ mod tests {
             .map_text(|text| text.replace('a', "b"));
         assert_eq!(diagnostic.message(), "rebds `b`");
         assert_eq!(diagnostic.labels()[0].message, "`b` here");
-        assert_eq!(diagnostic.field("predicate"), Some("b"));
+        assert_eq!(diagnostic.field("predicate"), Some("a"));
         assert_eq!(diagnostic.notes(), ["bbout `b`"]);
         assert_eq!(diagnostic.hints(), ["renbme `b`"]);
     }

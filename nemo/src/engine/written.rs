@@ -5,8 +5,8 @@
 //! The ids follow from the program text alone, and an extension appends to them.
 //! The pipeline stages rewrite the program into the compiled program,
 //! and results are mapped back onto the written statements.
-//! A predicate that a stage introduced is *hidden*: no user wrote it,
-//! so a diagnostic names the written literals it replaces instead.
+//! No user wrote a predicate that a stage made,
+//! so a diagnostic names the written literals that the predicate stands for instead.
 //! Whether a predicate is derived or extensional also follows the written program,
 //! however the stages rewrote its rules.
 
@@ -37,9 +37,22 @@ pub(crate) struct WrittenProgram {
     outputs: Vec<String>,
     /// The rewrites that the pipeline stages declared on the way to the compiled program.
     rewrites: Rewrites,
-    /// Per name of a hidden predicate, as written or resolved,
-    /// the text with which a diagnostic names the written literals it replaces.
-    hidden: Vec<(String, String)>,
+    /// The predicates that the stages made, as diagnostics present them.
+    stage_made: Vec<StageMade>,
+}
+
+/// A predicate that a pipeline stage made, as a diagnostic presents it.
+#[derive(Debug, Clone)]
+struct StageMade {
+    /// The names under which a diagnostic may refer to the predicate:
+    /// as the stage wrote it, and resolved.
+    spellings: Vec<String>,
+    /// The phrase that names the written literals that the predicate stands for,
+    /// such as "the literals `a(?x)`, `b(?x)`".
+    literals: String,
+    /// The resolved name of the written predicate of these literals,
+    /// if they are all literals of one predicate.
+    predicate: Option<String>,
 }
 
 /// What the written statements establish about one predicate.
@@ -66,7 +79,7 @@ enum PredicateUse {
 
 impl WrittenProgram {
     /// Collects the written program from the revision `written`,
-    /// and the hidden predicates of `revision`, which the pipeline stages made of it.
+    /// and what the pipeline stages declared on the way to `revision`.
     pub(crate) fn new(pipeline: &Pipeline, written: RevisionId, revision: RevisionId) -> Self {
         let statements: Vec<StatementId> = pipeline.statements(written).map(|(id, _)| id).collect();
         let ids = statements
@@ -83,6 +96,7 @@ impl WrittenProgram {
         }
 
         let rewrites = pipeline.rewrites(revision, &scope);
+        let stage_made = stage_made(pipeline, &rewrites, &scope, &predicates);
 
         Self {
             revision: written,
@@ -90,7 +104,7 @@ impl WrittenProgram {
             ids,
             predicates,
             outputs,
-            hidden: hidden(pipeline, &rewrites),
+            stage_made,
             rewrites,
         }
     }
@@ -162,21 +176,40 @@ impl WrittenProgram {
         self.predicates.get(predicate)?.arity
     }
 
-    /// Returns a diagnostic rewritten to refer to the written program:
-    /// every hidden predicate it names is replaced by the written literals it replaces.
+    /// Returns a diagnostic rewritten to refer to the written program.
+    ///
+    /// Where a sentence of the diagnostic names a predicate that a stage made,
+    /// it names the written literals that the predicate stands for instead.
+    /// A field whose value is such a predicate gets the written predicate of these literals,
+    /// and keeps its value if the literals are of several predicates.
     pub(crate) fn present(&self, diagnostic: Diagnostic) -> Diagnostic {
-        if self.hidden.is_empty() {
+        if self.stage_made.is_empty() {
             return diagnostic;
         }
 
+        let written: Vec<(&'static str, String)> = diagnostic
+            .fields()
+            .iter()
+            .filter_map(|field| {
+                let made = self
+                    .stage_made
+                    .iter()
+                    .find(|made| made.spellings.contains(&field.value))?;
+                Some((field.name, made.predicate.clone()?))
+            })
+            .collect();
+        let diagnostic = written
+            .into_iter()
+            .fold(diagnostic, |diagnostic, (name, predicate)| {
+                diagnostic.with_field(name, predicate)
+            });
+
         diagnostic.map_text(|text| {
             let mut text = text.to_owned();
-            for (spelling, literals) in &self.hidden {
-                if text == *spelling {
-                    return literals.clone();
+            for made in &self.stage_made {
+                for spelling in &made.spellings {
+                    text = text.replace(&format!("`{spelling}`"), &made.literals);
                 }
-
-                text = text.replace(&format!("`{spelling}`"), literals);
             }
 
             text
@@ -260,12 +293,18 @@ fn note_statement(
     statement.visit_predicates(|predicate| note(predicate, PredicateUse::Read, None));
 }
 
-/// Returns, per name of a predicate that a stage defined, as written or resolved,
-/// the text that names the written literals it replaces, such as "the literals `a`, `b`".
-fn hidden(pipeline: &Pipeline, rewrites: &Rewrites) -> Vec<(String, String)> {
-    let mut hidden = Vec::new();
+/// Returns the predicates that the stages defined, as diagnostics present them.
+///
+/// `scope` resolves the names of the written program, and `predicates` are its predicates.
+fn stage_made(
+    pipeline: &Pipeline,
+    rewrites: &Rewrites,
+    scope: &NameScope,
+    predicates: &HashMap<String, WrittenPredicate>,
+) -> Vec<StageMade> {
+    let mut made = Vec::new();
     for definition in rewrites.definitions() {
-        let (Some(meaning), Some(written)) = (
+        let (Some(meaning), Some(name)) = (
             pipeline.definition_rule(definition),
             pipeline.defined_predicate(definition.statement),
         ) else {
@@ -277,16 +316,31 @@ fn hidden(pipeline: &Pipeline, rewrites: &Rewrites) -> Vec<(String, String)> {
             .iter()
             .map(|literal| format!("`{literal}`"))
             .collect();
-        let literals = format!("the literals {}", literals.join(", "));
-        let mut spellings = vec![written.to_string()];
+
+        let mut spellings = vec![name.to_string()];
         if !spellings.contains(&definition.predicate) {
             spellings.push(definition.predicate.clone());
         }
 
-        for spelling in spellings {
-            hidden.push((spelling, literals.clone()));
-        }
+        // The literals name one written predicate, several, or none.
+        let mut read: Vec<String> = meaning
+            .body
+            .iter()
+            .filter_map(|literal| scope.lookup(&literal.atom()?.predicate))
+            .collect();
+        read.sort();
+        read.dedup();
+        let predicate = match read.as_slice() {
+            [only] if predicates.contains_key(only) => Some(only.clone()),
+            _ => None,
+        };
+
+        made.push(StageMade {
+            spellings,
+            literals: format!("the literals {}", literals.join(", ")),
+            predicate,
+        });
     }
 
-    hidden
+    made
 }

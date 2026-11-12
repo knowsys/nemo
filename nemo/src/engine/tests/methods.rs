@@ -414,10 +414,11 @@ fn traces_fail_on_a_store_short_of_the_fixpoint() {
     assert!(response.proof(0).is_some());
 }
 
-/// A diagnostic that names a predicate a stage introduced names the written
-/// literals that the predicate replaces instead.
+/// A diagnostic that names a predicate that a stage made names the written literals that
+/// the predicate stands for instead, and its fields name the written predicate of these
+/// literals.
 #[test]
-fn diagnostics_name_the_literals_a_hidden_predicate_replaces() {
+fn diagnostics_name_the_literals_that_a_stage_made_predicate_stands_for() {
     let program = parse(
         "@import triple from sparql { endpoint = <http://example.org/sparql>, \
          query = \"SELECT ?s ?p ?o WHERE { ?s ?p ?o }\" } .\n\
@@ -435,14 +436,22 @@ fn diagnostics_name_the_literals_a_hidden_predicate_replaces() {
     );
     let literals = "the literals `triple(?c, <urn:parent>, ?p)`";
     assert_eq!(presented.message(), format!("a rule reads {literals}"));
-    assert_eq!(presented.field("predicate"), Some(literals));
+    assert_eq!(presented.field("predicate"), Some("triple"));
 
-    // The binding rule is hidden too.
-    let presented = written.present(Diagnostic::warning(
-        codes::NEVER_FIRES,
-        "a rule reads `triple_bindings1`",
-    ));
+    // So is the predicate of the binding rule.
+    let presented = written.present(
+        Diagnostic::warning(codes::NEVER_FIRES, "a rule reads `triple_bindings1`")
+            .with_field("predicate", "triple_bindings1"),
+    );
     assert_eq!(presented.message(), "a rule reads the literals `anc(?c)`");
+    assert_eq!(presented.field("predicate"), Some("anc"));
+
+    // A field that names another predicate keeps its value.
+    let presented = written.present(
+        Diagnostic::warning(codes::NEVER_FIRES, "a rule reads `anc`")
+            .with_field("predicate", "anc"),
+    );
+    assert_eq!(presented.field("predicate"), Some("anc"));
 }
 
 /// A program's outputs are the predicates it declares `@output` or exports.
