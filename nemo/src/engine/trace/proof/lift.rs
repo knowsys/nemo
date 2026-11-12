@@ -321,7 +321,7 @@ impl<'a> Lifter<'a> {
             unreachable!("only a derived node has a derivation")
         };
 
-        let statement = self.program.statements[*index];
+        let statement = self.program.sources[*index].statement;
         let rule = match self.pipeline.statement(statement) {
             Statement::Rule(rule) => rule.clone(),
             Statement::Directive(Directive::Import(import)) => {
@@ -340,7 +340,8 @@ impl<'a> Lifter<'a> {
         let mut assignment = HashMap::new();
         if !witness.is_empty() {
             let positions = combined_positions(compiled);
-            for (variable, name) in self.program.names[*index]
+            for (variable, name) in self.program.sources[*index]
+                .names
                 .iter()
                 .enumerate()
                 .take(compiled.variables)

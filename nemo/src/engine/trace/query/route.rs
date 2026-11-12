@@ -79,10 +79,10 @@ impl<'a> Router<'a> {
             state,
             rewrites,
             compiled: program
-                .statements
+                .sources
                 .iter()
                 .enumerate()
-                .map(|(index, &statement)| (statement, index))
+                .map(|(index, source)| (source.statement, index))
                 .collect(),
         }
     }

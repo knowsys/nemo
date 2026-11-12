@@ -4,8 +4,10 @@ use nemo_physical::{diagnostics::Diagnostic, function::EvaluationContext};
 
 use crate::{
     diagnostics::TypeError,
-    engine::{compile::compiled::CompiledRule, compile::optimize::ProgramPass},
-    model::Span,
+    engine::compile::{
+        compiled::{CompiledRule, RuleSource},
+        optimize::ProgramPass,
+    },
 };
 
 /// The program pass that evaluates every ground condition of a rule once.
@@ -27,10 +29,11 @@ impl ProgramPass for ConstantFold {
     fn run(
         &self,
         rules: &mut [CompiledRule],
-        spans: &[Option<Span>],
+        sources: &[RuleSource],
         reports: &mut Vec<Diagnostic>,
     ) {
-        for (rule, &span) in rules.iter_mut().zip(spans) {
+        for (rule, source) in rules.iter_mut().zip(sources) {
+            let span = source.span;
             let never_fires = &mut rule.never_fires;
             rule.filters.retain(|filter| {
                 if !filter.inputs.is_empty() || filter.program.is_nondeterministic() {

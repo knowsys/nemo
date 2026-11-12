@@ -382,7 +382,7 @@ impl<'a> Run<'a> {
         self.reports(engine);
         loaded?;
         if let Some(recorder) = recorder {
-            recorder.set_rules(engine.compiled_rules().to_vec());
+            recorder.set_rules(engine.compiled_rules());
         }
         Ok(())
     }

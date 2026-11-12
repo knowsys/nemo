@@ -30,7 +30,7 @@
 //! let mut engine = Engine::new();
 //! engine.set_telemetry(recorder.clone());
 //! engine.load(program)?;
-//! recorder.set_rules(engine.compiled_rules().to_vec());
+//! recorder.set_rules(engine.compiled_rules());
 //! engine.reason()?;
 //!
 //! let snapshot = recorder.snapshot_json();

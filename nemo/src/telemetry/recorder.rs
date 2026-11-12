@@ -49,8 +49,11 @@ impl Recorder {
     /// `texts` gives each rule's text at its [position](crate::engine::Engine::compiled_rules),
     /// which is how events name rules.
     /// Once texts are set, an event for a position beyond them counts only towards the totals.
-    pub fn set_rules(&self, texts: Vec<String>) {
-        self.lock().texts = texts;
+    pub fn set_rules<T>(&self, texts: impl IntoIterator<Item = T>)
+    where
+        T: Into<String>,
+    {
+        self.lock().texts = texts.into_iter().map(Into::into).collect();
         self.version.fetch_add(1, Ordering::Release);
     }
 
@@ -141,7 +144,7 @@ mod tests {
     #[test]
     fn events_aggregate_per_rule_and_in_total() {
         let recorder = Recorder::new();
-        recorder.set_rules(vec!["a :- b .".to_string(), "c :- d .".to_string()]);
+        recorder.set_rules(["a :- b .", "c :- d ."]);
         recorder.record(&applied(0, 5));
         recorder.record(&applied(1, 2));
         recorder.record(&applied(0, 3));
@@ -240,7 +243,7 @@ mod tests {
         drop(state);
 
         // Once the rules are known, an index beyond them is unknown too.
-        recorder.set_rules(vec!["a :- b .".to_string()]);
+        recorder.set_rules(["a :- b ."]);
         recorder.record(&applied(1, 1));
         recorder.record(&applied(0, 1));
         let rules = recorder.rules();

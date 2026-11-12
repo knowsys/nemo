@@ -1483,10 +1483,16 @@ impl Engine {
     /// while traces name them by statement id (see [rule](Self::rule)).
     /// A bound import is a rule here too, rendered as its directive.
     /// Returns none before [load](Self::load).
-    pub fn compiled_rules(&self) -> &[String] {
-        self.program
-            .as_ref()
-            .map_or(&[], |program| program.texts.as_slice())
+    pub fn compiled_rules(&self) -> Vec<&str> {
+        let Some(program) = &self.program else {
+            return Vec::new();
+        };
+
+        program
+            .sources
+            .iter()
+            .map(|source| source.text.as_str())
+            .collect()
     }
 
     /// Returns the join order chosen for the rule at a [position](Self::compiled_rules),

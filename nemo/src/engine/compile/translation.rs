@@ -36,7 +36,7 @@ use crate::{
     diagnostics::{EngineError, TraceError, TranslationError},
     engine::{
         Engine, ExportSpec,
-        compile::compiled::{CompiledProgram, CompiledRule, VariableId},
+        compile::compiled::{CompiledProgram, CompiledRule, RuleSource, VariableId},
         compile::optimize::{ImportSurvey, OptimizationPasses},
         compile::strata,
         compile::translation::{
@@ -199,39 +199,25 @@ fn collect_columns(operation: &Operation, names: &mut HashMap<String, VariableId
 struct CompiledRules {
     /// The rules, in statement order.
     rules: Vec<CompiledRule>,
-    /// The text of each rule, rendered from the rule.
-    texts: Vec<String>,
-    /// The statement that each rule was compiled from.
-    statements: Vec<StatementId>,
-    /// Per rule, the written name of each rule column, or `None` for a column without one.
-    names: Vec<Vec<Option<String>>>,
-    /// The source position of each rule.
-    spans: Vec<Option<Span>>,
+    /// The source of each rule.
+    sources: Vec<RuleSource>,
 }
 
 impl CompiledRules {
-    /// Adds a rule with its text, statement, column names and source position.
-    fn push(
-        &mut self,
-        rule: CompiledRule,
-        text: String,
-        statement: StatementId,
-        names: Vec<Option<String>>,
-        span: Option<Span>,
-    ) {
+    /// Adds a rule with its source.
+    fn push(&mut self, rule: CompiledRule, source: RuleSource) {
         self.rules.push(rule);
-        self.texts.push(text);
-        self.statements.push(statement);
-        self.names.push(names);
-        self.spans.push(span);
+        self.sources.push(source);
     }
 
     /// Returns what the type analysis needs of each rule.
     fn source_info(&self) -> Vec<types::RuleSourceInfo<'_>> {
-        self.names
+        self.sources
             .iter()
-            .zip(&self.spans)
-            .map(|(names, &span)| types::RuleSourceInfo { span, names })
+            .map(|source| types::RuleSourceInfo {
+                span: source.span,
+                names: &source.names,
+            })
             .collect()
     }
 }
@@ -636,13 +622,13 @@ impl<'a> Translator<'a> {
                 Statement::Fact(_) if self.is_preloaded(index) => Ok(()),
                 Statement::Fact(fact) => self.fact(fact),
                 Statement::Rule(rule) => self.rule(rule).map(|(rule_compiled, names)| {
-                    compiled.push(
-                        rule_compiled,
-                        rule.to_string(),
-                        ids[index],
+                    let source = RuleSource {
+                        text: rule.to_string(),
+                        statement: ids[index],
                         names,
-                        rule.span,
-                    );
+                        span: rule.span,
+                    };
+                    compiled.push(rule_compiled, source);
                 }),
                 Statement::Directive(directive) => {
                     // An import with atoms in its `where` clause is a rule of the program,
@@ -652,13 +638,13 @@ impl<'a> Translator<'a> {
                     if let Directive::Import(import) = directive
                         && !import.bindings.is_empty()
                     {
-                        compiled.push(
-                            CompiledRule::inert(),
-                            import.to_string(),
-                            ids[index],
-                            Vec::new(),
-                            import.span,
-                        );
+                        let source = RuleSource {
+                            text: import.to_string(),
+                            statement: ids[index],
+                            names: Vec::new(),
+                            span: import.span,
+                        };
+                        compiled.push(CompiledRule::inert(), source);
                     }
 
                     self.directive(directive, index, compiled.rules.len())
@@ -691,7 +677,7 @@ impl<'a> Translator<'a> {
         for report in self
             .setup
             .passes
-            .rewrite(&mut compiled.rules, &compiled.spans)
+            .rewrite(&mut compiled.rules, &compiled.sources)
         {
             self.warn(report);
         }
@@ -721,7 +707,7 @@ impl<'a> Translator<'a> {
                 Some(rule) => self
                     .stores
                     .pipeline
-                    .label_instances(diagnostic, compiled.statements[rule]),
+                    .label_instances(diagnostic, compiled.sources[rule].statement),
                 None => diagnostic,
             };
             if problem.severity() == Severity::Error {
@@ -736,9 +722,9 @@ impl<'a> Translator<'a> {
         // depends on that predicate's rules, like any rule that reads it.
         for fetch in std::mem::take(&mut self.fetch_rules) {
             compiled.rules[fetch.index] = fetch.rule;
-            compiled.names[fetch.index] = fetch.names;
+            compiled.sources[fetch.index].names = fetch.names;
         }
-        let strata = match strata::stratify(&compiled.rules, &compiled.spans) {
+        let strata = match strata::stratify(&compiled.rules, &compiled.sources) {
             Ok(strata) => strata,
             Err(problem) => {
                 self.report_or_fail(problem)?;
@@ -748,10 +734,7 @@ impl<'a> Translator<'a> {
 
         Ok(CompiledProgram {
             rules: compiled.rules,
-            texts: compiled.texts,
-            statements: compiled.statements,
-            names: compiled.names,
-            spans: compiled.spans,
+            sources: compiled.sources,
             strata,
             exports: std::mem::take(&mut self.exports),
             column_types,

@@ -12,17 +12,20 @@ use std::collections::HashMap;
 
 use nemo_physical::{diagnostics::Diagnostic, management::TableId};
 
-use crate::{diagnostics::TranslationError, engine::compile::compiled::CompiledRule, model::Span};
+use crate::{
+    diagnostics::TranslationError,
+    engine::compile::compiled::{CompiledRule, RuleSource},
+};
 
 /// Returns the strata of the compiled rules, as lists of rule indices in dependency order.
 ///
 /// Strata that do not depend on each other are ordered by their smallest rule index.
-/// `spans` contains the source position of each rule.
 /// Fails for a program that is not stratified,
 /// with a label on a rule that negates or aggregates over its own recursion.
+/// The label is put at the rule's position in `sources`, which has one entry per rule.
 pub(crate) fn stratify(
     rules: &[CompiledRule],
-    spans: &[Option<Span>],
+    sources: &[RuleSource],
 ) -> Result<Vec<Vec<usize>>, Diagnostic> {
     let count = rules.len();
     if count == 0 {
@@ -90,7 +93,7 @@ pub(crate) fn stratify(
                 } else {
                     "this rule aggregates over its own recursion"
                 };
-                return Err(match spans[consumer] {
+                return Err(match sources[consumer].span {
                     Some(span) => diagnostic.with_label(span, label),
                     None => diagnostic,
                 });

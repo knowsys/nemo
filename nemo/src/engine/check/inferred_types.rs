@@ -79,10 +79,11 @@ impl InferredTypes {
 /// so a variable's type is the union of its types in all of them.
 fn rule_types(compiled: &CompiledProgram) -> Vec<RuleTypes> {
     let mut rules: Vec<(Span, Vec<(String, Type)>)> = Vec::new();
-    let sources = compiled.names.iter().zip(&compiled.spans);
-    for ((names, &span), columns) in sources.zip(&compiled.rule_columns) {
+    for (source, columns) in compiled.sources.iter().zip(&compiled.rule_columns) {
+        let names = &source.names;
+
         // A rule that fetches from an endpoint has no columns to report.
-        let Some(span) = span.filter(|_| !columns.is_empty()) else {
+        let Some(span) = source.span.filter(|_| !columns.is_empty()) else {
             continue;
         };
 

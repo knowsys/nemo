@@ -32,23 +32,30 @@ use crate::{engine::ExportSpec, model::Span, pipeline::StatementId};
 /// The variables are numbered in the order in which the positive body atoms first bind them.
 pub(crate) type VariableId = usize;
 
+/// What a compiled rule is in the program: its statement, and what messages show of it.
+#[derive(Debug, Clone)]
+pub(crate) struct RuleSource {
+    /// The rule's text, rendered from the rule.
+    pub(crate) text: String,
+    /// The pipeline statement that the rule was compiled from.
+    pub(crate) statement: StatementId,
+    /// The name of each rule column as written in the rule,
+    /// or `None` for a column without a written name.
+    pub(crate) names: Vec<Option<String>>,
+    /// The rule's source position.
+    pub(crate) span: Option<Span>,
+}
+
 /// The compiled program, which the engine evaluates.
 ///
-/// The fields with one entry per rule (`texts`, `statements`, `names`, `spans` and
-/// `rule_columns`) match [rules](Self::rules) by index.
+/// The fields with one entry per rule (`sources` and `rule_columns`)
+/// match [rules](Self::rules) by index.
 #[derive(Debug)]
 pub(crate) struct CompiledProgram {
     /// The rules, in program order.
     pub(crate) rules: Vec<CompiledRule>,
-    /// The text of each rule, rendered from the rule.
-    pub(crate) texts: Vec<String>,
-    /// The pipeline statement that each rule was compiled from.
-    pub(crate) statements: Vec<StatementId>,
-    /// Per rule, the name of each rule column as written in the rule,
-    /// or `None` for a column without a written name.
-    pub(crate) names: Vec<Vec<Option<String>>>,
-    /// The source position of each rule.
-    pub(crate) spans: Vec<Option<Span>>,
+    /// The source of each rule.
+    pub(crate) sources: Vec<RuleSource>,
     /// The strata in dependency order, each a list of rule indices.
     ///
     /// Every predicate that a stratum's rules negate is complete before the stratum is

@@ -887,9 +887,12 @@ impl Engine {
             .as_ref()
             .expect("rows widen the types of a loaded program");
         let sources: Vec<types::RuleSourceInfo<'_>> = program
-            .names
+            .sources
             .iter()
-            .map(|names| types::RuleSourceInfo { span: None, names })
+            .map(|source| types::RuleSourceInfo {
+                span: None,
+                names: &source.names,
+            })
             .collect();
         let inputs = types::AnalysisInputs {
             predicates: &self.predicates,
@@ -917,7 +920,7 @@ impl Engine {
                 diagnostic,
             }) => Err(self
                 .pipeline
-                .label_instances(diagnostic, program.statements[rule])),
+                .label_instances(diagnostic, program.sources[rule].statement)),
             Some(types::TypeFinding { diagnostic, .. }) => Err(diagnostic),
         }
     }

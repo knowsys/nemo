@@ -32,12 +32,10 @@ use std::fmt;
 
 use nemo_physical::diagnostics::Diagnostic;
 
-use crate::{
-    engine::{
-        compile::compiled::CompiledRule, compile::import_plan::ImportPlan,
-        compile::translation::Translator,
-    },
-    model::Span,
+use crate::engine::compile::{
+    compiled::{CompiledRule, RuleSource},
+    import_plan::ImportPlan,
+    translation::Translator,
 };
 
 /// An import pass, which decides what the loads of imported predicates may leave out
@@ -62,11 +60,11 @@ pub(crate) trait ProgramPass: fmt::Debug + Send + Sync {
 
     /// Rewrites the rules in place, and adds the diagnostics for the user to `reports`.
     ///
-    /// `spans` contains the source position of each rule, if it is known.
+    /// `sources` has one entry per rule, for the diagnostics' labels.
     fn run(
         &self,
         rules: &mut [CompiledRule],
-        spans: &[Option<Span>],
+        sources: &[RuleSource],
         reports: &mut Vec<Diagnostic>,
     );
 }
@@ -117,11 +115,11 @@ impl OptimizationPasses {
     pub(crate) fn rewrite(
         &self,
         rules: &mut [CompiledRule],
-        spans: &[Option<Span>],
+        sources: &[RuleSource],
     ) -> Vec<Diagnostic> {
         let mut reports = Vec::new();
         for pass in &self.program {
-            pass.run(rules, spans, &mut reports);
+            pass.run(rules, sources, &mut reports);
             tracing::debug!(pass = pass.name(), "program pass ran");
         }
 
