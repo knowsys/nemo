@@ -77,7 +77,7 @@ impl<'a> Translator<'a> {
             .intersects(DomainSet::TUPLE | DomainSet::MAP)
             && self
                 .column_declaration(name, position)
-                .is_none_or(|declared| column_type.is_subset(declared, &self.label_types))
+                .is_none_or(|declared| column_type.is_subset(declared, &self.state.label_types))
     }
 
     /// Encodes a value for its table.
@@ -88,7 +88,8 @@ impl<'a> Translator<'a> {
         value: ValueRef<'_>,
         span: Option<Span>,
     ) -> Result<StorageValue, Diagnostic> {
-        self.dictionary
+        self.stores
+            .dictionary
             .encode(value)
             .ok_or_else(|| TranslationError::Unrepresentable.at(span))
     }
@@ -97,6 +98,7 @@ impl<'a> Translator<'a> {
     /// starts its columns from.
     pub(super) fn seed(&mut self, table: TableId, column_types: &[Type]) {
         let seeds = self
+            .state
             .seeds
             .entry(table)
             .or_insert_with(|| vec![Type::EMPTY; column_types.len()]);
@@ -108,7 +110,8 @@ impl<'a> Translator<'a> {
     /// Returns the type that a predicate's declaration gives its kept column at `position`,
     /// if it has one.
     fn column_declaration(&self, name: &str, position: usize) -> Option<&Type> {
-        self.declarations
+        self.state
+            .declarations
             .get(name)
             .and_then(|declaration| declaration.types.get(position))
     }
@@ -125,12 +128,12 @@ impl<'a> Translator<'a> {
         arity: usize,
         span: Option<Span>,
     ) -> Result<ColumnLayout, Diagnostic> {
-        let layout = self.plan.layout_of(name, arity);
+        let layout = self.state.plan.layout_of(name, arity);
         if layout.prunes() {
             return Ok(layout);
         }
 
-        let kept = self.plan.stored_layout(name, arity).kept();
+        let kept = self.state.plan.stored_layout(name, arity).kept();
         if kept != arity {
             return Err(TranslationError::PrunedPredicateRows {
                 name: name.to_owned(),
@@ -158,7 +161,7 @@ impl<'a> Translator<'a> {
         let Some(declared) = self.column_declaration(name, position) else {
             return Ok(());
         };
-        if declared.admits(value, &self.label_types) {
+        if declared.admits(value, &self.state.label_types) {
             return Ok(());
         }
 

@@ -62,7 +62,7 @@ impl<'a> Translator<'a> {
             .iter()
             .map(|format| format.value != ValueFormat::Skip)
             .collect();
-        let layout = self.plan.layout(&import.predicate, kept);
+        let layout = self.state.plan.layout(&import.predicate, kept);
         let checked_only: Vec<bool> = formats
             .iter()
             .enumerate()
@@ -131,7 +131,7 @@ impl<'a> Translator<'a> {
         if !import.variables.is_empty() {
             return Ok(Some(terms(import.variables.len())));
         }
-        if let Some(declaration) = self.declarations.get(&import.predicate) {
+        if let Some(declaration) = self.state.declarations.get(&import.predicate) {
             return Ok(Some(terms(declaration.types.len())));
         }
 
@@ -156,11 +156,11 @@ impl<'a> Translator<'a> {
         resource: &str,
         fetched: Option<&Arc<[u8]>>,
     ) -> Result<Option<usize>, ImportFailure> {
-        let arity = match self.predicates.get(&import.predicate) {
+        let arity = match self.stores.predicates.get(&import.predicate) {
             Some(&Registered { arity, .. }) => arity,
             None => {
-                if !self.purpose.reads() {
-                    self.open.insert(import.predicate.clone());
+                if !self.setup.purpose.reads() {
+                    self.state.open.insert(import.predicate.clone());
                     return Ok(None);
                 }
 
@@ -187,7 +187,7 @@ impl<'a> Translator<'a> {
                     // An empty file into a predicate without other uses has no rows and no
                     // width, so there is nothing to register.
                     None => {
-                        self.open.insert(import.predicate.clone());
+                        self.state.open.insert(import.predicate.clone());
                         return Ok(None);
                     }
                 }
@@ -197,7 +197,10 @@ impl<'a> Translator<'a> {
         // The table of a pruned predicate has only the delivered columns,
         // but the file still has every kept column.
         Ok(Some(
-            self.plan.stored_layout(&import.predicate, arity).kept(),
+            self.state
+                .plan
+                .stored_layout(&import.predicate, arity)
+                .kept(),
         ))
     }
 
@@ -213,7 +216,7 @@ impl<'a> Translator<'a> {
             .iter()
             .map(|prepared| prepared.source.clone())
             .collect();
-        let loaded = DsvBatch::new(sources).load(self.dictionary, self.context)?;
+        let loaded = DsvBatch::new(sources).load(self.stores.dictionary, self.setup.context)?;
         for (prepared, loaded) in batch.into_iter().zip(loaded) {
             self.absorb(
                 prepared.table,

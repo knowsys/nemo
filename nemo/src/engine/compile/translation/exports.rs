@@ -95,6 +95,7 @@ impl<'a> Translator<'a> {
                 // The program's own prefixes and base, so that the
                 // output abbreviates IRIs as the program does.
                 let mut prefixes: Vec<(String, String)> = self
+                    .state
                     .scope
                     .prefixes()
                     .iter()
@@ -106,7 +107,9 @@ impl<'a> Translator<'a> {
                     resource: shape.resource,
                     format: ExportFormat::Rdf {
                         variant,
-                        base: shape.base.or_else(|| self.scope.base().map(str::to_owned)),
+                        base: shape
+                            .base
+                            .or_else(|| self.state.scope.base().map(str::to_owned)),
                         prefixes,
                     },
                     compression: shape.compression,
@@ -131,7 +134,7 @@ impl<'a> Translator<'a> {
                 // A check accepts what this build cannot write,
                 // since the program may be meant for a build that can.
                 #[cfg(not(feature = "parquet"))]
-                return if self.purpose == super::Purpose::Check {
+                return if self.setup.purpose == super::Purpose::Check {
                     Ok(None)
                 } else {
                     Err(TranslationError::FeatureUnavailable {
@@ -168,7 +171,8 @@ impl<'a> Translator<'a> {
     pub(super) fn validate_exports(&mut self) -> Result<(), Diagnostic> {
         let mut problems = Vec::new();
         for (spec, &span) in self.exports.iter().zip(&self.export_spans) {
-            let Some(&Registered { arity, .. }) = self.predicates.get(&spec.predicate) else {
+            let Some(&Registered { arity, .. }) = self.stores.predicates.get(&spec.predicate)
+            else {
                 continue;
             };
 

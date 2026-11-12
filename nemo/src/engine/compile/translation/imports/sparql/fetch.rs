@@ -140,10 +140,10 @@ impl<'a> Translator<'a> {
     /// It persists across translations, and one of another arity is replaced,
     /// as after a [reload](crate::engine::Engine::reload) that projects the import differently.
     fn fetch_scratch(&mut self, predicate: &str, arity: usize) -> Result<TableId, Diagnostic> {
-        let kept = match self.scratch.get(predicate) {
-            Some(&scratch) if self.manager.arity(scratch) == arity => Some(scratch),
+        let kept = match self.state.scratch.get(predicate) {
+            Some(&scratch) if self.stores.manager.arity(scratch) == arity => Some(scratch),
             Some(&scratch) => {
-                self.manager.drop_table(scratch);
+                self.stores.manager.drop_table(scratch);
                 None
             }
             None => None,
@@ -152,8 +152,11 @@ impl<'a> Translator<'a> {
         Ok(match kept {
             Some(scratch) => scratch,
             None => {
-                let scratch = self.manager.register(format!("{predicate}#fetch"), arity);
-                self.scratch.insert(predicate.to_owned(), scratch);
+                let scratch = self
+                    .stores
+                    .manager
+                    .register(format!("{predicate}#fetch"), arity);
+                self.state.scratch.insert(predicate.to_owned(), scratch);
                 scratch
             }
         })
@@ -184,7 +187,11 @@ impl RuleCompiler<'_, '_> {
             return Err(TranslationError::BindingSelf { predicate: name }.at(atom.span));
         }
 
-        let layout = self.translator.plan.layout_of(&name, atom.terms.len());
+        let layout = self
+            .translator
+            .state
+            .plan
+            .layout_of(&name, atom.terms.len());
         let mut columns = Vec::with_capacity(atom.terms.len());
         let mut bound_here: HashSet<usize> = HashSet::new();
         for (position, term) in atom.terms.iter().enumerate() {

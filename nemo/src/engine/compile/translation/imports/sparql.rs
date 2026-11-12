@@ -163,11 +163,16 @@ impl<'a> Translator<'a> {
         // The solutions came from the fetch, or were registered under the
         // import's resource name. Otherwise the prefetch returned an error.
         let bytes = fetched
-            .or_else(|| self.resources.get(&spec.resource()).cloned())
+            .or_else(|| self.setup.resources.get(&spec.resource()).cloned())
             .expect("the prefetch fetched or diagnosed every SPARQL import");
         let loaded = SparqlReader::new(source_width, selection)
             .with_endpoint_blank_nodes()
-            .read(&spec.endpoint, &bytes, self.dictionary, self.context)
+            .read(
+                &spec.endpoint,
+                &bytes,
+                self.stores.dictionary,
+                self.setup.context,
+            )
             .map_err(ImportFailure::Reading)?;
         self.absorb(
             table,
@@ -202,8 +207,9 @@ impl<'a> Translator<'a> {
         let text = options.query.unwrap_or_else(|| String::from(DEFAULT_QUERY));
         let query = SparqlQuery::parse(
             &text,
-            options.base.as_deref().or(self.scope.base()),
-            self.scope
+            options.base.as_deref().or(self.state.scope.base()),
+            self.state
+                .scope
                 .prefixes()
                 .iter()
                 .map(|(name, iri)| (name.as_str(), iri.as_str())),
@@ -233,8 +239,8 @@ impl<'a> Translator<'a> {
             query.width(),
             options.formats_span.or(import.span),
         )?;
-        let layout = self.plan.layout(&import.predicate, kept);
-        let written_query = match options.base.as_deref().or(self.scope.base()) {
+        let layout = self.state.plan.layout(&import.predicate, kept);
+        let written_query = match options.base.as_deref().or(self.state.scope.base()) {
             Some(base) => format!("BASE <{base}>\n{text}"),
             None => text,
         };

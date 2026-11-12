@@ -84,17 +84,17 @@ impl<'a> Translator<'a> {
         name: &str,
         span: Option<Span>,
     ) -> Result<(), Diagnostic> {
-        let Some(&Registered { table, arity }) = self.predicates.get(name) else {
+        let Some(&Registered { table, arity }) = self.stores.predicates.get(name) else {
             return Ok(());
         };
-        let Some(seeds) = self.seeds.get(&table) else {
+        let Some(seeds) = self.state.seeds.get(&table) else {
             return Ok(());
         };
-        let Some(declaration) = self.declarations.get(name) else {
+        let Some(declaration) = self.state.declarations.get(name) else {
             return Ok(());
         };
 
-        let layout = self.plan.stored_layout(name, arity);
+        let layout = self.state.plan.stored_layout(name, arity);
         for (column, declared) in declaration.types.iter().enumerate() {
             let Some(seed) = layout
                 .delivered_position(column)
@@ -102,7 +102,7 @@ impl<'a> Translator<'a> {
             else {
                 continue;
             };
-            if !seed.is_subset(declared, &self.label_types) {
+            if !seed.is_subset(declared, &self.state.label_types) {
                 return Err(TypeError::StoredValuesExcluded {
                     name: name.to_owned(),
                     column: column + 1,
@@ -158,7 +158,7 @@ impl<'a> Translator<'a> {
             let mut reads = Vec::new();
             collect_globals(value, &mut reads);
             let undefined = reads.into_iter().find(|read| {
-                !self.globals.contains_key(*read)
+                !self.state.globals.contains_key(*read)
                     && !parameters.iter().any(|other| other.variable.name == *read)
             });
             if let Some(read) = undefined {
@@ -214,7 +214,7 @@ impl<'a> Translator<'a> {
     fn resolve_parameter(&mut self, parameter: &ParameterDirective) -> Result<bool, Diagnostic> {
         let name = &parameter.variable.name;
         let Some(value) = &parameter.value else {
-            if self.purpose != Purpose::Check {
+            if self.setup.purpose != Purpose::Check {
                 self.report_or_fail(
                     TranslationError::ParameterWithoutValue { name: name.clone() }
                         .at(parameter.span),
@@ -231,13 +231,16 @@ impl<'a> Translator<'a> {
             self.unvalued.insert(name);
             return Ok(true);
         }
-        if !reads.iter().all(|read| self.globals.contains_key(*read)) {
+        if !reads
+            .iter()
+            .all(|read| self.state.globals.contains_key(*read))
+        {
             return Ok(false);
         }
 
         match self.parameter_value(parameter, value) {
             Ok(grounded) => {
-                self.globals.insert(name.clone(), grounded);
+                self.state.globals.insert(name.clone(), grounded);
             }
             Err(problem) => {
                 self.report_or_fail(problem)?;
@@ -270,7 +273,7 @@ impl<'a> Translator<'a> {
                     return Err(problem);
                 }
             };
-            if !declared.admits(grounded.as_ref(), &self.label_types) {
+            if !declared.admits(grounded.as_ref(), &self.state.label_types) {
                 let supplied = Type::of_value(grounded.as_ref());
                 return Err(TypeError::ParameterOutsideType {
                     name: parameter.variable.name.clone(),
@@ -286,7 +289,7 @@ impl<'a> Translator<'a> {
 
     /// Returns the value of a global parameter.
     pub(super) fn global(&self, name: &str, span: Option<Span>) -> Result<DataValue, Diagnostic> {
-        self.globals.get(name).cloned().ok_or_else(|| {
+        self.state.globals.get(name).cloned().ok_or_else(|| {
             TranslationError::UndefinedParameter {
                 name: name.to_owned(),
             }
@@ -326,7 +329,7 @@ impl<'a> Translator<'a> {
         let mut stack = Vec::with_capacity(program.stack_bound());
 
         program
-            .evaluate(self.context, &mut stack, &[])
+            .evaluate(self.setup.context, &mut stack, &[])
             .as_result()
             .map(|value| value.to_owned())
             .map_err(|_| TranslationError::OptionUnevaluable.at(term.span))
@@ -372,7 +375,7 @@ impl<'a> Translator<'a> {
             TypeExpression::Base(BaseType::Map) => Type::of(ValueDomain::Map),
             TypeExpression::Named(identifier) => {
                 let name = self.resolve(identifier, span)?;
-                let Some(definition) = self.type_definitions.get(&name) else {
+                let Some(definition) = self.state.type_definitions.get(&name) else {
                     return Err(TranslationError::UnknownType {
                         name: identifier.to_string(),
                     }
@@ -434,6 +437,7 @@ impl<'a> Translator<'a> {
         };
 
         Ok(self
+            .state
             .type_definitions
             .contains_key(&self.resolve(name, span)?))
     }
@@ -529,7 +533,7 @@ impl<'a> Translator<'a> {
         }
 
         let name = self.resolve(identifier, directive.span)?;
-        match self.type_definitions.get(&name) {
+        match self.state.type_definitions.get(&name) {
             // Every instance of a module declares the module's types again,
             // with the same definitions.
             Some(definition) if *definition == directive.definition => Ok(()),
@@ -538,7 +542,8 @@ impl<'a> Translator<'a> {
             }
             .at(directive.span)),
             None => {
-                self.type_definitions
+                self.state
+                    .type_definitions
                     .insert(name, directive.definition.clone());
                 Ok(())
             }
@@ -563,7 +568,7 @@ impl<'a> Translator<'a> {
     /// Returns the type that `@type` declares for a label, or `None` if the label has no
     /// `@type`.
     fn label_type(&self, label: &str) -> Option<&Type> {
-        self.label_types.get(label)
+        self.state.label_types.get(label)
     }
 
     /// Checks a ground value and its parts against the element types that `@type` declares
@@ -580,7 +585,7 @@ impl<'a> Translator<'a> {
             let Some(label_type) = self.label_type(label) else {
                 return Ok(());
             };
-            if !label_type.admits(value, &self.label_types) {
+            if !label_type.admits(value, &self.state.label_types) {
                 return Err(TypeError::ValueOutsideType {
                     label: label.to_owned(),
                     declared: TypeSyntax::of(label_type).to_string(),
@@ -650,7 +655,7 @@ impl<'a> Translator<'a> {
 
         for (argument, declared) in arguments.iter().zip(&shape.elements) {
             if let Ok(grounded) = self.evaluate(argument)
-                && !declared.admits(grounded.as_ref(), &self.label_types)
+                && !declared.admits(grounded.as_ref(), &self.state.label_types)
             {
                 return Err(TypeError::TupleFieldOutsideType {
                     label: label.to_owned(),
@@ -709,7 +714,7 @@ impl<'a> Translator<'a> {
                 .at(key.span.or(span)));
             };
             if let Ok(grounded) = self.evaluate(value)
-                && !declared.admits(grounded.as_ref(), &self.label_types)
+                && !declared.admits(grounded.as_ref(), &self.state.label_types)
             {
                 return Err(TypeError::MapFieldOutsideType {
                     key: key.to_string(),
@@ -749,6 +754,7 @@ impl<'a> Translator<'a> {
             span: declare.span,
         };
         if self
+            .state
             .declarations
             .insert(name.clone(), declaration)
             .is_some()
@@ -779,7 +785,7 @@ impl<'a> Translator<'a> {
         body: bool,
     ) -> Result<Vec<Term>, Diagnostic> {
         let name = self.resolve(predicate, span)?;
-        let Some(declaration) = self.declarations.get(&name) else {
+        let Some(declaration) = self.state.declarations.get(&name) else {
             let problem = TranslationError::NamedArgumentsUndeclared {
                 predicate: predicate.to_string(),
             }
@@ -850,11 +856,11 @@ impl<'a> Translator<'a> {
             let local = match &term.kind {
                 TermKind::Number(_) | TermKind::Constant(Identifier::Bare(_)) => term
                     .span
-                    .and_then(|span| self.pipeline.span_text(span))
+                    .and_then(|span| self.stores.pipeline.span_text(span))
                     .map_or_else(|| term.to_string(), str::to_owned),
                 _ => return None,
             };
-            (self.scope.prefixes().contains_key(label) && NameKind::Local.admits(&local))
+            (self.state.scope.prefixes().contains_key(label) && NameKind::Local.admits(&local))
                 .then_some((label, local))
         });
         let Some((label, local)) = mistaken else {
@@ -932,7 +938,7 @@ impl<'a> Translator<'a> {
         preloaded: bool,
     ) -> Result<Option<String>, Diagnostic> {
         let name = self.resolve(&input.predicate, input.span)?;
-        if self.inputs.contains(&name) {
+        if self.state.inputs.contains(&name) {
             return Err(ModuleError::DuplicateInput {
                 predicate: input.predicate.to_string(),
             }
@@ -950,6 +956,7 @@ impl<'a> Translator<'a> {
                 span: input.span,
             };
             if self
+                .state
                 .declarations
                 .insert(name.clone(), declaration)
                 .is_some()
@@ -966,7 +973,7 @@ impl<'a> Translator<'a> {
         // Running the program directly leaves the input unbound, which gets a warning.
         // A check looks at a module on its own, whose inputs are bound later,
         // and a preloaded statement was already warned about, so neither warns.
-        if self.purpose != Purpose::Check && !preloaded {
+        if self.setup.purpose != Purpose::Check && !preloaded {
             self.warn(
                 TranslationError::InputUnsupplied {
                     predicate: input.predicate.to_string(),
@@ -976,8 +983,8 @@ impl<'a> Translator<'a> {
             );
         }
 
-        self.inputs.insert(name.clone());
-        self.open.insert(name);
+        self.state.inputs.insert(name.clone());
+        self.state.open.insert(name);
         Ok(declared)
     }
 }

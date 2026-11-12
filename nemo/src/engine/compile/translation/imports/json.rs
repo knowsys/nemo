@@ -50,7 +50,7 @@ impl<'a> Translator<'a> {
             .iter()
             .map(|format| format.value != ValueFormat::Skip)
             .collect();
-        let layout = self.plan.layout(&import.predicate, kept);
+        let layout = self.state.plan.layout(&import.predicate, kept);
 
         // What the kept columns can hold follows from their formats alone.
         let kept_types: Vec<Type> = formats
@@ -74,12 +74,12 @@ impl<'a> Translator<'a> {
         let reader = JsonReader::new(options);
         let loaded = match self.source_stream(&resource, compression, fetched) {
             Some(source) => reader
-                .read(source, self.dictionary, self.context)
+                .read(source, self.stores.dictionary, self.setup.context)
                 .map_err(|diagnostic| diagnostic.with_resource(resource.clone())),
             None => reader.read_path(
                 self.resource_path(import.span, &resource),
-                self.dictionary,
-                self.context,
+                self.stores.dictionary,
+                self.setup.context,
             ),
         }
         .map_err(ImportFailure::Reading)?;
@@ -118,18 +118,22 @@ impl<'a> Translator<'a> {
         if !import.variables.is_empty() {
             return Ok(Some(terms(import.variables.len())));
         }
-        if let Some(declaration) = self.declarations.get(&import.predicate) {
+        if let Some(declaration) = self.state.declarations.get(&import.predicate) {
             return Ok(Some(terms(declaration.types.len())));
         }
-        if let Some(&Registered { arity, .. }) = self.predicates.get(&import.predicate) {
+        if let Some(&Registered { arity, .. }) = self.stores.predicates.get(&import.predicate) {
             // The table of a pruned predicate has only the delivered columns,
             // but a record still has every kept column.
-            let kept = self.plan.stored_layout(&import.predicate, arity).kept();
+            let kept = self
+                .state
+                .plan
+                .stored_layout(&import.predicate, arity)
+                .kept();
 
             return Ok(Some(terms(kept)));
         }
-        if !self.purpose.reads() {
-            self.open.insert(import.predicate.clone());
+        if !self.setup.purpose.reads() {
+            self.state.open.insert(import.predicate.clone());
             return Ok(None);
         }
 
@@ -151,7 +155,7 @@ impl<'a> Translator<'a> {
             // A resource without a record, or whose first record is no array,
             // gives no number of columns, so there is nothing to register.
             None => {
-                self.open.insert(import.predicate.clone());
+                self.state.open.insert(import.predicate.clone());
                 Ok(None)
             }
         }

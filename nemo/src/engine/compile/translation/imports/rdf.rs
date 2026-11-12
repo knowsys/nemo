@@ -44,6 +44,7 @@ impl<'a> Translator<'a> {
         }
 
         let scope = self
+            .stores
             .dictionary
             .fresh_label_scope(&format!("document {resource}"));
         self.documents.insert(resource.to_owned(), scope);
@@ -69,7 +70,7 @@ impl<'a> Translator<'a> {
             variant.width(),
             directive.formats_span.or(import.span),
         )?;
-        let layout = self.plan.layout(&import.predicate, kept);
+        let layout = self.state.plan.layout(&import.predicate, kept);
         let kept_types: Vec<Type> = column_types(variant.width())
             .into_iter()
             .enumerate()
@@ -92,7 +93,7 @@ impl<'a> Translator<'a> {
         // The batch parses the statements on worker threads, and a large line-based resource
         // on several of them.
         let loaded = RdfBatch::new(vec![RdfResource { input, reader }])
-            .load(self.dictionary, self.context)
+            .load(self.stores.dictionary, self.setup.context)
             .map_err(ImportFailure::Reading)?
             .pop()
             .expect("a batch gives one load per resource");

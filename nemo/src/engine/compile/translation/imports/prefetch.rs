@@ -34,7 +34,7 @@ impl<'a> Translator<'a> {
         ids: &[StatementId],
     ) -> Result<Vec<ResourceRequest>, Diagnostic> {
         let mut requests = Vec::new();
-        if !self.purpose.reads() {
+        if !self.setup.purpose.reads() {
             return Ok(requests);
         }
 
@@ -58,7 +58,7 @@ impl<'a> Translator<'a> {
                 Ok(Some(request)) => requests.push(request),
                 Ok(None) => {}
                 Err(problem) => {
-                    let problem = self.pipeline.label_instances(problem, ids[index]);
+                    let problem = self.stores.pipeline.label_instances(problem, ids[index]);
                     self.report_or_fail(problem)?;
                 }
             }
@@ -85,7 +85,7 @@ impl<'a> Translator<'a> {
     ) -> Result<Vec<Option<Arc<[u8]>>>, Diagnostic> {
         let mut fetched: Vec<Option<Arc<[u8]>>> = Vec::new();
         fetched.resize_with(imports.len(), || None);
-        if !self.purpose.reads() {
+        if !self.setup.purpose.reads() {
             return Ok(fetched);
         }
 
@@ -154,7 +154,7 @@ impl<'a> Translator<'a> {
             return Err(problem);
         }
 
-        self.pipeline.report(
+        self.stores.pipeline.report(
             TranslationError::ImportFailed {
                 resource: request.resource.clone(),
                 reason: failure.to_string(),
@@ -185,7 +185,7 @@ impl<'a> Translator<'a> {
 
             let spec = self.sparql_import_spec(import)?;
             let resource = spec.resource();
-            if self.resources.contains_key(&resource) {
+            if self.setup.resources.contains_key(&resource) {
                 return Ok(None);
             }
 
@@ -229,7 +229,7 @@ impl<'a> Translator<'a> {
         }
 
         Ok(self.resource_name(import)?.filter(|resource| {
-            Request::is_remote(resource) && !self.resources.contains_key(resource)
+            Request::is_remote(resource) && !self.setup.resources.contains_key(resource)
         }))
     }
 

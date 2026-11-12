@@ -179,10 +179,10 @@ impl<'a> Translator<'a> {
     /// Otherwise it is relative to the directory of the file that contains the directive,
     /// or to the working directory for a directive without a file.
     pub(super) fn resource_path(&self, span: Option<Span>, resource: &str) -> PathBuf {
-        let directory = match self.import_directory {
+        let directory = match self.setup.import_directory {
             Some(directory) => directory.to_path_buf(),
             None => span
-                .and_then(|span| self.pipeline.file_name(span.file))
+                .and_then(|span| self.stores.pipeline.file_name(span.file))
                 .map_or_else(|| PathBuf::from("."), |name| directory_of(Path::new(name))),
         };
 
@@ -231,7 +231,7 @@ impl<'a> Translator<'a> {
         }
 
         // A translation that reads no data only validates the options, as the loop did.
-        if !self.purpose.reads() {
+        if !self.setup.purpose.reads() {
             return Ok(());
         }
 
@@ -245,8 +245,8 @@ impl<'a> Translator<'a> {
     /// since the program may be meant for a build that can validate it.
     #[cfg(not(feature = "parquet"))]
     fn parquet_import(&mut self, import: &PendingImport) -> Result<(), ImportFailure> {
-        if self.purpose == super::Purpose::Check {
-            self.open.insert(import.predicate.clone());
+        if self.setup.purpose == super::Purpose::Check {
+            self.state.open.insert(import.predicate.clone());
             return Ok(());
         }
 
@@ -265,7 +265,7 @@ impl<'a> Translator<'a> {
     /// - The atoms of a `where` clause bind the variables of a SPARQL query's projection,
     ///   so they are an error in an import of any other format.
     fn admissible(&self, import: &PendingImport) -> Result<(), Diagnostic> {
-        if self.inputs.contains(&import.predicate) {
+        if self.state.inputs.contains(&import.predicate) {
             return Err(TranslationError::ImportIntoInput {
                 predicate: import.predicate.clone(),
             }
@@ -286,7 +286,8 @@ impl<'a> Translator<'a> {
     ///
     /// The stream is decompressed according to `compression` and the name.
     fn registered_stream(&self, resource: &str, compression: Compression) -> Option<Box<dyn Read>> {
-        self.resources
+        self.setup
+            .resources
             .get(resource)
             .map(|bytes| compression.open_bytes(bytes.clone(), resource))
     }
@@ -313,7 +314,7 @@ impl<'a> Translator<'a> {
         resource: &str,
         fetched: Option<Arc<[u8]>>,
     ) -> Resource {
-        match self.resources.get(resource).cloned().or(fetched) {
+        match self.setup.resources.get(resource).cloned().or(fetched) {
             Some(bytes) => Resource::Bytes {
                 name: source_name(resource),
                 bytes,
@@ -371,7 +372,7 @@ impl<'a> Translator<'a> {
             .iter()
             .map(|&column| column_types[column].clone())
             .collect();
-        let narrowed = program.narrow(&read, &self.label_types, &Outcome::Holds);
+        let narrowed = program.narrow(&read, &self.state.label_types, &Outcome::Holds);
         for (&column, narrowed) in inputs.iter().zip(narrowed) {
             column_types[column] = column_types[column].intersect(&narrowed);
         }
@@ -479,7 +480,7 @@ impl<'a> Translator<'a> {
         layout: &ColumnLayout,
     ) -> Result<Option<(Operation, RowCondition)>, Diagnostic> {
         let own = self.own_condition(import, layout)?;
-        let pushed = self.plan.condition(&import.predicate).cloned();
+        let pushed = self.state.plan.condition(&import.predicate).cloned();
         let Some(condition) = conjoin(own.into_iter().chain(pushed).collect()) else {
             return Ok(None);
         };
@@ -495,7 +496,7 @@ impl<'a> Translator<'a> {
         import: &PendingImport,
         layout: &ColumnLayout,
     ) -> Result<RowSelection, Diagnostic> {
-        let mut selection = self.plan.selection(&import.predicate, layout);
+        let mut selection = self.state.plan.selection(&import.predicate, layout);
         selection.condition = self
             .import_condition(import, layout)?
             .map(|(_, filter)| filter);
@@ -517,12 +518,12 @@ impl<'a> Translator<'a> {
         column_types: Vec<Type>,
     ) -> Result<(), Diagnostic> {
         let predicate = import.predicate.as_str();
-        if let Some(declaration) = self.declarations.get(predicate) {
+        if let Some(declaration) = self.state.declarations.get(predicate) {
             // The declaration and the checked types are indexed by the kept columns.
             for (column, (column_type, declared)) in
                 checked.iter().zip(&declaration.types).enumerate()
             {
-                if !column_type.is_subset(declared, &self.label_types) {
+                if !column_type.is_subset(declared, &self.state.label_types) {
                     let kind = TypeSyntax::of(column_type).to_string();
 
                     // Only a DSV format can read a column in a chosen format.
@@ -571,11 +572,11 @@ impl<'a> Translator<'a> {
             counts: &loaded.counts,
             marker,
         }
-        .report(self.pipeline);
-        self.errors.absorb(&loaded.counts.errors);
+        .report(self.stores.pipeline);
+        self.stores.errors.absorb(&loaded.counts.errors);
         tracing::debug!(resource, rows = loaded.rows.len(), counts = ?loaded.counts, "import read");
-        if self.telemetry.enabled() {
-            self.telemetry.record(&EngineEvent::Imported {
+        if self.setup.telemetry.enabled() {
+            self.setup.telemetry.record(&EngineEvent::Imported {
                 resource: resource.to_owned(),
                 rows: loaded.rows.len() as u64,
             });

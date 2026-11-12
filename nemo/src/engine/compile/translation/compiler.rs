@@ -159,7 +159,11 @@ impl RuleCompiler<'_, '_> {
     /// not value equality.
     pub(super) fn body_atom(&mut self, atom: &Atom) -> Result<(), Diagnostic> {
         let name = self.translator.resolve(&atom.predicate, atom.span)?;
-        let layout = self.translator.plan.layout_of(&name, atom.terms.len());
+        let layout = self
+            .translator
+            .state
+            .plan
+            .layout_of(&name, atom.terms.len());
         let table = self
             .translator
             .table(&atom.predicate, layout.delivered(), atom.span)?;
@@ -291,7 +295,11 @@ impl RuleCompiler<'_, '_> {
         foreign: &mut HashMap<String, Option<Span>>,
     ) -> Result<NegatedAtom, Diagnostic> {
         let name = self.translator.resolve(&atom.predicate, atom.span)?;
-        let layout = self.translator.plan.layout_of(&name, atom.terms.len());
+        let layout = self
+            .translator
+            .state
+            .plan
+            .layout_of(&name, atom.terms.len());
         let table = self
             .translator
             .table(&atom.predicate, layout.delivered(), atom.span)?;
@@ -441,6 +449,7 @@ impl RuleCompiler<'_, '_> {
                     // cannot hold is an error at its position,
                     // rather than at the first row that the head creates.
                     self.translator
+                        .stores
                         .dictionary
                         .encode(value.as_ref())
                         .ok_or_else(|| TranslationError::Unrepresentable.at(term.span))?;

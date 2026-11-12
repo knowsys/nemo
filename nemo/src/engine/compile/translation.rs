@@ -17,11 +17,7 @@ mod rules;
 mod state;
 mod terms;
 
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-    sync::Arc,
-};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use nemo_io::file_format::FileFormat;
 use nemo_physical::{
@@ -30,7 +26,7 @@ use nemo_physical::{
     function::{EvaluationContext, StackProgram},
     management::{TableId, TableManager},
     trie::RowBuffer,
-    value::{DataValue, ErrorCounts, LabelTypes, Type},
+    value::{DataValue, ErrorCounts, Type},
 };
 
 pub(crate) use declarations::ParametersWithoutValue;
@@ -41,7 +37,6 @@ use crate::{
     engine::{
         Engine, ExportSpec,
         compile::compiled::{CompiledProgram, CompiledRule, VariableId},
-        compile::import_plan::ImportPlan,
         compile::optimize::{ImportSurvey, OptimizationPasses},
         compile::strata,
         compile::translation::{
@@ -54,10 +49,7 @@ use crate::{
         remote::{FetchedResource, Progress, ResourceRequest, Suspension},
         written::WrittenProgram,
     },
-    model::{
-        Directive, Fact, Identifier, ImportDirective, Operation, Span, Statement, TypeExpression,
-        Walk,
-    },
+    model::{Directive, Fact, Identifier, ImportDirective, Operation, Span, Statement, Walk},
     pipeline::{NameScope, Pipeline, StatementId},
     telemetry::SinkSlot,
 };
@@ -257,32 +249,12 @@ struct FetchRule {
 /// The translator of a program's statements, which resolves names, registers tables,
 /// loads facts and imports, and compiles rules.
 pub(crate) struct Translator<'a> {
-    /// The table store that facts are loaded into.
-    pub(crate) manager: &'a mut TableManager,
-    /// The dictionary in which fact values are interned.
-    pub(crate) dictionary: &'a mut Dictionary,
-    /// The registered predicates by resolved name, each with its table
-    /// and its number of columns.
-    pub(crate) predicates: &'a mut HashMap<String, Registered>,
-    /// The pipeline that receives the program's reports,
-    /// and knows the files that its statements come from.
-    pub(crate) pipeline: &'a mut Pipeline,
-    /// The failed evaluations of import conditions, counted per error kind.
-    ///
-    /// A row whose condition fails to evaluate is dropped.
-    pub(crate) errors: &'a mut ErrorCounts,
-    /// The directory against which relative import resources are resolved,
-    /// if the engine sets one.
-    import_directory: Option<&'a Path>,
-    /// The in-memory resources registered on the engine, by name.
-    ///
-    /// An import of a resource with one of these names reads its bytes from here
-    /// instead of the file system.
-    resources: &'a HashMap<String, Arc<[u8]>>,
-    /// The name scope of the program: its base IRI and its prefixes.
-    scope: NameScope,
-    /// The values of the global parameters, by name.
-    globals: HashMap<String, DataValue>,
+    /// The parts of the engine that the translation writes to.
+    pub(crate) stores: TranslationStores<'a>,
+    /// The settings of the translation.
+    pub(crate) setup: TranslationSetup<'a>,
+    /// What earlier translations established, which [finish](Self::finish) returns.
+    pub(crate) state: TranslationState,
     /// The rows of the facts per table, encoded by the dictionary.
     facts: HashMap<TableId, RowBuffer>,
     /// The import directives, which are executed once every arity is known.
@@ -295,31 +267,6 @@ pub(crate) struct Translator<'a> {
     /// The checks that need every predicate's arity run after all statements are translated,
     /// and report at these positions.
     export_spans: Vec<Option<Span>>,
-    /// The declared column types, by resolved predicate name.
-    declarations: HashMap<String, types::PredicateDeclaration>,
-    /// The `@type` definitions, by resolved label.
-    type_definitions: HashMap<String, TypeExpression>,
-    /// The types that the `@type` definitions declare, by resolved label.
-    ///
-    /// They are known once every definition is recorded.
-    label_types: LabelTypes,
-    /// Per table, the initial column types from the facts and import formats,
-    /// from which the type analysis starts.
-    seeds: HashMap<TableId, Vec<Type>>,
-    /// The imported predicates whose column types are not known before loading,
-    /// and the `@input` predicates.
-    ///
-    /// The type analysis assumes that their columns can hold anything that their declarations
-    /// allow.
-    open: HashSet<String>,
-    /// The resolved `@input` predicates.
-    ///
-    /// Their rows come from a program that uses this one as a module, or from
-    /// [import_rows](crate::engine::Engine::import_rows),
-    /// so an `@import` cannot fill them.
-    inputs: HashSet<String>,
-    /// What the loads of imported predicates leave out (see [ImportPlan]).
-    pub(super) plan: ImportPlan,
     /// The label scope of the program's blank nodes, in which each label names one null.
     ///
     /// It is created before any term is evaluated, and kept across translations.
@@ -329,39 +276,20 @@ pub(crate) struct Translator<'a> {
     /// So the imports of one resource within one translation agree on its blank nodes.
     /// The scopes close when the translation [finishes](Self::finish).
     documents: HashMap<String, LabelScope>,
-    /// Per predicate of an import with atoms in its `where` clause,
-    /// the scratch table of its fetches.
-    scratch: HashMap<String, TableId>,
     /// The fetch rules of the imports with atoms in their `where` clauses,
     /// which are compiled when the imports are executed.
     fetch_rules: Vec<FetchRule>,
-    /// The slot of the installed telemetry sink, which receives a report of each import's load.
-    telemetry: &'a SinkSlot,
     /// The remote resources fetched for the imports,
     /// by the position of each import's directive among the statements.
     ///
     /// [commit](Self::commit) receives them.
     fetched: HashMap<usize, FetchedResource>,
-    /// The optimization passes.
-    passes: &'a OptimizationPasses,
-    /// What the translation is for.
-    purpose: Purpose<'a>,
-    /// The written program of the translated statements, or `None` if no import pass runs.
-    pub(super) written: Option<&'a WrittenProgram>,
-    /// The column types with which the loaded program was analyzed, if a program is loaded.
-    previous_types: Option<&'a HashMap<TableId, Vec<Type>>>,
-    /// The evaluation context of ground expressions, such as the instant that their `NOW()`
-    /// returns.
-    context: EvaluationContext,
     /// Per statement, whether its data is already stored, or empty for a first load.
     ///
     /// A *preloaded* fact adds no rows, and a preloaded import reads nothing,
     /// but everything that they declare is still compiled.
     preloaded: Vec<bool>,
-    /// The rows given through [import_rows](crate::engine::Engine::import_rows) before the
-    /// first load (see [TranslationSetup::imported]).
-    imported: &'a [RowBlock],
-    /// The encoded rows of [imported](Self::imported), per table,
+    /// The encoded rows of the [imported](TranslationSetup::imported) blocks, per table,
     /// which are stored apart from the facts since they are not part of the program.
     imported_tables: Vec<(TableId, RowBuffer)>,
     /// The parameters that a check has no value for,
@@ -383,39 +311,18 @@ impl<'a> Translator<'a> {
         let program_blanks = stores.dictionary.shared_label_scope(PROGRAM_BLANK_NODES);
 
         Self {
-            manager: stores.manager,
-            dictionary: stores.dictionary,
-            predicates: stores.predicates,
-            pipeline: stores.pipeline,
-            errors: stores.errors,
-            import_directory: setup.import_directory,
-            resources: setup.resources,
-            scope: state.scope,
-            globals: state.globals,
+            stores,
+            setup,
+            state,
             facts: HashMap::new(),
             imports: Vec::new(),
             exports: Vec::new(),
             export_spans: Vec::new(),
-            declarations: state.declarations,
-            type_definitions: state.type_definitions,
-            label_types: state.label_types,
-            seeds: state.seeds,
-            open: state.open,
-            inputs: state.inputs,
-            plan: state.plan,
             program_blanks,
             documents: HashMap::new(),
-            scratch: state.scratch,
             fetch_rules: Vec::new(),
-            telemetry: setup.telemetry,
             fetched: HashMap::new(),
-            passes: setup.passes,
-            purpose: setup.purpose,
-            written: setup.written,
-            previous_types: setup.previous_types,
-            context: setup.context,
             preloaded,
-            imported: setup.imported,
             imported_tables: Vec::new(),
             unvalued: ParametersWithoutValue::default(),
         }
@@ -424,7 +331,7 @@ impl<'a> Translator<'a> {
     /// Returns the names of the predicates with rows given through
     /// [import_rows](crate::engine::Engine::import_rows) before the first load.
     pub(crate) fn imported_predicates(&self) -> impl Iterator<Item = &str> {
-        self.imported.iter().map(RowBlock::predicate)
+        self.setup.imported.iter().map(RowBlock::predicate)
     }
 
     /// Takes out the encoded rows given through
@@ -443,7 +350,7 @@ impl<'a> Translator<'a> {
     /// This is the case in a translation that reads no data,
     /// and for a directive whose data is already stored.
     fn options_only(&self, import: &PendingImport) -> bool {
-        !self.purpose.reads() || import.preloaded
+        !self.setup.purpose.reads() || import.preloaded
     }
 
     /// Handles a problem with the program's statements according to the purpose.
@@ -456,9 +363,9 @@ impl<'a> Translator<'a> {
     /// Panics in the translation of a program that the pipeline stages made from a written
     /// program that passed, since the stages then wrote something that translation refuses.
     fn report_or_fail(&mut self, problem: Diagnostic) -> Result<(), Diagnostic> {
-        match self.purpose {
+        match self.setup.purpose {
             Purpose::Check => {
-                self.pipeline.report(problem);
+                self.stores.pipeline.report(problem);
                 Ok(())
             }
             Purpose::Load | Purpose::Validate => Err(problem),
@@ -477,8 +384,8 @@ impl<'a> Translator<'a> {
     /// except in the translation of a program that the pipeline stages made,
     /// since the warnings about its written program were already reported.
     fn warn(&mut self, warning: Diagnostic) {
-        if !matches!(self.purpose, Purpose::LoadRewritten { .. }) {
-            self.pipeline.report(warning);
+        if !matches!(self.setup.purpose, Purpose::LoadRewritten { .. }) {
+            self.stores.pipeline.report(warning);
         }
     }
 
@@ -584,8 +491,8 @@ impl<'a> Translator<'a> {
 
         // The rows given through `import_rows` are data, which a check leaves out.
         // A refused row ends any other translation, as a problem in an import's data does.
-        if self.purpose != Purpose::Check {
-            for block in self.imported {
+        if self.setup.purpose != Purpose::Check {
+            for block in self.setup.imported {
                 if let Some(rows) = self.imported_rows(block)? {
                     self.imported_tables.push(rows);
                 }
@@ -610,7 +517,7 @@ impl<'a> Translator<'a> {
             self.report_or_fail(problem)?;
         }
 
-        self.scope = NameScope::of(statements);
+        self.state.scope = NameScope::of(statements);
         let parameters: Vec<_> = statements
             .iter()
             .filter_map(|statement| match statement {
@@ -638,7 +545,7 @@ impl<'a> Translator<'a> {
                 match self.definition_type(&directive.definition, directive.span) {
                     Ok(declared) => {
                         if let Some(label) = self.defined_label(directive) {
-                            self.label_types.declare(&label, declared);
+                            self.state.label_types.declare(&label, declared);
                         }
                     }
                     Err(problem) => self.report_or_fail(problem)?,
@@ -697,14 +604,16 @@ impl<'a> Translator<'a> {
     /// (see [check_stability](ImportPlan::check_stability)).
     /// A translation that reads no data plans nothing, and keeps the stored plan.
     fn plan_imports(&mut self, statements: &[Statement]) -> Result<(), Diagnostic> {
-        if !self.purpose.reads() {
+        if !self.setup.purpose.reads() {
             return Ok(());
         }
 
-        let stored = std::mem::take(&mut self.plan);
+        let stored = std::mem::take(&mut self.state.plan);
         let survey = ImportSurvey::new(self, statements)?;
-        self.plan = self.passes.plan_imports(&survey, self)?;
-        self.plan.check_stability(stored, self.predicates.keys())
+        self.state.plan = self.setup.passes.plan_imports(&survey, self)?;
+        self.state
+            .plan
+            .check_stability(stored, self.stores.predicates.keys())
     }
 
     /// Translates the statements one by one, and returns the compiled rules.
@@ -717,7 +626,7 @@ impl<'a> Translator<'a> {
     ) -> Result<CompiledRules, Diagnostic> {
         let mut compiled = CompiledRules::default();
         for (index, statement) in statements.iter().enumerate() {
-            let already = self.pipeline.reports().len();
+            let already = self.stores.pipeline.reports().len();
             let outcome = match statement {
                 // A preloaded fact's rows and seeds are already stored.
                 Statement::Fact(_) if self.is_preloaded(index) => Ok(()),
@@ -754,10 +663,11 @@ impl<'a> Translator<'a> {
 
             // What the statement's translation reported is about the statement,
             // and so, in a module instance, about that instance.
-            self.pipeline
+            self.stores
+                .pipeline
                 .label_instances_in_reports(already, ids[index]);
             if let Err(problem) = outcome {
-                let problem = self.pipeline.label_instances(problem, ids[index]);
+                let problem = self.stores.pipeline.label_instances(problem, ids[index]);
                 self.report_or_fail(problem)?;
             }
         }
@@ -774,7 +684,11 @@ impl<'a> Translator<'a> {
         mut compiled: CompiledRules,
     ) -> Result<CompiledProgram, Diagnostic> {
         super::order::choose(&mut compiled.rules);
-        for report in self.passes.rewrite(&mut compiled.rules, &compiled.spans) {
+        for report in self
+            .setup
+            .passes
+            .rewrite(&mut compiled.rules, &compiled.spans)
+        {
             self.warn(report);
         }
 
@@ -783,15 +697,15 @@ impl<'a> Translator<'a> {
         // The fetch rules take no part, since an import's columns start with every type
         // that an endpoint may return.
         let inputs = types::AnalysisInputs {
-            predicates: self.predicates,
-            seeds: &self.seeds,
+            predicates: self.stores.predicates,
+            seeds: &self.state.seeds,
             declared: types::Declared {
-                predicates: &self.declarations,
-                labels: &self.label_types,
+                predicates: &self.state.declarations,
+                labels: &self.state.label_types,
             },
-            open: &self.open,
-            plan: &self.plan,
-            previous: self.previous_types,
+            open: &self.state.open,
+            plan: &self.state.plan,
+            previous: self.setup.previous_types,
         };
         let types::Analysis {
             column_types,
@@ -801,6 +715,7 @@ impl<'a> Translator<'a> {
         for types::TypeFinding { rule, diagnostic } in findings {
             let problem = match rule {
                 Some(rule) => self
+                    .stores
                     .pipeline
                     .label_instances(diagnostic, compiled.statements[rule]),
                 None => diagnostic,
@@ -851,7 +766,7 @@ impl<'a> Translator<'a> {
         let positional = self.positional_fact(fact)?;
         let fact = positional.as_ref().unwrap_or(fact);
         let name = self.resolve(&fact.predicate, fact.span)?;
-        let Some(&Registered { table, arity }) = self.predicates.get(&name) else {
+        let Some(&Registered { table, arity }) = self.stores.predicates.get(&name) else {
             return Err(EngineError::UnknownPredicate { predicate: name }.diagnostic());
         };
         if fact.terms.len() != arity {
@@ -869,7 +784,8 @@ impl<'a> Translator<'a> {
         let mut labels = Vec::new();
         terms::collect_blank_nodes(fact, &mut labels);
         if let Some(label) = labels.into_iter().find(|label| {
-            self.dictionary
+            self.stores
+                .dictionary
                 .find_labeled_null(self.program_blanks, label)
                 .is_none()
         }) {
@@ -894,24 +810,10 @@ impl<'a> Translator<'a> {
     /// too.
     pub(crate) fn finish(self) -> (TranslationState, HashMap<TableId, RowBuffer>) {
         for scope in self.documents.values() {
-            self.dictionary.close_label_scope(*scope);
+            self.stores.dictionary.close_label_scope(*scope);
         }
 
-        (
-            TranslationState {
-                scope: self.scope,
-                globals: self.globals,
-                declarations: self.declarations,
-                type_definitions: self.type_definitions,
-                label_types: self.label_types,
-                seeds: self.seeds,
-                open: self.open,
-                inputs: self.inputs,
-                plan: self.plan,
-                scratch: self.scratch,
-            },
-            self.facts,
-        )
+        (self.state, self.facts)
     }
 
     /// Handles one directive, the statement at position `index`.
@@ -1024,7 +926,9 @@ impl<'a> Translator<'a> {
         }
 
         for label in labels {
-            self.dictionary.labeled_null(self.program_blanks, label);
+            self.stores
+                .dictionary
+                .labeled_null(self.program_blanks, label);
         }
     }
 
@@ -1051,7 +955,8 @@ impl<'a> Translator<'a> {
         identifier: &Identifier,
         span: Option<Span>,
     ) -> Result<String, Diagnostic> {
-        self.scope
+        self.state
+            .scope
             .lookup(identifier)
             .ok_or_else(|| match identifier {
                 Identifier::Prefixed { prefix, .. } => TranslationError::UndeclaredPrefix {
@@ -1111,7 +1016,7 @@ impl<'a> Translator<'a> {
         if let Some(&Registered {
             table,
             arity: registered,
-        }) = self.predicates.get(&name)
+        }) = self.stores.predicates.get(&name)
         {
             if registered != arity {
                 return Err(TranslationError::ArityMismatch {
@@ -1125,8 +1030,10 @@ impl<'a> Translator<'a> {
             return Ok(table);
         }
 
-        let table = self.manager.register(name.clone(), arity);
-        self.predicates.insert(name, Registered { table, arity });
+        let table = self.stores.manager.register(name.clone(), arity);
+        self.stores
+            .predicates
+            .insert(name, Registered { table, arity });
         Ok(table)
     }
 }

@@ -345,6 +345,7 @@ impl<'a> Translator<'a> {
             TermKind::Variable(_) => Err(TranslationError::NotGround.at(term.span)),
             TermKind::BlankNode(label) => {
                 let id = self
+                    .stores
                     .dictionary
                     .find_labeled_null(self.program_blanks, label)
                     .expect("blank node labels get their nulls before their terms translate");
@@ -394,7 +395,10 @@ impl<'a> Translator<'a> {
                 builder.operation(self, VariableScope::Ground, operation)?;
                 let program = builder.finish(term.span)?;
                 let mut stack = Vec::with_capacity(program.stack_bound());
-                match program.evaluate(self.context, &mut stack, &[]).as_result() {
+                match program
+                    .evaluate(self.setup.context, &mut stack, &[])
+                    .as_result()
+                {
                     Ok(value) => Ok(value.to_owned()),
                     Err(error) => {
                         let problem = TranslationError::ConstantExpressionErrors.diagnostic();

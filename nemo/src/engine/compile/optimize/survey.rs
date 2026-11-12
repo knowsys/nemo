@@ -64,7 +64,7 @@ impl ImportSurvey {
 
         // A predicate the written program derives is stored whole, even
         // if a pipeline stage replaced its rules with an import.
-        if let Some(written) = translator.written {
+        if let Some(written) = translator.setup.written {
             survey.sealed.extend(written.derived().map(str::to_owned));
         }
 

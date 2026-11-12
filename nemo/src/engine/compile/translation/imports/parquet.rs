@@ -26,7 +26,7 @@ impl<'a> Translator<'a> {
         let directive = self.plain_directive(import.format, &import.options, &bindings, true)?;
         let resource = required_resource(directive.resource, import)?;
         if Request::is_remote(&resource)
-            || self.resources.contains_key(&resource)
+            || self.setup.resources.contains_key(&resource)
             || resource.is_empty()
         {
             // The Parquet reader needs a seekable file.
@@ -42,7 +42,7 @@ impl<'a> Translator<'a> {
             return Ok(());
         };
 
-        let layout = self.plan.layout_of(&import.predicate, width);
+        let layout = self.state.plan.layout_of(&import.predicate, width);
         let selection = self.import_selection(import, &layout)?;
         let table = self.register_import(import, vec![Type::ANY; layout.kept()], &layout)?;
         if self.options_only(import) {
@@ -76,7 +76,7 @@ impl<'a> Translator<'a> {
         }
 
         let loaded = ParquetReader::with_selection(selection)
-            .read_path(&path, self.dictionary, self.context)
+            .read_path(&path, self.stores.dictionary, self.setup.context)
             .map_err(ImportFailure::Reading)?;
         self.absorb(table, layout.delivered(), loaded, &resource, false);
         Ok(())
@@ -94,15 +94,17 @@ impl<'a> Translator<'a> {
         import: &PendingImport,
         path: &Path,
     ) -> Result<Option<usize>, ImportFailure> {
-        Ok(Some(match self.predicates.get(&import.predicate) {
-            Some(&Registered { arity, .. }) => {
-                self.plan.stored_layout(&import.predicate, arity).kept()
-            }
-            None => match self.declarations.get(&import.predicate) {
+        Ok(Some(match self.stores.predicates.get(&import.predicate) {
+            Some(&Registered { arity, .. }) => self
+                .state
+                .plan
+                .stored_layout(&import.predicate, arity)
+                .kept(),
+            None => match self.state.declarations.get(&import.predicate) {
                 Some(declaration) => declaration.types.len(),
                 None if !import.variables.is_empty() => import.variables.len(),
-                None if !self.purpose.reads() => {
-                    self.open.insert(import.predicate.clone());
+                None if !self.setup.purpose.reads() => {
+                    self.state.open.insert(import.predicate.clone());
                     return Ok(None);
                 }
                 None => ParquetReader::width(path).map_err(ImportFailure::Reading)?,

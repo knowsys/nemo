@@ -34,7 +34,7 @@ impl<'a> Translator<'a> {
         // since a stage may change the declarations that the rows are checked against.
         self.check_imported_rows(block)?;
         self.seed(table, &layout.deliver(block.column_types().to_vec()));
-        if !self.purpose.reads() {
+        if !self.setup.purpose.reads() {
             return Ok(None);
         }
 
