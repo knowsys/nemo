@@ -367,6 +367,7 @@ fn term_expression(term: GroundTerm) -> Option<Expression> {
     Some(match term {
         GroundTerm::NamedNode(node) => Expression::NamedNode(node),
         GroundTerm::Literal(literal) => Expression::Literal(literal),
+        // `GroundTerm` has a variant for triple terms if a crate of the build turns on RDF 1.2.
         #[allow(unreachable_patterns)]
         _ => return None,
     })
