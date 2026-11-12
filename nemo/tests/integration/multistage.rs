@@ -533,6 +533,34 @@ s(?a, ?v) :- p(?a, ?v) .
     }
 }
 
+/// A reload whose rules read past what was stored of several imports reads each of them
+/// again: one by another condition, the other by a column that was left out.
+#[test]
+fn reloads_reread_every_import_the_new_rules_read_past() {
+    let temporary = TempDirectory::new();
+    let directory = temporary.path();
+    std::fs::write(directory.join("nemo_multistage_first.csv"), "1,5\n2,7\n")
+        .expect("the temp file writes");
+    std::fs::write(directory.join("nemo_multistage_second.csv"), "1,8\n2,9\n")
+        .expect("the temp file writes");
+    let imports = "@import p from csv{resource=\"nemo_multistage_first.csv\", format=(int,int)} .
+@import r from csv{resource=\"nemo_multistage_second.csv\", format=(int,int)} .
+";
+    let first = format!("{imports}q(?a) :- p(?a, 5), r(?a, ?v) .\n@output q .\n");
+    let second = format!("{imports}s(?a, ?v, ?w) :- p(?a, ?v), r(?a, ?w) .\n");
+
+    let mut engine = Engine::new();
+    engine.set_import_directory(directory);
+    engine.load(parse(&first)).expect("the program loads");
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "q"), vec!["1"]);
+    engine
+        .reload(parse(&second))
+        .expect("both imports are read again");
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "s"), vec!["1,5,8", "2,7,9"]);
+}
+
 /// A failed extension leaves no registration behind: what it named can
 /// be named again, at any arity.
 #[test]

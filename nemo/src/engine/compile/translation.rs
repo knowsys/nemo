@@ -37,6 +37,7 @@ use crate::{
     engine::{
         Engine, ExportSpec,
         compile::compiled::{CompiledProgram, CompiledRule, RuleSource, VariableId},
+        compile::import_plan::Instability,
         compile::optimize::{ImportSurvey, OptimizationPasses, column_position},
         compile::strata,
         compile::translation::{
@@ -205,6 +206,30 @@ impl CompiledRules {
     }
 }
 
+/// What [preparing](Translator::prepare) a translation found.
+#[derive(Debug)]
+pub(crate) struct Prepared {
+    /// The requests for the remote resources that the imports read,
+    /// each tagged with the position of its directive.
+    pub(crate) requests: Vec<ResourceRequest>,
+    /// The stored imports that do not cover what the program reads of them.
+    ///
+    /// A translation with such imports cannot be committed, and lists no request.
+    pub(crate) unstable: Vec<Instability>,
+}
+
+impl Prepared {
+    /// Returns the requests, or the error about the first unstable import if there is one.
+    ///
+    /// This is the outcome for a translation that cannot read a stored import again.
+    pub(crate) fn stable(self) -> Result<Vec<ResourceRequest>, Diagnostic> {
+        match self.unstable.first() {
+            Some(instability) => Err(instability.diagnostic()),
+            None => Ok(self.requests),
+        }
+    }
+}
+
 /// The fetch rule of an import with atoms in its `where` clause.
 struct FetchRule {
     /// The rule index reserved for the rule.
@@ -370,7 +395,7 @@ impl<'a> Translator<'a> {
         statements: &[Statement],
         ids: &[StatementId],
     ) -> Result<CompiledProgram, Diagnostic> {
-        self.prepare(statements, ids)?;
+        self.prepare(statements, ids)?.stable()?;
         self.commit(statements, ids, HashMap::new())
     }
 
@@ -398,12 +423,13 @@ impl<'a> Translator<'a> {
         statements: &[Statement],
         ids: &[StatementId],
     ) -> Result<CompiledProgram, Diagnostic> {
-        self.declarations(statements, ids)?;
+        self.declarations(statements, ids)?.stable()?;
         self.commit(statements, ids, HashMap::new())
     }
 
-    /// Prepares the translation of a program, and returns the requests for the remote
-    /// resources that its imports read, each tagged with the position of its directive.
+    /// Prepares the translation of a program, and returns what its commit needs first:
+    /// the requests for the remote resources that its imports read,
+    /// and the stored imports that it would have to read again.
     ///
     /// Preparing creates the nulls of blank nodes, reads the names, parameters and
     /// declarations, and computes the import plan.
@@ -417,20 +443,20 @@ impl<'a> Translator<'a> {
         &mut self,
         statements: &[Statement],
         ids: &[StatementId],
-    ) -> Result<Vec<ResourceRequest>, Diagnostic> {
+    ) -> Result<Prepared, Diagnostic> {
         self.namespace(statements)?;
         self.declarations(statements, ids)
     }
 
     /// Reads the declarations and the inputs, computes the import plan,
-    /// and returns the requests for the remote resources that the imports read.
+    /// and lists the requests for the remote resources that the imports read.
     ///
     /// This follows [namespace](Self::namespace), and registers, reads and stores nothing.
     fn declarations(
         &mut self,
         statements: &[Statement],
         ids: &[StatementId],
-    ) -> Result<Vec<ResourceRequest>, Diagnostic> {
+    ) -> Result<Prepared, Diagnostic> {
         assert_eq!(
             statements.len(),
             ids.len(),
@@ -438,8 +464,14 @@ impl<'a> Translator<'a> {
         );
 
         self.declaration_directives(statements)?;
-        self.plan_imports(statements)?;
-        self.remote_requests(statements, ids)
+        let unstable = self.plan_imports(statements)?;
+        let requests = if unstable.is_empty() {
+            self.remote_requests(statements, ids)?
+        } else {
+            Vec::new()
+        };
+
+        Ok(Prepared { requests, unstable })
     }
 
     /// Completes a [prepared](Self::prepare) translation, and returns the compiled program.
@@ -571,22 +603,23 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Runs the import passes, which decide what the loads leave out.
+    /// Runs the import passes, which decide what the loads leave out,
+    /// and returns the stored imports that do not cover what the new plan reads.
     ///
     /// The new plan is checked against the plan that the stored tables were loaded under
-    /// (see [check_stability](ImportPlan::check_stability)).
+    /// (see [check_stability](crate::engine::compile::import_plan::ImportPlan::check_stability)).
     /// A translation that reads no data plans nothing, and keeps the stored plan.
-    fn plan_imports(&mut self, statements: &[Statement]) -> Result<(), Diagnostic> {
+    fn plan_imports(&mut self, statements: &[Statement]) -> Result<Vec<Instability>, Diagnostic> {
         if !self.setup.purpose.reads() {
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         let stored = std::mem::take(&mut self.state.plan);
         let survey = ImportSurvey::new(self, statements)?;
         self.state.plan = self.setup.passes.plan_imports(&survey, self)?;
-        self.state
-            .plan
-            .check_stability(stored, self.stores.predicates.keys())
+
+        let loaded = self.stores.predicates.keys();
+        Ok(self.state.plan.check_stability(stored, loaded))
     }
 
     /// Translates the statements one by one, and returns the compiled rules.

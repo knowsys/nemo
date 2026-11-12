@@ -18,13 +18,12 @@ use nemo_physical::{
 };
 
 use crate::{
-    codes,
-    diagnostics::{AboutPredicate, EngineError},
+    diagnostics::EngineError,
     engine::{
         Engine,
         compile::{
             compiled::CompiledProgram,
-            translation::{self, Purpose, TranslationState},
+            translation::{self, Prepared, Purpose, TranslationState},
         },
         evaluate::extensional::{ExtensionalBlock, ExtensionalOrigin},
         registered::Registered,
@@ -351,8 +350,8 @@ impl Engine {
     /// their rows are kept, and their resources are not read again.
     ///
     /// A kept import may have been stored without columns or rows that the new rules read.
-    /// The translation then fails with [PRUNING_INSTABILITY](crate::codes::PRUNING_INSTABILITY)
-    /// for its predicate, and is repeated with that predicate rebuilt as well.
+    /// The preparation lists these imports,
+    /// and the translation is repeated with their predicates rebuilt as well.
     /// A failed translation restores the previous state.
     /// So does a prepared translation that needs remote resources that are not fetched yet.
     /// `load` then keeps the prepared translation state and the predicates rebuilt so far,
@@ -395,30 +394,47 @@ impl Engine {
                     setup.previous_types = Some(previous);
                     let mut translator =
                         translation::Translator::new(stores, setup, state, preloaded.clone());
-                    let requests = translator.prepare(new_statements, new_ids);
+                    let prepared = translator.prepare(new_statements, new_ids);
                     let (state, _) = translator.finish();
-                    match requests.map(|requests| load.missing(requests)) {
-                        Ok(missing) if missing.is_empty() => state,
+                    let prepared = prepared.map(|prepared| Prepared {
+                        requests: load.missing(prepared.requests),
+                        ..prepared
+                    });
+                    match prepared {
+                        Ok(prepared)
+                            if prepared.requests.is_empty() && prepared.unstable.is_empty() =>
+                        {
+                            state
+                        }
                         outcome => {
                             // Nothing was registered or stored, but the rebuilt
                             // predicates were unregistered.
                             self.forget_registrations(&saved_predicates, &saved_state);
                             self.translation = saved_state;
                             self.extensional = saved_extensional;
-                            match outcome {
-                                Ok(missing) => {
-                                    load.prepared = Some(state);
-                                    load.unstable = unstable;
-                                    return Ok(TranslationOutcome::Missing(missing));
-                                }
-                                Err(problem) => {
-                                    if Self::unstable_import(&problem, &mut unstable) {
-                                        continue;
-                                    }
+                            let prepared = outcome?;
+                            let Some(first) = prepared.unstable.first() else {
+                                load.prepared = Some(state);
+                                load.unstable = unstable;
+                                return Ok(TranslationOutcome::Missing(prepared.requests));
+                            };
 
-                                    return Err(problem);
-                                }
+                            // The unstable imports are read again, with their predicates
+                            // rebuilt. A rebuilt predicate has no stored import, so each
+                            // repetition rebuilds more.
+                            let before = unstable.len();
+                            let refusal = first.diagnostic();
+                            unstable.extend(
+                                prepared
+                                    .unstable
+                                    .into_iter()
+                                    .map(|instability| instability.predicate),
+                            );
+                            if unstable.len() == before {
+                                return Err(refusal);
                             }
+
+                            continue;
                         }
                     }
                 }
@@ -448,26 +464,10 @@ impl Engine {
                     self.forget_registrations(&saved_predicates, &saved_state);
                     self.translation = saved_state;
                     self.extensional = saved_extensional;
-                    if Self::unstable_import(&problem, &mut unstable) {
-                        continue;
-                    }
-
                     return Err(problem);
                 }
             }
         }
-    }
-
-    /// Returns whether a reload's translation failed because a stored import does not cover
-    /// what the new rules read ([PRUNING_INSTABILITY](crate::codes::PRUNING_INSTABILITY)),
-    /// for a predicate that is not rebuilt yet.
-    ///
-    /// If so, the predicate is added to `unstable`, the predicates to rebuild for this reason.
-    fn unstable_import(problem: &Diagnostic, unstable: &mut HashSet<String>) -> bool {
-        problem.code() == codes::PRUNING_INSTABILITY
-            && problem
-                .predicate()
-                .is_some_and(|name| unstable.insert(name.to_owned()))
     }
 
     /// Returns the registered predicates that a reload rebuilds.

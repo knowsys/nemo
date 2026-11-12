@@ -11,6 +11,29 @@ use crate::{
     model::Operation,
 };
 
+/// A stored import that does not cover what a program reads of it.
+///
+/// The import was stored without the columns and rows that no rule read then.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Instability {
+    /// The resolved name of the import's predicate.
+    pub(crate) predicate: String,
+    /// What the program now reads that the stored table lacks, as a clause.
+    change: &'static str,
+}
+
+impl Instability {
+    /// Returns the error for a translation that cannot read the import again.
+    pub(crate) fn diagnostic(&self) -> Diagnostic {
+        TranslationError::PruningInstability {
+            name: self.predicate.clone(),
+            change: self.change.to_owned(),
+        }
+        .diagnostic()
+        .with_predicate(&self.predicate)
+    }
+}
+
 /// For each imported predicate, the columns that its load prunes
 /// and the condition that its rows must satisfy.
 ///
@@ -111,7 +134,7 @@ impl ImportPlan {
     }
 
     /// Checks this newly computed plan against `stored`, the plan that the stored tables were
-    /// loaded under.
+    /// loaded under, and returns the stored imports that do not cover what this plan reads.
     ///
     /// A column that `stored` pruned must not be read now,
     /// and a condition of `stored` must equal the condition now,
@@ -119,13 +142,15 @@ impl ImportPlan {
     /// and a program that reads more cannot get the rest back.
     /// The predicates in `loaded`, which already have tables, keep the entries they were
     /// loaded under, or none if they were stored whole, whatever this plan computed.
-    /// The predicates are checked in name order,
-    /// so that the error is always about the same predicate.
+    /// The predicates are checked in name order, the pruned columns before the conditions,
+    /// so that the same program always gets the same list.
     pub(crate) fn check_stability<'n>(
         &mut self,
         stored: ImportPlan,
         loaded: impl IntoIterator<Item = &'n String>,
-    ) -> Result<(), Diagnostic> {
+    ) -> Vec<Instability> {
+        let mut unstable = Vec::new();
+
         for name in loaded {
             if !stored.pruned.contains_key(name) {
                 self.pruned.remove(name);
@@ -149,12 +174,11 @@ impl ImportPlan {
                 None => was_pruned.contains(&true),
             };
             if live_again {
-                return Err(TranslationError::PruningInstability {
-                    name: name.clone(),
-                    change: String::from("the program now reads some of those columns"),
-                }
-                .diagnostic()
-                .with_predicate(name));
+                unstable.push(Instability {
+                    predicate: name,
+                    change: "the program now reads some of those columns",
+                });
+                continue;
             }
 
             self.pruned.insert(name, was_pruned);
@@ -164,13 +188,13 @@ impl ImportPlan {
         filters.sort_by(|left, right| left.0.cmp(&right.0));
         for (name, filter) in filters {
             if self.filters.get(&name) != Some(&filter) {
-                return Err(TranslationError::PruningInstability {
-                    name: name.clone(),
-                    change: String::from("the program now selects its rows by another condition"),
-                }
-                .diagnostic()
-                .with_predicate(name));
+                unstable.push(Instability {
+                    predicate: name,
+                    change: "the program now selects its rows by another condition",
+                });
+                continue;
             }
+
             if let Some(condition) = stored.conditions.get(&name) {
                 self.conditions.insert(name.clone(), condition.clone());
             }
@@ -178,6 +202,6 @@ impl ImportPlan {
             self.filters.insert(name, filter);
         }
 
-        Ok(())
+        unstable
     }
 }

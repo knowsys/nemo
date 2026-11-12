@@ -21,7 +21,7 @@ use crate::{
         Engine,
         check::rewrite_unvalued,
         compile::compiled::CompiledProgram,
-        compile::translation::{self, Purpose, TranslationState},
+        compile::translation::{self, Prepared, Purpose, TranslationState},
         compile::types,
         evaluate::extensional::ExtensionalOrigin,
         imported_rows::{RowBlock, UnloadedRows},
@@ -162,6 +162,7 @@ impl Engine {
         } else {
             translator
                 .prepare(&statements, &ids)
+                .and_then(Prepared::stable)
                 .map(|requests| load.missing(requests))
         };
         let outcome = match &requests {
@@ -601,7 +602,9 @@ impl Engine {
                 setup.written = Some(&written);
                 let mut translator =
                     translation::Translator::new(stores, setup, state, preloaded.clone());
-                let requests = translator.prepare(&statements, &ids);
+                let requests = translator
+                    .prepare(&statements, &ids)
+                    .and_then(Prepared::stable);
                 let (state, _) = translator.finish();
                 let missing = match requests {
                     Ok(requests) => load.missing(requests),
