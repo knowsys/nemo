@@ -415,9 +415,6 @@ impl<'a> Translator<'a> {
         &mut self,
         statements: &[Statement],
     ) -> Result<ParametersWithoutValue, Diagnostic> {
-        // Blank nodes get their nulls first, so that every occurrence of
-        // a label maps to the same null.
-        self.create_blank_nodes(statements);
         self.namespace(statements)?;
         Ok(std::mem::take(&mut self.unvalued))
     }
@@ -432,14 +429,7 @@ impl<'a> Translator<'a> {
         statements: &[Statement],
         ids: &[StatementId],
     ) -> Result<CompiledProgram, Diagnostic> {
-        assert_eq!(
-            statements.len(),
-            ids.len(),
-            "statements and their pipeline ids must align"
-        );
-        self.declaration_directives(statements)?;
-        self.plan_imports(statements)?;
-        self.remote_requests(statements, ids)?;
+        self.declarations(statements, ids)?;
         self.commit(statements, ids, HashMap::new())
     }
 
@@ -459,16 +449,25 @@ impl<'a> Translator<'a> {
         statements: &[Statement],
         ids: &[StatementId],
     ) -> Result<Vec<ResourceRequest>, Diagnostic> {
+        self.namespace(statements)?;
+        self.declarations(statements, ids)
+    }
+
+    /// Reads the declarations and the inputs, computes the import plan,
+    /// and returns the requests for the remote resources that the imports read.
+    ///
+    /// This follows [namespace](Self::namespace), and registers, reads and stores nothing.
+    fn declarations(
+        &mut self,
+        statements: &[Statement],
+        ids: &[StatementId],
+    ) -> Result<Vec<ResourceRequest>, Diagnostic> {
         assert_eq!(
             statements.len(),
             ids.len(),
             "statements and their pipeline ids must align"
         );
 
-        // Blank nodes get their nulls first, so that every occurrence of
-        // a label maps to the same null.
-        self.create_blank_nodes(statements);
-        self.namespace(statements)?;
         self.declaration_directives(statements)?;
         self.plan_imports(statements)?;
         self.remote_requests(statements, ids)
@@ -507,12 +506,17 @@ impl<'a> Translator<'a> {
         self.finish_program(compiled)
     }
 
-    /// Reads the prefixes, the base, the parameters, and the `@type` definitions
+    /// Creates the nulls of the blank nodes,
+    /// and reads the prefixes, the base, the parameters, and the `@type` definitions
     /// before anything is resolved, typed, or evaluated.
     ///
     /// So a name may be used before its declaration,
     /// and `@type` definitions may refer to each other in any order.
     fn namespace(&mut self, statements: &[Statement]) -> Result<(), Diagnostic> {
+        // Blank nodes get their nulls first, so that every occurrence of a label maps to the
+        // same null.
+        self.create_blank_nodes(statements);
+
         if let Err(problem) = NameScope::check_base(statements) {
             self.report_or_fail(problem)?;
         }
