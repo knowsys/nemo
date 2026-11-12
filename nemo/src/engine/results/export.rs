@@ -291,14 +291,26 @@ impl ExportWriter {
 }
 
 impl Engine {
-    /// Writes the rows of export specifications into files of a directory,
-    /// or to the standard output for an empty resource name.
+    /// Writes the rows of the given export specifications into the given directory,
+    /// as [export](Self::export) does.
     ///
+    /// The specifications can also be built directly,
+    /// for example to write a predicate that the program does not export,
+    /// or to write in another serialization.
     /// The rows are decoded from their table as they are written,
     /// so an export holds no second copy of the table.
-    /// If the standard output is closed, the export to it ends without an error.
-    /// Fails if no program is loaded, also for an empty list of specifications.
-    pub(in crate::engine) fn write_exports(
+    /// If the standard output is closed, an export to it ends without an error.
+    ///
+    /// # Errors
+    ///
+    /// - Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
+    ///   also for an empty list of specifications.
+    /// - Returns [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) for a predicate that the
+    ///   program neither uses nor declares as an output, and
+    ///   [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) for one that the engine does not store
+    ///   whole.
+    /// - Otherwise, returns the failure to write a file.
+    pub fn export_specs(
         &mut self,
         directory: impl AsRef<Path>,
         specs: &[ExportSpec],
@@ -335,11 +347,19 @@ impl Engine {
         Ok(())
     }
 
-    /// Serializes one export specification's rows into memory.
-    pub(in crate::engine) fn serialize_export(
-        &mut self,
-        spec: &ExportSpec,
-    ) -> Result<Vec<u8>, Diagnostic> {
+    /// Returns the bytes that [export_specs](Self::export_specs) would write to the file of one
+    /// export specification, compression included.
+    ///
+    /// This serves environments without a filesystem, such as browsers,
+    /// and exports that are sent somewhere other than a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM),
+    /// [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) or
+    /// [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) as [export_specs](Self::export_specs)
+    /// does, and the failure to serialize the rows.
+    pub fn export_bytes(&mut self, spec: &ExportSpec) -> Result<Vec<u8>, Diagnostic> {
         let name = spec.file_name();
 
         // The standard output has no name to detect compression by,
@@ -374,7 +394,7 @@ impl Engine {
         if self.arity_of(&spec.predicate).is_none() {
             // An output that the program declares but never uses has no table,
             // and is written as an empty file.
-            if self.output_names().contains(&spec.predicate) {
+            if self.outputs().contains(&spec.predicate) {
                 return Ok(());
             }
 
@@ -384,7 +404,7 @@ impl Engine {
             .diagnostic());
         }
 
-        let cursor = self.open_cursor(&spec.predicate)?;
+        let cursor = self.cursor(&spec.predicate)?;
         let limit = spec.limit.unwrap_or(u64::MAX);
         if cursor.remaining() == 0 || limit == 0 {
             return Ok(());

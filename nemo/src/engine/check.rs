@@ -29,9 +29,12 @@ use crate::{
 };
 
 impl Engine {
-    /// Registers, parses, links and checks a program text
-    /// (see [check_source](Engine::check_source)).
-    pub(in crate::engine) fn check_text(
+    /// Registers a program text and checks it without loading it.
+    ///
+    /// The report contains what parsing, linking and [check](Self::check) reported,
+    /// warnings included, or the error of a failed registration.
+    /// The engine's [reports](Self::reports) stay as they were.
+    pub fn check_source(
         &mut self,
         name: impl Into<String>,
         text: impl Into<String>,

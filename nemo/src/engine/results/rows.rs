@@ -13,13 +13,15 @@ use crate::{
 };
 
 impl Engine {
-    /// Opens a cursor over a predicate stored whole.
+    /// Opens a cursor over a predicate's stored rows, for [read_chunk](Self::read_chunk) to read.
     ///
-    /// Fails as [whole_predicate](Self::whole_predicate) does.
-    pub(in crate::engine) fn open_cursor(
-        &self,
-        predicate: &str,
-    ) -> Result<PredicateCursor, Diagnostic> {
+    /// # Errors
+    ///
+    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
+    /// [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) for a predicate the program does not
+    /// have, and [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) for one the engine does not
+    /// store whole, naming what is left out.
+    pub fn cursor(&self, predicate: &str) -> Result<PredicateCursor, Diagnostic> {
         let Registered { table, arity } = self.whole_predicate(predicate)?;
         let range = Revision(0)..Revision(self.run.step.max(1));
         let rows = self.stores.manager.row_count(table, range.clone());
@@ -35,10 +37,19 @@ impl Engine {
         })
     }
 
-    /// Decodes the next rows of a cursor, at most `budget` of them, into a chunk.
+    /// Returns the next rows of a cursor, at most `budget` of them, decoded into a [RowChunk].
     ///
-    /// Fails for a cursor that is not [valid](Self::is_valid).
-    pub(in crate::engine) fn decode_chunk(
+    /// The chunk is empty once the cursor has delivered every row.
+    /// The cursor holds no borrow of the engine, and each read borrows the engine only while it
+    /// runs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [CURSOR_INVALIDATED](crate::codes::CURSOR_INVALIDATED) for a cursor whose table
+    /// changed after the cursor was opened, since its remaining rows would no longer match the
+    /// table.
+    /// [is_valid](Self::is_valid) checks for this beforehand.
+    pub fn read_chunk(
         &mut self,
         cursor: &mut PredicateCursor,
         budget: usize,

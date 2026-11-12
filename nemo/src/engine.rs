@@ -94,7 +94,7 @@ use crate::{
     pipeline::{Pipeline, RegisteredSource, RevisionText, Stages, StatementId},
     telemetry::{EngineEvent, EngineTimings, EventSink},
     trace::{
-        TracePart, TraceResponse, TracedFact, WrittenRule,
+        TraceResponse, WrittenRule,
         query::{
             NodeResponse, TableEntriesForTreeNodesQuery, TreeForTableQuery, TreeForTableResponse,
         },
@@ -630,29 +630,6 @@ impl Engine {
         CheckReport::new(reports, types)
     }
 
-    /// Registers a program text, parses and [links](Self::link) it,
-    /// and passes the result to `call`.
-    ///
-    /// `call` is a loading method, such as [start_load](Self::start_load), or another function
-    /// that accepts a linked program.
-    /// [load_source](Self::load_source), [extend_source](Self::extend_source) and
-    /// [reload_source](Self::reload_source) pass the program to the plain loading methods.
-    /// If parsing reports an error, the text is rejected with everything parsing reported.
-    /// Warnings alone do not stop it.
-    ///
-    /// # Errors
-    ///
-    /// Returns the diagnostics of the step that failed:
-    /// registration, parsing, linking, or `call`.
-    pub fn with_source(
-        &mut self,
-        name: impl Into<String>,
-        text: impl Into<String>,
-        call: impl FnOnce(&mut Engine, Program) -> Result<(), Diagnostic>,
-    ) -> Result<(), Vec<Diagnostic>> {
-        self.with_source_text(name, text, call)
-    }
-
     /// Registers a program text, parses and [links](Self::link) it, and [loads](Self::load) it.
     ///
     /// # Errors
@@ -692,19 +669,6 @@ impl Engine {
         text: impl Into<String>,
     ) -> Result<(), Vec<Diagnostic>> {
         self.with_source(name, text, |engine, program| engine.reload(program))
-    }
-
-    /// Registers a program text and checks it without loading it.
-    ///
-    /// The report contains what parsing, linking and [check](Self::check) reported,
-    /// warnings included, or the error of a failed registration.
-    /// The engine's [reports](Self::reports) stay as they were.
-    pub fn check_source(
-        &mut self,
-        name: impl Into<String>,
-        text: impl Into<String>,
-    ) -> CheckReport {
-        self.check_text(name, text)
     }
 
     /// Adds rows computed in memory, rather than read from a file, to a predicate.
@@ -955,17 +919,6 @@ impl Engine {
         })
     }
 
-    /// Returns the program's outputs.
-    ///
-    /// They are the predicates that the program declares `@output` or exports,
-    /// in declaration order.
-    /// If it declares neither, they are the predicates that its rules derive, sorted by name.
-    /// An output is stored whole,
-    /// so [rows](Self::rows) and [count](Self::count) deliver all of its facts.
-    pub fn outputs(&self) -> Vec<String> {
-        self.output_names()
-    }
-
     /// Returns the types of the values that each column of a predicate can hold,
     /// as the type analysis inferred them.
     ///
@@ -1015,38 +968,6 @@ impl Engine {
         }
 
         Ok(rows)
-    }
-
-    /// Opens a cursor over a predicate's stored rows, for [read_chunk](Self::read_chunk) to read.
-    ///
-    /// # Errors
-    ///
-    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded,
-    /// [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) for a predicate the program does not
-    /// have, and [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) for one the engine does not
-    /// store whole, naming what is left out.
-    pub fn cursor(&self, predicate: &str) -> Result<PredicateCursor, Diagnostic> {
-        self.open_cursor(predicate)
-    }
-
-    /// Returns the next rows of a cursor, at most `budget` of them, decoded into a [RowChunk].
-    ///
-    /// The chunk is empty once the cursor has delivered every row.
-    /// The cursor holds no borrow of the engine, and each read borrows the engine only while it
-    /// runs.
-    ///
-    /// # Errors
-    ///
-    /// Returns [CURSOR_INVALIDATED](crate::codes::CURSOR_INVALIDATED) for a cursor whose table
-    /// changed after the cursor was opened, since its remaining rows would no longer match the
-    /// table.
-    /// [is_valid](Self::is_valid) checks for this beforehand.
-    pub fn read_chunk(
-        &mut self,
-        cursor: &mut PredicateCursor,
-        budget: usize,
-    ) -> Result<RowChunk, Diagnostic> {
-        self.decode_chunk(cursor, budget)
     }
 
     /// Returns whether a cursor still reads the rows it was opened on,
@@ -1111,45 +1032,6 @@ impl Engine {
         self.export_specs(directory, &specs)
     }
 
-    /// Writes the rows of the given export specifications into the given directory,
-    /// as [export](Self::export) does.
-    ///
-    /// The specifications can also be built directly,
-    /// for example to write a predicate that the program does not export,
-    /// or to write in another serialization.
-    ///
-    /// # Errors
-    ///
-    /// - Returns [NO_PROGRAM](crate::codes::NO_PROGRAM) if no program is loaded.
-    /// - Returns [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) for a predicate that the
-    ///   program neither uses nor declares as an output, and
-    ///   [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) for one that the engine does not store
-    ///   whole.
-    /// - Otherwise, returns the failure to write a file.
-    pub fn export_specs(
-        &mut self,
-        directory: impl AsRef<Path>,
-        specs: &[ExportSpec],
-    ) -> Result<(), Diagnostic> {
-        self.write_exports(directory, specs)
-    }
-
-    /// Returns the bytes that [export_specs](Self::export_specs) would write to the file of one
-    /// export specification, compression included.
-    ///
-    /// This serves environments without a filesystem, such as browsers,
-    /// and exports that are sent somewhere other than a file.
-    ///
-    /// # Errors
-    ///
-    /// Returns [NO_PROGRAM](crate::codes::NO_PROGRAM),
-    /// [UNKNOWN_PREDICATE](crate::codes::UNKNOWN_PREDICATE) or
-    /// [NOT_STORED_WHOLE](crate::codes::NOT_STORED_WHOLE) as [export_specs](Self::export_specs)
-    /// does, and the failure to serialize the rows.
-    pub fn export_bytes(&mut self, spec: &ExportSpec) -> Result<Vec<u8>, Diagnostic> {
-        self.serialize_export(spec)
-    }
-
     /// Checks that facts can be traced, without tracing them.
     ///
     /// Each fact must name a predicate of the program and fit it,
@@ -1193,58 +1075,6 @@ impl Engine {
         self.traceable()?;
         let resolved = self.ground_facts(facts)?;
         trace::proof::run(self, resolved)
-    }
-
-    /// Traces every stored row of the given predicates, and then the given facts,
-    /// as [trace](Self::trace) does.
-    ///
-    /// Returns the traced facts, each with its node.
-    /// The response is passed to `sink` in [parts](crate::trace::TracePart) as it grows,
-    /// one batch of rows at a time.
-    /// Each fact is proven once and becomes one node,
-    /// which is listed after the nodes of its premises.
-    /// Every proof is kept in memory until the trace ends.
-    ///
-    /// # Errors
-    ///
-    /// Returns what [trace](Self::trace) returns for the facts,
-    /// what [cursor](Self::cursor) returns for a predicate,
-    /// and the first error of `sink`, which ends the tracing.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use nemo::{engine::Engine, model::Program};
-    ///
-    /// let (program, _) = Program::parse("edge(1, 2) . reach(?x, ?y) :- edge(?x, ?y) .");
-    /// let mut engine = Engine::new();
-    /// engine.load(program)?;
-    /// engine.reason()?;
-    ///
-    /// let mut parts = Vec::new();
-    /// engine.trace_predicates(&["reach".to_owned()], &[], |part| {
-    ///     parts.push(part);
-    ///     Ok(())
-    /// })?;
-    ///
-    /// // Node ids continue across the parts.
-    /// let nodes: Vec<_> = parts.iter().flat_map(|part| &part.nodes).collect();
-    /// let node = nodes
-    ///     .iter()
-    ///     .find(|node| node.fact == "reach(1, 2)")
-    ///     .expect("the row is traced");
-    /// let derivation = node.derivation.as_ref().expect("a rule derives the fact");
-    /// let premises = derivation.premises.iter().map(|&premise| nodes[premise].fact.as_str());
-    /// assert_eq!(node.inference(premises), "reach(1, 2) :- edge(1, 2) .");
-    /// # Ok::<(), nemo::diagnostics::Diagnostic>(())
-    /// ```
-    pub fn trace_predicates(
-        &mut self,
-        predicates: &[String],
-        facts: &[Fact],
-        sink: impl FnMut(TracePart) -> Result<(), Diagnostic>,
-    ) -> Result<Vec<TracedFact>, Diagnostic> {
-        self.trace_in_parts(predicates, facts, sink)
     }
 
     /// Answers a `treeForTable` query of the [query format](crate::trace::query).

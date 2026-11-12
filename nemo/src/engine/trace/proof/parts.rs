@@ -22,10 +22,50 @@ use crate::{
 const BATCH: usize = 1 << 10;
 
 impl Engine {
-    /// Traces every stored row of `predicates`, then `facts`,
-    /// passes one part of the response to `sink` per batch,
-    /// and returns `facts` with their nodes.
-    pub(in crate::engine) fn trace_in_parts(
+    /// Traces every stored row of the given predicates, and then the given facts,
+    /// as [trace](Self::trace) does.
+    ///
+    /// Returns the traced facts, each with its node.
+    /// The response is passed to `sink` in [parts](crate::trace::TracePart) as it grows,
+    /// one batch of rows at a time.
+    /// Each fact is proven once and becomes one node,
+    /// which is listed after the nodes of its premises.
+    /// Every proof is kept in memory until the trace ends.
+    ///
+    /// # Errors
+    ///
+    /// Returns what [trace](Self::trace) returns for the facts,
+    /// what [cursor](Self::cursor) returns for a predicate,
+    /// and the first error of `sink`, which ends the tracing.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use nemo::{engine::Engine, model::Program};
+    ///
+    /// let (program, _) = Program::parse("edge(1, 2) . reach(?x, ?y) :- edge(?x, ?y) .");
+    /// let mut engine = Engine::new();
+    /// engine.load(program)?;
+    /// engine.reason()?;
+    ///
+    /// let mut parts = Vec::new();
+    /// engine.trace_predicates(&["reach".to_owned()], &[], |part| {
+    ///     parts.push(part);
+    ///     Ok(())
+    /// })?;
+    ///
+    /// // Node ids continue across the parts.
+    /// let nodes: Vec<_> = parts.iter().flat_map(|part| &part.nodes).collect();
+    /// let node = nodes
+    ///     .iter()
+    ///     .find(|node| node.fact == "reach(1, 2)")
+    ///     .expect("the row is traced");
+    /// let derivation = node.derivation.as_ref().expect("a rule derives the fact");
+    /// let premises = derivation.premises.iter().map(|&premise| nodes[premise].fact.as_str());
+    /// assert_eq!(node.inference(premises), "reach(1, 2) :- edge(1, 2) .");
+    /// # Ok::<(), nemo::diagnostics::Diagnostic>(())
+    /// ```
+    pub fn trace_predicates(
         &mut self,
         predicates: &[String],
         facts: &[Fact],

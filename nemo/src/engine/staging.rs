@@ -441,9 +441,21 @@ impl Engine {
         stages
     }
 
-    /// Registers, parses and links a program text, and passes the result to `call`
-    /// (see [with_source](Engine::with_source)).
-    pub(in crate::engine) fn with_source_text(
+    /// Registers a program text, parses and [links](Self::link) it,
+    /// and passes the result to `call`.
+    ///
+    /// `call` is a loading method, such as [start_load](Self::start_load), or another function
+    /// that accepts a linked program.
+    /// [load_source](Self::load_source), [extend_source](Self::extend_source) and
+    /// [reload_source](Self::reload_source) pass the program to the plain loading methods.
+    /// If parsing reports an error, the text is rejected with everything parsing reported.
+    /// Warnings alone do not stop it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the diagnostics of the step that failed:
+    /// registration, parsing, linking, or `call`.
+    pub fn with_source(
         &mut self,
         name: impl Into<String>,
         text: impl Into<String>,

@@ -117,8 +117,14 @@ impl Engine {
         }
     }
 
-    /// Returns the names of the program's outputs (see [outputs](Self::outputs)).
-    pub(in crate::engine) fn output_names(&self) -> Vec<String> {
+    /// Returns the program's outputs.
+    ///
+    /// They are the predicates that the program declares `@output` or exports,
+    /// in declaration order.
+    /// If it declares neither, they are the predicates that its rules derive, sorted by name.
+    /// An output is stored whole,
+    /// so [rows](Self::rows) and [count](Self::count) deliver all of its facts.
+    pub fn outputs(&self) -> Vec<String> {
         match &self.loaded {
             Some(LoadedProgram { written, .. }) if !written.declared_outputs().is_empty() => {
                 written.declared_outputs().to_vec()
