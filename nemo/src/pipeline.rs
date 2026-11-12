@@ -22,6 +22,11 @@
 //! The pipeline also registers the source texts that spans point into.
 //! A module instance is registered as a source of its own,
 //! so that a span says which instance a statement belongs to.
+//!
+//! The pipeline of an [Engine](crate::engine::Engine) does not keep everything.
+//! The engine removes the statements of a program that it abandons or replaces,
+//! and the sources that it registered itself once nothing points into them
+//! (see [Engine::sources](crate::engine::Engine::sources)).
 
 mod arena;
 mod commit;

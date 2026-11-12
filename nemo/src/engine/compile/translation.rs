@@ -91,9 +91,11 @@ pub(crate) struct TranslationSetup<'a> {
     pub(crate) passes: &'a OptimizationPasses,
     /// What the translation is for.
     pub(crate) purpose: Purpose<'a>,
-    /// The written program of the translated statements, or `None` if no import pass runs.
+    /// The written program that the statements were made from, in a translation that reads
+    /// data.
     ///
-    /// The import passes store the predicates that it derives whole.
+    /// A predicate that the written program derives is stored whole,
+    /// even if a pipeline stage replaced its rules by an import.
     pub(crate) written: Option<&'a WrittenProgram>,
     /// The column types with which the loaded program was analyzed, if a program is loaded.
     ///
@@ -850,11 +852,8 @@ impl<'a> Translator<'a> {
                 Ok(())
             }
 
-            // Declarations, `@type` definitions, and inputs were read
-            // before the statements were translated. See
-            // [declare_directive](Self::declare_directive),
-            // [type_directive](Self::type_directive), and
-            // [input_directive](Self::input_directive).
+            // Declarations, `@type` definitions and inputs took effect before the first
+            // statement was translated.
             Directive::Declare(_) | Directive::Type(_) | Directive::Input(_) => Ok(()),
             Directive::Export(export) => self.export_directive(export),
             Directive::Use(_) => {

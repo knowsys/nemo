@@ -128,8 +128,8 @@ use crate::{
 /// ```
 #[derive(Debug, Default)]
 pub struct Engine {
-    /// The program pipeline, which stores the registered sources, every revision of the
-    /// program, and the reports.
+    /// The program pipeline, which stores the registered sources, the revisions of the
+    /// loaded program, and the reports.
     pipeline: Pipeline,
     /// The stored data: the tables, the dictionary, and the registered predicates.
     stores: Stores,

@@ -108,6 +108,7 @@ impl Engine {
         let (Some(loaded), Some(seeds)) = (&self.loaded, self.translation.seeds.get(&table)) else {
             return true;
         };
+
         let program = &loaded.compiled;
 
         program.column_types.get(&table).is_some_and(|inferred| {

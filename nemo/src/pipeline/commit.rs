@@ -133,12 +133,16 @@ pub struct Commit<'a> {
     pending: Vec<PendingDeclaration>,
     /// The name scope of the base revision, built on first use.
     scope: OnceCell<NameScope>,
-    /// The resolved names of the predicates that the input uses,
-    /// with the predicates of [imported](Self::imported), collected on first use.
+    /// The resolved names of the predicates that the base revision uses,
+    /// and of the [imported](Self::imported) predicates.
+    ///
+    /// They are collected on first use.
     input_names: OnceCell<HashSet<String>>,
-    /// The resolved names of the predicates in use,
-    /// with the predicates of [imported](Self::imported)
-    /// and those drawn by [fresh](Self::fresh), collected on first use.
+    /// The resolved names that [fresh](Self::fresh) must not return:
+    /// those of the predicates in use, of the [imported](Self::imported) predicates,
+    /// and the names that it returned before.
+    ///
+    /// They are collected on first use.
     taken: Option<HashSet<String>>,
     /// The imports removed with [remove_import](Self::remove_import),
     /// each with the resolved name of its predicate.

@@ -579,6 +579,7 @@ impl Engine {
     /// however their blocks have merged.
     fn has_fresh_input(&self, rule: &CompiledRule, index: usize) -> bool {
         let last = Revision(self.run.last_applied[index]);
+
         rule.body.iter().any(|atom| {
             self.stores
                 .manager

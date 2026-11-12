@@ -1095,6 +1095,7 @@ anc(?p) :- parent(?c, ?p) .
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
     let linked = engine.link(parsed).expect("the module links").to_string();
+
     // The instance owns `anc` and `parent`, so no statement names them bare.
     assert!(!linked.contains("where anc("), "{linked}");
     assert!(linked.contains("where <f::anc>("), "{linked}");

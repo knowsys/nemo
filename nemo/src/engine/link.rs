@@ -250,12 +250,10 @@ impl Linker<'_> {
 ///
 /// A module's privacy rests on this check alone,
 /// since the renamed names live in the same namespace as every other name.
-/// The check is made on the resolved name. A renamed module name is an
-/// ordinary name in an ordinary namespace, and a program can write a name
-/// in that namespace in more ways than the obvious one: `<t::secret>`, but
-/// also `t:secret` after a `@prefix t: <t::>`, or any bare name in a file with a
-/// `@base <t::>`. Checking only how a name is written catches the first and none of the
-/// rest.
+/// The check is made on the resolved name,
+/// since a program can write a name of that namespace in several ways:
+/// as `<t::secret>`, as `t:secret` after a `@prefix t: <t::>`,
+/// or as a bare name in a file with a `@base <t::>`.
 ///
 /// A name that does not resolve is left to translation, which reports
 /// the undeclared prefix that made it unresolvable.
