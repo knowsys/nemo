@@ -91,7 +91,7 @@ use crate::{
         stores::Stores,
     },
     model::{Directive, Fact, FileId, Identifier, Program, Statement, Term},
-    pipeline::{Pipeline, RegisteredSource, RevisionText, Stages, StatementId},
+    pipeline::{Pipeline, RegisteredSource, ReportMark, RevisionText, Stages, StatementId},
     telemetry::{EngineEvent, EngineTimings, EventSink},
     trace::{
         TraceResponse, WrittenRule,
@@ -150,6 +150,11 @@ pub struct Engine {
     /// The first [load](Self::load) checks them against the program and stores them.
     /// They stay here until a load succeeds.
     unloaded_rows: imported_rows::UnloadedRows,
+    /// Where the reports about a program that is being linked begin,
+    /// if [link](Self::link) was called since the last loading method or check began.
+    ///
+    /// The loading method that follows counts the reports from here on as its program's.
+    linked_from: Option<ReportMark>,
     /// The method suspended for data from the network, if any (see [pending](Self::pending)).
     suspension: Option<Suspension>,
     /// The last id given to a request of a suspended method.
@@ -443,6 +448,9 @@ impl Engine {
     /// a file that cannot be read or does not parse, a cycle, an alias used twice,
     /// a name that an instance does not offer, or a binding or a parameter that does not fit.
     pub fn link(&mut self, program: Program) -> Result<Program, Diagnostic> {
+        let mark = self.pipeline.mark_reports();
+        self.linked_from.get_or_insert(mark);
+
         let linked = self.link_program(program);
         self.located(linked)
     }
@@ -580,7 +588,8 @@ impl Engine {
     /// and the next [reason](Self::reason) derives everything again from the input facts.
     /// It evaluates `NOW()` at the same instant as the program's facts and option values.
     ///
-    /// The dictionary and the registered sources and resources are kept.
+    /// The dictionary and the registered resources are kept.
+    /// The [reports](Self::reports) about the replaced program are dropped.
     /// So are the input facts of every predicate whose defining statements
     /// (facts, imports, declarations) are unchanged, and in particular,
     /// unchanged imports are not read again.
@@ -652,6 +661,9 @@ impl Engine {
     /// Like a load, it needs a [linked](Self::link) program and an engine without a program.
     /// Otherwise, the report contains the error that [load](Self::load) would return.
     pub fn check(&mut self, program: Program) -> CheckReport {
+        // A check ends the linking of its program, as a loading method does.
+        self.linked_from = None;
+
         let mark = self.pipeline.mark_reports();
         let statements = self.pipeline.mark();
         let checked = self.check_inner(program);
@@ -1301,6 +1313,9 @@ impl Engine {
 
     /// Returns the diagnostics that the methods reported so far,
     /// such as the warnings of loading and reasoning.
+    ///
+    /// A [reload](Self::reload) that succeeds drops the reports about the program that it
+    /// replaces: those made before the new program was [linked](Self::link) and loaded.
     pub fn reports(&self) -> &[Diagnostic] {
         self.pipeline.reports()
     }

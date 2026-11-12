@@ -165,6 +165,25 @@ impl LoadKind {
     }
 }
 
+/// Where a loading method began in the pipeline, which is where what it leaves there begins.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct LoadMarks {
+    /// Where the method's reports begin.
+    ///
+    /// If the method is discarded, its reports are withdrawn.
+    pub(super) reports: ReportMark,
+    /// Where the reports about the method's program begin,
+    /// which is where those of linking it begin if it was linked just before.
+    ///
+    /// A reload that succeeds drops the reports made before.
+    pub(super) program_reports: ReportMark,
+    /// The pipeline's arena before the method staged its program.
+    ///
+    /// If the method fails or is discarded, the statements of its program are removed.
+    /// A reload that succeeds removes the statements added before.
+    pub(super) statements: ArenaMark,
+}
+
 /// The state of a loading method after the pipeline stages ran:
 /// its prepared translation, and the remote resources it fetched and still needs.
 ///
@@ -196,32 +215,17 @@ pub(super) struct SuspendedLoad {
     ///
     /// The choice is undone if the method fails or is discarded.
     pub(super) chose_context: bool,
-    /// Where the method's reports begin.
-    ///
-    /// If the method is discarded, its reports are withdrawn.
-    pub(super) reports_from: ReportMark,
-    /// The pipeline's arena before the method staged its program.
-    ///
-    /// If the method fails or is discarded, the statements of its program are removed.
-    pub(super) statements_from: ArenaMark,
+    /// Where the method began in the pipeline.
+    pub(super) marks: LoadMarks,
 }
 
 impl SuspendedLoad {
-    /// Creates the state of a loading method, before any request.
-    ///
-    /// Its reports begin at `reports_from`,
-    /// and the statements of its program in the pipeline at `statements_from`.
-    pub(super) fn new(
-        kind: LoadKind,
-        staged: Staged,
-        reports_from: ReportMark,
-        statements_from: ArenaMark,
-    ) -> Self {
+    /// Creates the state of a loading method that began at `marks`, before any request.
+    pub(super) fn new(kind: LoadKind, staged: Staged, marks: LoadMarks) -> Self {
         Self {
             kind,
             staged,
-            reports_from,
-            statements_from,
+            marks,
             prepared: None,
             unstable: HashSet::new(),
             fetched: HashMap::new(),
@@ -537,8 +541,8 @@ impl Engine {
             self.run.next_context = None;
         }
 
-        self.pipeline.take_reports(load.reports_from);
-        self.pipeline.rewind(load.statements_from);
+        self.pipeline.take_reports(load.marks.reports);
+        self.pipeline.rewind(load.marks.statements);
     }
 
     /// Records a suspended method, and returns [Progress::Suspended] with the requests it is

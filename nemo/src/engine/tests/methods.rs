@@ -780,6 +780,42 @@ fn a_long_lived_engine_does_not_grow_with_its_calls() {
     }
 }
 
+/// A reload drops the reports about the program that it replaces.
+/// It keeps the reports about the new program, also those of linking it,
+/// and a reload that fails drops nothing.
+#[test]
+fn a_reload_drops_the_reports_about_the_replaced_program() {
+    let codes_of =
+        |engine: &Engine| -> Vec<Code> { engine.reports().iter().map(Diagnostic::code).collect() };
+
+    let mut engine = Engine::new();
+    engine
+        .add_module("promises", "@output real, ghost . real(1) .")
+        .expect("the name is a module name");
+    engine
+        .load_source("main.rls", "@input given .\nr(1) . q(?x) :- r(?x) .\n")
+        .unwrap_or_else(|problems| panic!("{problems:?}"));
+    assert_eq!(codes_of(&engine), [codes::INPUT_UNSUPPLIED]);
+
+    engine
+        .reload_source("main.rls", "r(1, 2) . q(?x) :- r(?x) .\n")
+        .expect_err("`r` is used with two numbers of columns");
+    assert_eq!(codes_of(&engine), [codes::INPUT_UNSUPPLIED]);
+
+    engine
+        .reload_source(
+            "main.rls",
+            "@use promises {} as g .\nanswer(?x) :- g::real(?x) .\n",
+        )
+        .unwrap_or_else(|problems| panic!("{problems:?}"));
+    assert_eq!(codes_of(&engine), [codes::OFFERS_UNWRITTEN]);
+
+    engine
+        .reload_source("main.rls", "r(1) . q(?x) :- r(?x) .\n")
+        .unwrap_or_else(|problems| panic!("{problems:?}"));
+    assert_eq!(codes_of(&engine), []);
+}
+
 /// A load that fails registers no predicate, so that a corrected program loads,
 /// even one that uses a predicate of the failed program with another number of columns.
 #[test]

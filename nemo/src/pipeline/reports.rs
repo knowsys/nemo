@@ -32,7 +32,14 @@ impl Pipeline {
 
     /// Takes the reports made since `mark` out of the reports, and returns them.
     pub(crate) fn take_reports(&mut self, mark: ReportMark) -> Vec<Diagnostic> {
-        self.reports.split_off(mark.0)
+        self.reports.split_off(mark.0.min(self.reports.len()))
+    }
+
+    /// Drops the reports made before `mark` was taken.
+    ///
+    /// The marks taken before this call are invalid afterwards.
+    pub(crate) fn forget_reports_before(&mut self, mark: ReportMark) {
+        self.reports.drain(..mark.0.min(self.reports.len()));
     }
 
     /// Returns a diagnostic about a statement version, labeled with the `@use` directives that

@@ -41,7 +41,7 @@ use crate::{
         imported_rows::UnloadedRows,
         link::is_instance_parameter,
         loaded::LoadedProgram,
-        remote::{LoadKind, Progress, ResourceRequest, SuspendedLoad, Suspension},
+        remote::{LoadKind, LoadMarks, Progress, ResourceRequest, SuspendedLoad, Suspension},
         transform::sparql_rewrite,
     },
     model::{Directive, Program, Statement},
@@ -142,12 +142,17 @@ impl Engine {
     ///
     /// A program that fails to stage leaves no statement in the pipeline.
     fn start_loading(&mut self, kind: LoadKind, program: Program) -> Result<Progress, Diagnostic> {
+        // The reports of linking the program are the program's too.
         let reports = self.pipeline.mark_reports();
-        let statements = self.pipeline.mark();
+        let marks = LoadMarks {
+            reports,
+            program_reports: self.linked_from.take().unwrap_or(reports),
+            statements: self.pipeline.mark(),
+        };
         let staged = match self.stage_for(kind, program) {
             Ok(staged) => staged,
             Err(problem) => {
-                self.pipeline.rewind(statements);
+                self.pipeline.rewind(marks.statements);
                 return Err(problem);
             }
         };
@@ -155,7 +160,7 @@ impl Engine {
         // The sources that only earlier calls needed go, now that this call's program is staged.
         self.pipeline.sweep_sources();
 
-        let load = SuspendedLoad::new(kind, staged, reports, statements);
+        let load = SuspendedLoad::new(kind, staged, marks);
         self.continue_loading(load, reports)
     }
 
@@ -229,10 +234,12 @@ impl Engine {
                     compiled: Arc::new(compiled),
                 });
 
-                // The statements of a replaced program go with it.
-                // An extension appends to the loaded program's statements, and keeps them.
+                // The statements of a replaced program go with it, and so do the reports
+                // about it. An extension appends to the loaded program, and keeps both.
                 if load.kind == LoadKind::Reload {
-                    self.pipeline.forget_before(load.statements_from);
+                    self.pipeline.forget_before(load.marks.statements);
+                    self.pipeline
+                        .forget_reports_before(load.marks.program_reports);
                 }
 
                 tracing::debug!(
@@ -251,7 +258,7 @@ impl Engine {
                 Ok(self.suspend(Suspension::Load(load)))
             }
             Err(problem) => {
-                self.pipeline.rewind(load.statements_from);
+                self.pipeline.rewind(load.marks.statements);
                 Err(program.written.present(problem))
             }
         }
