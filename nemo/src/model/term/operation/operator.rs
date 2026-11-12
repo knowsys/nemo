@@ -302,280 +302,206 @@ impl Operator {
             _ => return None,
         })
     }
+}
 
-    /// Returns the name of the operator in a call, such as `STRLEN`.
-    pub fn name(&self) -> &'static str {
-        match self {
-            Operator::Equal => "EQUALITY",
-            Operator::Unequal => "UNEQUALITY",
-            Operator::ValueEqual => "VALUEEQUALITY",
-            Operator::ValueUnequal => "VALUEUNEQUALITY",
-            Operator::Greater => "NUMGREATER",
-            Operator::GreaterEq => "NUMGREATEREQ",
-            Operator::Less => "NUMLESS",
-            Operator::LessEq => "NUMLESSEQ",
-            Operator::Add => "SUM",
-            Operator::Subtract => "SUBTRACTION",
-            Operator::Multiply => "PRODUCT",
-            Operator::Divide => "DIVISION",
-            Operator::Negate => "NEGATION",
-            Operator::Abs => "ABS",
-            Operator::Max => "MAX",
-            Operator::Min => "MIN",
-            Operator::And => "AND",
-            Operator::Or => "OR",
-            Operator::Not => "NOT",
-            Operator::IsIri => "isIri",
-            Operator::IsNumeric => "isNumeric",
-            Operator::StringLength => "STRLEN",
-            Operator::UpperCase => "UCASE",
-            Operator::LowerCase => "LCASE",
-            Operator::Contains => "CONTAINS",
-            Operator::StartsWith => "STRSTARTS",
-            Operator::EndsWith => "STRENDS",
-            Operator::Concat => "CONCAT",
-            Operator::Str => "STR",
-            Operator::IsString => "isString",
-            Operator::IsInteger => "isInteger",
-            Operator::IsFloat => "isFloat",
-            Operator::IsDouble => "isDouble",
-            Operator::IsNull => "isNull",
-            Operator::IsDecimal => "isDecimal",
-            Operator::IsBoolean => "isBoolean",
-            Operator::IsLangString => "isLangString",
-            Operator::IsDateTime => "isDateTime",
-            Operator::IsDate => "isDate",
-            Operator::IsTime => "isTime",
-            Operator::IsDuration => "isDuration",
-            Operator::IsDayTimeDuration => "isDayTimeDuration",
-            Operator::IsYearMonthDuration => "isYearMonthDuration",
-            Operator::Datatype => "DATATYPE",
-            Operator::FullStr => "fullStr",
-            Operator::Lang => "LANG",
-            Operator::StrLang => "STRLANG",
-            Operator::LangMatches => "langMatches",
-            Operator::StrDt => "STRDT",
-            Operator::CastInt => "INT",
-            Operator::CastFloat => "FLOAT",
-            Operator::CastDouble => "DOUBLE",
-            Operator::CastIri => "IRI",
-            Operator::CastDateTime => "DATETIME",
-            Operator::CastDate => "DATE",
-            Operator::CastTime => "TIME",
-            Operator::CastDuration => "DURATION",
-            Operator::CastDayTimeDuration => "DAYTIMEDURATION",
-            Operator::CastYearMonthDuration => "YEARMONTHDURATION",
-            Operator::Round => "ROUND",
-            Operator::Pow => "POW",
-            Operator::Log => "LOG",
-            Operator::Sin => "SIN",
-            Operator::Sqrt => "SQRT",
-            Operator::Cos => "COS",
-            Operator::Tan => "TAN",
-            Operator::Ceil => "CEIL",
-            Operator::Floor => "FLOOR",
-            Operator::Rem => "REM",
-            Operator::BitAnd => "BITAND",
-            Operator::BitOr => "BITOR",
-            Operator::BitXor => "BITXOR",
-            Operator::BitShl => "BITSHL",
-            Operator::BitShr => "BITSHR",
-            Operator::Luka => "LUKA",
-            Operator::Compare => "COMPARE",
-            Operator::Levenshtein => "LEVENSHTEIN",
-            Operator::StrRev => "STRREV",
-            Operator::Trim => "STRTRIM",
-            Operator::TrimStart => "STRTRIMSTART",
-            Operator::TrimEnd => "STRTRIMEND",
-            Operator::StrBefore => "STRBEFORE",
-            Operator::StrAfter => "STRAFTER",
-            Operator::UriEncode => "URIENCODE",
-            Operator::UriDecode => "URIDECODE",
-            Operator::Substr => "SUBSTR",
-            Operator::Regex => "REGEX",
-            Operator::Replace => "REPLACE",
-            Operator::Md5 => "MD5",
-            Operator::Sha1 => "SHA1",
-            Operator::Sha256 => "SHA256",
-            Operator::Sha384 => "SHA384",
-            Operator::Sha512 => "SHA512",
-            Operator::Year => "YEAR",
-            Operator::Month => "MONTH",
-            Operator::Day => "DAY",
-            Operator::Hours => "HOURS",
-            Operator::Minutes => "MINUTES",
-            Operator::Seconds => "SECONDS",
-            Operator::TzString => "TZ",
-            Operator::Timezone => "TIMEZONE",
-            Operator::Adjust => "ADJUST",
-            Operator::Rand => "RAND",
-            Operator::Uuid => "UUID",
-            Operator::StrUuid => "STRUUID",
-            Operator::Now => "NOW",
-            Operator::Get => "GET",
-            Operator::Length => "LENGTH",
-            Operator::Label => "LABEL",
-            Operator::Keys => "KEYS",
-            Operator::HasKey => "HASKEY",
-            Operator::IsTuple => "isTuple",
-            Operator::IsMap => "isMap",
-            Operator::StrJoin => "STRJOIN",
-            Operator::StrSplit => "STRSPLIT",
+/// Declares the names by which the builtins are called.
+///
+/// An entry is `Variant => "name"`,
+/// followed by `as "NAME"` if the name is not in upper case,
+/// and by `| "OTHER"` for each further name of the builtin.
+/// [name](Operator::name) and [from_name](Operator::from_name) are generated from the entries,
+/// so that they cannot disagree.
+macro_rules! operator_names {
+    (@upper $name:literal) => {
+        $name
+    };
+    (@upper $name:literal as $upper:literal) => {
+        $upper
+    };
+    ($($variant:ident => $name:literal $(as $upper:literal)? $(| $other:literal)*,)+) => {
+        impl Operator {
+            /// Returns the name of the operator in a call, such as `STRLEN`.
+            pub fn name(&self) -> &'static str {
+                match self {
+                    $(Operator::$variant => $name,)+
+                }
+            }
+
+            /// Returns the operator with the given name in a call, written in any case,
+            /// or `None` if there is none.
+            ///
+            /// The names are exactly those in [NAMES](Self::NAMES).
+            /// Other names, like `equal` or `less`, remain free for predicates and function
+            /// terms.
+            pub fn from_name(name: &str) -> Option<Self> {
+                Some(match name.to_ascii_uppercase().as_str() {
+                    $(
+                        operator_names!(@upper $name $(as $upper)?) $(| $other)* => {
+                            Operator::$variant
+                        }
+                    )+
+                    _ => return None,
+                })
+            }
+
+            /// The names of the entries, in upper case and in the order of the variants.
+            #[cfg(test)]
+            const ENTRY_NAMES: &'static [&'static str] = &[
+                $(operator_names!(@upper $name $(as $upper)?), $($other,)*)+
+            ];
         }
-    }
+    };
+}
 
+operator_names! {
+    Equal => "EQUALITY",
+    Unequal => "UNEQUALITY",
+    ValueEqual => "VALUEEQUALITY",
+    ValueUnequal => "VALUEUNEQUALITY",
+    Greater => "NUMGREATER",
+    GreaterEq => "NUMGREATEREQ",
+    Less => "NUMLESS",
+    LessEq => "NUMLESSEQ",
+    Add => "SUM",
+    Subtract => "SUBTRACTION",
+    Multiply => "PRODUCT",
+    Divide => "DIVISION",
+    Negate => "NEGATION" | "INVERTSIGN",
+    Abs => "ABS",
+    Max => "MAX",
+    Min => "MIN",
+    And => "AND",
+    Or => "OR",
+    Not => "NOT",
+    IsIri => "isIri" as "ISIRI",
+    IsNumeric => "isNumeric" as "ISNUMERIC",
+    StringLength => "STRLEN",
+    UpperCase => "UCASE",
+    LowerCase => "LCASE",
+    Contains => "CONTAINS",
+    StartsWith => "STRSTARTS",
+    EndsWith => "STRENDS",
+    Concat => "CONCAT",
+    Str => "STR",
+    IsString => "isString" as "ISSTRING",
+    IsInteger => "isInteger" as "ISINTEGER",
+    IsFloat => "isFloat" as "ISFLOAT",
+    IsDouble => "isDouble" as "ISDOUBLE",
+    IsNull => "isNull" as "ISNULL",
+    IsDecimal => "isDecimal" as "ISDECIMAL",
+    IsBoolean => "isBoolean" as "ISBOOLEAN",
+    IsLangString => "isLangString" as "ISLANGSTRING",
+    IsDateTime => "isDateTime" as "ISDATETIME",
+    IsDate => "isDate" as "ISDATE",
+    IsTime => "isTime" as "ISTIME",
+    IsDuration => "isDuration" as "ISDURATION",
+    IsDayTimeDuration => "isDayTimeDuration" as "ISDAYTIMEDURATION",
+    IsYearMonthDuration => "isYearMonthDuration" as "ISYEARMONTHDURATION",
+    Datatype => "DATATYPE",
+    FullStr => "fullStr" as "FULLSTR",
+    Lang => "LANG",
+    StrLang => "STRLANG",
+    LangMatches => "langMatches" as "LANGMATCHES",
+    StrDt => "STRDT",
+    CastInt => "INT",
+    CastFloat => "FLOAT",
+    CastDouble => "DOUBLE",
+    CastIri => "IRI",
+    CastDateTime => "DATETIME",
+    CastDate => "DATE",
+    CastTime => "TIME",
+    CastDuration => "DURATION",
+    CastDayTimeDuration => "DAYTIMEDURATION",
+    CastYearMonthDuration => "YEARMONTHDURATION",
+    Round => "ROUND",
+    Pow => "POW",
+    Log => "LOG",
+    Sin => "SIN",
+    Sqrt => "SQRT",
+    Cos => "COS",
+    Tan => "TAN",
+    Ceil => "CEIL",
+    Floor => "FLOOR",
+    Rem => "REM",
+    BitAnd => "BITAND",
+    BitOr => "BITOR",
+    BitXor => "BITXOR",
+    BitShl => "BITSHL",
+    BitShr => "BITSHR",
+    Luka => "LUKA",
+    Compare => "COMPARE",
+    Levenshtein => "LEVENSHTEIN",
+    StrRev => "STRREV",
+    Trim => "STRTRIM",
+    TrimStart => "STRTRIMSTART",
+    TrimEnd => "STRTRIMEND",
+    StrBefore => "STRBEFORE",
+    StrAfter => "STRAFTER",
+    UriEncode => "URIENCODE",
+    UriDecode => "URIDECODE",
+    Substr => "SUBSTR",
+    Regex => "REGEX",
+    Replace => "REPLACE",
+    Md5 => "MD5",
+    Sha1 => "SHA1",
+    Sha256 => "SHA256",
+    Sha384 => "SHA384",
+    Sha512 => "SHA512",
+    Year => "YEAR",
+    Month => "MONTH",
+    Day => "DAY",
+    Hours => "HOURS",
+    Minutes => "MINUTES",
+    Seconds => "SECONDS",
+    TzString => "TZ",
+    Timezone => "TIMEZONE",
+    Adjust => "ADJUST",
+    Rand => "RAND",
+    Uuid => "UUID",
+    StrUuid => "STRUUID",
+    Now => "NOW",
+    Get => "GET",
+    Length => "LENGTH",
+    Label => "LABEL",
+    Keys => "KEYS",
+    HasKey => "HASKEY",
+    IsTuple => "isTuple" as "ISTUPLE",
+    IsMap => "isMap" as "ISMAP",
+    StrJoin => "STRJOIN",
+    StrSplit => "STRSPLIT",
+}
+
+impl Operator {
     /// Every name that a builtin can be called by.
     ///
     /// These names are reserved, in any case,
     /// so a program cannot use them as names of predicates or functions.
     /// They are the names that term syntax reserves ([BUILTIN_NAMES]).
     pub const NAMES: &'static [&'static str] = BUILTIN_NAMES;
-
-    /// Returns the operator with the given name in a call, written in any case,
-    /// or `None` if there is none.
-    ///
-    /// The names are exactly those in [NAMES](Self::NAMES).
-    /// Other names, like `equal` or `less`, remain free for predicates and function terms.
-    pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name.to_ascii_uppercase().as_str() {
-            "EQUALITY" => Operator::Equal,
-            "UNEQUALITY" => Operator::Unequal,
-            "VALUEEQUALITY" => Operator::ValueEqual,
-            "VALUEUNEQUALITY" => Operator::ValueUnequal,
-            "NUMGREATER" => Operator::Greater,
-            "NUMGREATEREQ" => Operator::GreaterEq,
-            "NUMLESS" => Operator::Less,
-            "NUMLESSEQ" => Operator::LessEq,
-            "SUM" => Operator::Add,
-            "SUBTRACTION" => Operator::Subtract,
-            "PRODUCT" => Operator::Multiply,
-            "DIVISION" => Operator::Divide,
-            "NEGATION" | "INVERTSIGN" => Operator::Negate,
-            "ABS" => Operator::Abs,
-            "MAX" => Operator::Max,
-            "MIN" => Operator::Min,
-            "AND" => Operator::And,
-            "OR" => Operator::Or,
-            "NOT" => Operator::Not,
-            "ISIRI" => Operator::IsIri,
-            "ISNUMERIC" => Operator::IsNumeric,
-            "STRLEN" => Operator::StringLength,
-            "UCASE" => Operator::UpperCase,
-            "LCASE" => Operator::LowerCase,
-            "CONTAINS" => Operator::Contains,
-            "STRSTARTS" => Operator::StartsWith,
-            "STRENDS" => Operator::EndsWith,
-            "CONCAT" => Operator::Concat,
-            "STR" => Operator::Str,
-            "ISSTRING" => Operator::IsString,
-            "ISINTEGER" => Operator::IsInteger,
-            "ISFLOAT" => Operator::IsFloat,
-            "ISDOUBLE" => Operator::IsDouble,
-            "ISNULL" => Operator::IsNull,
-            "ISDECIMAL" => Operator::IsDecimal,
-            "ISBOOLEAN" => Operator::IsBoolean,
-            "ISLANGSTRING" => Operator::IsLangString,
-            "ISDATETIME" => Operator::IsDateTime,
-            "ISDATE" => Operator::IsDate,
-            "ISTIME" => Operator::IsTime,
-            "ISDURATION" => Operator::IsDuration,
-            "ISDAYTIMEDURATION" => Operator::IsDayTimeDuration,
-            "ISYEARMONTHDURATION" => Operator::IsYearMonthDuration,
-            "DATATYPE" => Operator::Datatype,
-            "FULLSTR" => Operator::FullStr,
-            "LANG" => Operator::Lang,
-            "STRLANG" => Operator::StrLang,
-            "LANGMATCHES" => Operator::LangMatches,
-            "STRDT" => Operator::StrDt,
-            "INT" => Operator::CastInt,
-            "FLOAT" => Operator::CastFloat,
-            "DOUBLE" => Operator::CastDouble,
-            "IRI" => Operator::CastIri,
-            "DATETIME" => Operator::CastDateTime,
-            "DATE" => Operator::CastDate,
-            "TIME" => Operator::CastTime,
-            "DURATION" => Operator::CastDuration,
-            "DAYTIMEDURATION" => Operator::CastDayTimeDuration,
-            "YEARMONTHDURATION" => Operator::CastYearMonthDuration,
-            "ROUND" => Operator::Round,
-            "POW" => Operator::Pow,
-            "LOG" => Operator::Log,
-            "SIN" => Operator::Sin,
-            "SQRT" => Operator::Sqrt,
-            "COS" => Operator::Cos,
-            "TAN" => Operator::Tan,
-            "CEIL" => Operator::Ceil,
-            "FLOOR" => Operator::Floor,
-            "REM" => Operator::Rem,
-            "BITAND" => Operator::BitAnd,
-            "BITOR" => Operator::BitOr,
-            "BITXOR" => Operator::BitXor,
-            "BITSHL" => Operator::BitShl,
-            "BITSHR" => Operator::BitShr,
-            "LUKA" => Operator::Luka,
-            "COMPARE" => Operator::Compare,
-            "LEVENSHTEIN" => Operator::Levenshtein,
-            "STRREV" => Operator::StrRev,
-            "STRTRIM" => Operator::Trim,
-            "STRTRIMSTART" => Operator::TrimStart,
-            "STRTRIMEND" => Operator::TrimEnd,
-            "STRBEFORE" => Operator::StrBefore,
-            "STRAFTER" => Operator::StrAfter,
-            "URIENCODE" => Operator::UriEncode,
-            "URIDECODE" => Operator::UriDecode,
-            "SUBSTR" => Operator::Substr,
-            "REGEX" => Operator::Regex,
-            "REPLACE" => Operator::Replace,
-            "MD5" => Operator::Md5,
-            "SHA1" => Operator::Sha1,
-            "SHA256" => Operator::Sha256,
-            "SHA384" => Operator::Sha384,
-            "SHA512" => Operator::Sha512,
-            "YEAR" => Operator::Year,
-            "MONTH" => Operator::Month,
-            "DAY" => Operator::Day,
-            "HOURS" => Operator::Hours,
-            "MINUTES" => Operator::Minutes,
-            "SECONDS" => Operator::Seconds,
-            "TZ" => Operator::TzString,
-            "TIMEZONE" => Operator::Timezone,
-            "ADJUST" => Operator::Adjust,
-            "RAND" => Operator::Rand,
-            "UUID" => Operator::Uuid,
-            "STRUUID" => Operator::StrUuid,
-            "NOW" => Operator::Now,
-            "GET" => Operator::Get,
-            "LENGTH" => Operator::Length,
-            "LABEL" => Operator::Label,
-            "KEYS" => Operator::Keys,
-            "HASKEY" => Operator::HasKey,
-            "ISTUPLE" => Operator::IsTuple,
-            "ISMAP" => Operator::IsMap,
-            "STRJOIN" => Operator::StrJoin,
-            "STRSPLIT" => Operator::StrSplit,
-            _ => return None,
-        })
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Every name in [NAMES](Operator::NAMES) is found, in any case.
+    /// The names that term syntax reserves are the names of the builtins, in their order.
+    #[test]
+    fn the_reserved_names_are_the_names_of_the_builtins() {
+        assert_eq!(Operator::NAMES, Operator::ENTRY_NAMES);
+    }
+
+    /// Every name in [NAMES](Operator::NAMES) is found, in any case,
+    /// and a builtin is found by the name that it is written with.
     #[test]
     fn every_listed_name_resolves() {
-        // The list and the lookup must agree,
-        // so a name that is in one and not in the other is a mistake.
         for name in Operator::NAMES {
-            assert!(
-                Operator::from_name(name).is_some(),
-                "`{name}` is listed but resolves to nothing"
-            );
-            assert!(
-                Operator::from_name(&name.to_ascii_lowercase()).is_some(),
+            let operator = Operator::from_name(name).expect("a listed name resolves");
+            assert_eq!(
+                Operator::from_name(&name.to_ascii_lowercase()),
+                Some(operator),
                 "`{name}` resolves case-insensitively"
             );
+            assert_eq!(Operator::from_name(operator.name()), Some(operator));
         }
     }
 

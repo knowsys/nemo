@@ -1,6 +1,6 @@
 """Writes syntaxes/nemo.tmLanguage.json from the language's own definitions.
 
-The builtin names are read out of `Operator::NAMES` in the engine, so the
+The builtin names are read out of `BUILTIN_NAMES` in the engine, so the
 grammar cannot drift from the catalogue it highlights; `nemo/tests/integration/grammar.rs`
 fails if this file is not re-run after the catalogue changes.
 
@@ -14,7 +14,7 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
-OPERATIONS = os.path.join(ROOT, "nemo", "src", "model", "term", "operation", "operator.rs")
+NAMES = os.path.join(ROOT, "nemo-physical", "src", "value", "name.rs")
 AGGREGATION = os.path.join(ROOT, "nemo", "src", "model", "term", "aggregate.rs")
 TARGET = os.path.join(os.path.dirname(HERE), "syntaxes", "nemo.tmLanguage.json")
 
@@ -88,8 +88,8 @@ PREDICATE_CAPTURES = {
 
 def builtins():
     """The builtin names the engine accepts, from its own list."""
-    source = io.open(OPERATIONS, encoding="utf-8").read()
-    start = source.index("pub const NAMES:")
+    source = io.open(NAMES, encoding="utf-8").read()
+    start = source.index("pub const BUILTIN_NAMES:")
     end = source.index("];", start)
     return re.findall(r'"([A-Z0-9_]+)"', source[start:end])
 
