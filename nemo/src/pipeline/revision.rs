@@ -1,5 +1,7 @@
 //! Revisions: versions of the program, each a list of live statements.
 
+use serde::Serialize;
+
 use crate::pipeline::StatementId;
 
 /// The id of one revision of a pipeline's program.
@@ -16,6 +18,15 @@ impl RevisionId {
     pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
+}
+
+/// The program of one revision as text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RevisionText {
+    /// The name of the stage that made the revision, or `"loaded"` for a program as loaded.
+    pub stage: &'static str,
+    /// The program's text, which parses back to the same program.
+    pub text: String,
 }
 
 /// One revision: the program as a list of live statement versions.

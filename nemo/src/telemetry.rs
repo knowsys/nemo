@@ -51,9 +51,7 @@ pub use self::{
     event::EngineEvent,
     event_sink::EventSink,
     recorder::{Recorder, RuleSummary},
-    report::{
-        ErrorCount, NamedCount, PhaseTable, PredicateSize, ProgramText, ReportDocument, RunFacts,
-    },
+    report::{ErrorCount, NamedCount, PhaseTable, PredicateSize, ReportDocument, RunFacts},
     stream::{LogSink, TARGET},
     timings::EngineTimings,
 };

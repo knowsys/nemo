@@ -65,6 +65,15 @@ pub struct PredicateInfo {
     pub role: PredicateRole,
 }
 
+/// The numbers of loaded and of derived facts of the program's predicates.
+#[derive(Debug, Clone, Copy)]
+pub(in crate::engine) struct FactCounts {
+    /// The number of input facts.
+    pub(in crate::engine) loaded: usize,
+    /// The number of facts that reasoning stored.
+    pub(in crate::engine) derived: usize,
+}
+
 /// How much of a predicate's facts the engine stores.
 enum StoredExtent {
     /// Every fact is stored, in this table.
@@ -143,7 +152,7 @@ impl Engine {
     /// Every other row counts as derived,
     /// so the rows of an import with which a pipeline stage replaced a written rule count as
     /// derived.
-    pub(in crate::engine) fn fact_counts(&self) -> (usize, usize) {
+    pub(in crate::engine) fn fact_counts(&self) -> FactCounts {
         let range = Revision(0)..Revision(self.step.max(1));
         let (mut loaded, mut derived) = (0, 0);
         for name in self.listed() {
@@ -169,7 +178,7 @@ impl Engine {
             derived += total - outside;
         }
 
-        (loaded, derived)
+        FactCounts { loaded, derived }
     }
 
     /// Returns whether rows were added to a predicate through
@@ -235,12 +244,9 @@ impl Engine {
     ///
     /// Fails for a predicate that the program never used, and for one that a pipeline stage
     /// introduced, which no user wrote.
-    pub(crate) fn written_predicate(
-        &self,
-        predicate: &str,
-    ) -> Result<(TableId, usize), Diagnostic> {
+    pub(crate) fn written_predicate(&self, predicate: &str) -> Result<Registered, Diagnostic> {
         match self.predicates.get(predicate) {
-            Some(&Registered { table, arity }) if self.names(predicate) => Ok((table, arity)),
+            Some(&registered) if self.names(predicate) => Ok(registered),
             _ => Err(EngineError::UnknownPredicate {
                 predicate: predicate.to_owned(),
             }
@@ -256,7 +262,7 @@ impl Engine {
     /// Fails if no program is loaded,
     /// for a name that is not one of the program's predicates,
     /// and for a predicate that the engine does not store whole, naming what it leaves out.
-    pub(crate) fn whole_predicate(&self, predicate: &str) -> Result<(TableId, usize), Diagnostic> {
+    pub(crate) fn whole_predicate(&self, predicate: &str) -> Result<Registered, Diagnostic> {
         if self.program.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
         }
@@ -268,7 +274,7 @@ impl Engine {
         };
 
         match self.stored_extent(predicate) {
-            StoredExtent::Whole(table) => Ok((table, arity)),
+            StoredExtent::Whole(table) => Ok(Registered { table, arity }),
             extent => Err(not_stored_whole(predicate, extent)),
         }
     }

@@ -20,7 +20,10 @@ use crate::{
     engine::{
         compile::compiled::CompiledRule,
         evaluate::body::BodySpace,
-        trace::query::{QueryEvaluation, request::CompiledNode},
+        trace::query::{
+            QueryEvaluation,
+            request::{CompiledNode, Expansion},
+        },
     },
     trace::query::EntryQuery,
 };
@@ -33,8 +36,8 @@ impl<'a> QueryEvaluation<'a> {
         nodes: &mut [CompiledNode],
         index: usize,
     ) -> Result<(), Diagnostic> {
-        if let Some((_, _, children)) = &nodes[index].expansion {
-            for child in children.clone().into_iter().flatten() {
+        if let Some(expansion) = &nodes[index].expansion {
+            for child in expansion.children.clone().into_iter().flatten() {
                 self.valid(nodes, child)?;
             }
         }
@@ -52,10 +55,16 @@ impl<'a> QueryEvaluation<'a> {
             },
             // An inner node: the head projection of the rule's body over
             // the children's valid sets, intersected with the selectors.
-            Some((rule_index, head_index, children)) => {
-                let child_sets = self.child_sets(nodes, rule_index, &children);
+            Some(expansion) => {
+                let child_sets = self.child_sets(nodes, expansion.rule, &expansion.children);
                 let arity = nodes[index].arity;
-                Some(self.inner_set(arity, rule_index, head_index, &child_sets, selectors))
+                Some(self.inner_set(
+                    arity,
+                    expansion.rule,
+                    expansion.head,
+                    &child_sets,
+                    selectors,
+                ))
             }
         };
         nodes[index].valid = valid;
@@ -126,7 +135,12 @@ impl<'a> QueryEvaluation<'a> {
     /// Shrinks the sets of the children of the node `index`, top-down,
     /// to the facts that take part in a surviving derivation of the node, then recurses.
     pub(super) fn filter(&mut self, nodes: &mut [CompiledNode], index: usize) {
-        let Some((rule_index, head_index, children)) = nodes[index].expansion.clone() else {
+        let Some(Expansion {
+            rule: rule_index,
+            head: head_index,
+            children,
+        }) = nodes[index].expansion.clone()
+        else {
             return;
         };
 

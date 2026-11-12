@@ -10,6 +10,8 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use nemo_physical::diagnostics::{Diagnostic, FileId, Location};
 
+use crate::pipeline::RegisteredSource;
+
 /// The source texts that rendering quotes, addressed by the [FileId] of a span.
 pub trait SourceLookup: Debug {
     /// Returns the text of a file, or an empty text for an unknown file.
@@ -85,14 +87,15 @@ impl SourceTexts {
 
     /// Adds each of `sources` whose file id the registry does not contain yet.
     ///
-    /// Each source is given by its file id, name and text,
-    /// as [Engine::sources](crate::engine::Engine::sources) returns them.
-    pub fn absorb<'a>(&mut self, sources: impl IntoIterator<Item = (FileId, &'a str, &'a str)>) {
-        for (id, name, text) in sources {
-            self.files.entry(id.index()).or_insert_with(|| SourceText {
-                name: Arc::from(name),
-                text: text.to_owned(),
-            });
+    /// [Engine::sources](crate::engine::Engine::sources) returns the sources of an engine.
+    pub fn absorb<'a>(&mut self, sources: impl IntoIterator<Item = RegisteredSource<'a>>) {
+        for source in sources {
+            self.files
+                .entry(source.file.index())
+                .or_insert_with(|| SourceText {
+                    name: Arc::from(source.name),
+                    text: source.text.to_owned(),
+                });
         }
     }
 
@@ -179,8 +182,16 @@ mod tests {
         let file = FileId::new(3);
         assert!(sources.name(file).is_none());
 
-        sources.absorb([(file, "module.rls", "p(1) .\n")]);
-        sources.absorb([(file, "other.rls", "q(1) .\n")]);
+        sources.absorb([RegisteredSource {
+            file,
+            name: "module.rls",
+            text: "p(1) .\n",
+        }]);
+        sources.absorb([RegisteredSource {
+            file,
+            name: "other.rls",
+            text: "q(1) .\n",
+        }]);
         assert_eq!(sources.name(file), Some("module.rls"));
         assert_eq!(sources.text(file), "p(1) .\n");
     }

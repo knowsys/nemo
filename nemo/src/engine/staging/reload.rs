@@ -53,6 +53,15 @@ enum TranslationOutcome<T> {
     Missing(Vec<ResourceRequest>),
 }
 
+/// A table that a reload replaces: the old table of a rebuilt predicate,
+/// or the scratch table of its bound import.
+struct ReplacedTable {
+    /// The resolved name of the predicate.
+    predicate: String,
+    /// The table.
+    table: TableId,
+}
+
 /// What a reload's translation leaves to apply to the engine.
 struct Retranslated {
     /// The new compiled program.
@@ -61,7 +70,7 @@ struct Retranslated {
     facts: HashMap<TableId, RowBuffer>,
     /// The old tables of the rebuilt predicates,
     /// including the scratch tables of bound imports.
-    replaced: Vec<(String, TableId)>,
+    replaced: Vec<ReplacedTable>,
     /// The extensional blocks from before the translation.
     ///
     /// They show which of the old tables hold rows added through
@@ -75,17 +84,23 @@ fn unregister_from(
     state: &mut TranslationState,
     predicates: &mut HashMap<String, Registered>,
     names: &[String],
-) -> Vec<(String, TableId)> {
-    let mut replaced: Vec<(String, TableId)> = Vec::new();
+) -> Vec<ReplacedTable> {
+    let mut replaced: Vec<ReplacedTable> = Vec::new();
     for name in names {
         if let Some(Registered { table, .. }) = predicates.remove(name) {
             state.seeds.remove(&table);
             state.plan.remove(name);
             state.open.remove(name);
-            replaced.push((name.clone(), table));
+            replaced.push(ReplacedTable {
+                predicate: name.clone(),
+                table,
+            });
         }
         if let Some(scratch) = state.scratch.remove(name) {
-            replaced.push((name.clone(), scratch));
+            replaced.push(ReplacedTable {
+                predicate: name.clone(),
+                table: scratch,
+            });
         }
     }
 
@@ -322,9 +337,9 @@ impl Engine {
     ///
     /// It also forgets the extensional blocks of these tables.
     /// The old tables themselves are dropped only if the reload succeeds.
-    fn unregister(&mut self, names: &[String]) -> Vec<(String, TableId)> {
+    fn unregister(&mut self, names: &[String]) -> Vec<ReplacedTable> {
         let replaced = unregister_from(&mut self.translation, &mut self.predicates, names);
-        for (_, table) in &replaced {
+        for ReplacedTable { table, .. } in &replaced {
             self.extensional.remove(table);
         }
 
@@ -503,10 +518,10 @@ impl Engine {
     /// so dropping them is reported with a warning.
     fn replace_store(
         &mut self,
-        replaced: Vec<(String, TableId)>,
+        replaced: Vec<ReplacedTable>,
         extensional: &HashMap<TableId, Vec<ExtensionalBlock>>,
     ) {
-        for (name, table) in replaced {
+        for ReplacedTable { predicate, table } in replaced {
             if extensional
                 .get(&table)
                 .into_iter()
@@ -514,7 +529,7 @@ impl Engine {
                 .any(|block| block.origin == ExtensionalOrigin::ImportRows)
             {
                 self.pipeline
-                    .report(EngineError::ImportedRowsDropped { predicate: name }.diagnostic());
+                    .report(EngineError::ImportedRowsDropped { predicate }.diagnostic());
             }
 
             self.manager.drop_table(table);

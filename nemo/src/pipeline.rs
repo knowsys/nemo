@@ -36,7 +36,8 @@ mod stage;
 pub use self::{
     commit::Commit,
     matching::LiteralPath,
-    revision::RevisionId,
+    revision::{RevisionId, RevisionText},
+    sources::RegisteredSource,
     stage::{Stages, Transformation},
 };
 

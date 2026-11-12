@@ -35,7 +35,7 @@ impl Engine {
         let named = self.ground_facts(facts)?;
         let mut trace = BatchedTrace::default();
         for predicate in predicates {
-            let (table, _) = self.whole_predicate(predicate)?;
+            let table = self.whole_predicate(predicate)?.table;
             let mut cursor = self.cursor(predicate)?;
             loop {
                 let chunk = self.read_chunk(&mut cursor, BATCH)?;

@@ -782,9 +782,12 @@ impl Engine {
             return Ok(());
         }
 
-        let (table, _) = self.written_predicate(predicate).map_err(|unknown| {
-            unknown.with_hint("first `extend()` the program with statements that use it")
-        })?;
+        let table = self
+            .written_predicate(predicate)
+            .map_err(|unknown| {
+                unknown.with_hint("first `extend()` the program with statements that use it")
+            })?
+            .table;
 
         // The translation checks the block's number of values against the program.
         let Some(block) = RowBlock::read(predicate, rows, self.arity_of(predicate))? else {

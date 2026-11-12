@@ -11,6 +11,17 @@ use crate::{
 };
 
 /// One registered source text, with the name that diagnostics show for it.
+/// A source text registered with a pipeline, as [Pipeline::sources] lists it.
+#[derive(Debug, Clone, Copy)]
+pub struct RegisteredSource<'a> {
+    /// The file id of the spans that point into the text.
+    pub file: FileId,
+    /// The name that diagnostics show for the text, such as its path.
+    pub name: &'a str,
+    /// The text.
+    pub text: &'a str,
+}
+
 #[derive(Debug)]
 pub(super) struct SourceFile {
     /// The name that diagnostics show, as given to [Pipeline::add_source], such as a path.
@@ -166,11 +177,13 @@ impl Pipeline {
         diagnostic.with_locations(|span| self.location(span))
     }
 
-    /// Returns every registered source as its file id, name and text.
-    pub fn sources(&self) -> impl Iterator<Item = (FileId, &str, &str)> {
-        self.files
-            .iter()
-            .map(|(&id, source)| (id, &*source.name, &*source.text))
+    /// Returns every registered source.
+    pub fn sources(&self) -> impl Iterator<Item = RegisteredSource<'_>> {
+        self.files.iter().map(|(&file, source)| RegisteredSource {
+            file,
+            name: &source.name,
+            text: &source.text,
+        })
     }
 
     /// Returns the source text a span covers,

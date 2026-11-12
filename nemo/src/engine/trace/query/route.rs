@@ -20,6 +20,15 @@ use crate::{
     pipeline::{Pipeline, RevisionId, RewriteDeclaration, StatementId},
 };
 
+/// A body literal of a statement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct StatementLiteral {
+    /// The statement.
+    pub(super) statement: StatementId,
+    /// The literal's position in the statement's body.
+    pub(super) literal: usize,
+}
+
 /// The literal a written literal became in the compiled program, and the way there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Route {
@@ -27,9 +36,9 @@ pub(super) struct Route {
     /// and the engine evaluates.
     ///
     /// The next literal is in that predicate's definition.
-    pub(super) hops: Vec<(StatementId, usize)>,
+    pub(super) hops: Vec<StatementLiteral>,
     /// The literal the route ends at.
-    pub(super) last: (StatementId, usize),
+    pub(super) last: StatementLiteral,
     /// Whether the last literal reads a predicate that an import evaluates at its endpoint,
     /// whose rows the written literal is matched against.
     pub(super) remote: bool,
@@ -151,7 +160,10 @@ impl<'a> Router<'a> {
             }
             None => Route {
                 hops: Vec::new(),
-                last: (statement, position),
+                last: StatementLiteral {
+                    statement,
+                    literal: position,
+                },
                 remote: false,
             },
         };
@@ -195,7 +207,7 @@ impl<'a> Router<'a> {
     /// Returns the view of the import defining the predicate
     /// that a remote route's last literal reads.
     pub(super) fn remote_view(&self, route: &Route) -> Option<&'a Rule> {
-        let (definition, _) = self.definition_at(route.last.0, route.last.1)?;
+        let (definition, _) = self.definition_at(route.last.statement, route.last.literal)?;
         match self.pipeline.declaration(definition) {
             Some((RewriteDeclaration::Defines { view: Some(view) }, _)) => Some(view),
             _ => None,

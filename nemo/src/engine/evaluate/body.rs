@@ -56,6 +56,15 @@ pub(crate) fn combined_positions(rule: &CompiledRule) -> Vec<usize> {
     positions
 }
 
+/// A load node of a plan, with the table that it reads.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TableLoad {
+    /// The plan node.
+    pub(crate) node: NodeId,
+    /// The table that the node reads.
+    pub(crate) table: TableId,
+}
+
 /// A rule's columns as plan markers.
 ///
 /// The rule's columns are its variables, then its computed columns.
@@ -198,7 +207,7 @@ impl<'r> BodySpace<'r> {
         plan: &mut OperationPlan,
         mut node: NodeId,
         range: Range<Revision>,
-    ) -> (NodeId, Vec<(NodeId, TableId)>) {
+    ) -> (NodeId, Vec<TableLoad>) {
         let mut loads = Vec::new();
         for atom in &self.rule.negated {
             let relation = self.negated_node(plan, atom, range.clone(), &mut loads);
@@ -219,7 +228,7 @@ impl<'r> BodySpace<'r> {
         plan: &mut OperationPlan,
         negated: &NegatedAtom,
         range: Range<Revision>,
-        loads: &mut Vec<(NodeId, TableId)>,
+        loads: &mut Vec<TableLoad>,
     ) -> NodeId {
         // Per column: the shared marker, or a fresh private one.
         let column_markers: Vec<Marker> = negated
@@ -231,7 +240,10 @@ impl<'r> BodySpace<'r> {
             })
             .collect();
         let load = plan.load(negated.table, range, column_markers.clone());
-        loads.push((load, negated.table));
+        loads.push(TableLoad {
+            node: load,
+            table: negated.table,
+        });
         filtered(plan, load, negated_filters(negated, &column_markers))
     }
 }

@@ -38,7 +38,7 @@ pub(super) struct RecorderState {
     /// The number of active rules of each stratum, in evaluation order.
     strata: Vec<usize>,
     /// The imported resources, each with the number of rows that it contributed.
-    imports: Vec<(String, u64)>,
+    imports: Vec<ImportedRows>,
     /// The timeline of rule applications.
     pub(super) timeline: BoundedCurve<TimelinePoint, TIMELINE_POINTS>,
     /// The curve of finished iterations.
@@ -108,9 +108,10 @@ impl RecorderState {
     pub(super) fn absorb(&mut self, at: u64, event: &EngineEvent) {
         self.duration = self.duration.max(at);
         match event {
-            EngineEvent::Imported { resource, rows } => {
-                self.imports.push((resource.clone(), *rows))
-            }
+            EngineEvent::Imported { resource, rows } => self.imports.push(ImportedRows {
+                resource: resource.clone(),
+                rows: *rows,
+            }),
             EngineEvent::Fetched { endpoint, rows, .. } => self.fetched(endpoint, *rows),
             EngineEvent::StratumStarted { rules, .. } => self.strata.push(*rules),
             EngineEvent::VariantObserved {
@@ -154,10 +155,13 @@ impl RecorderState {
         match self
             .imports
             .iter_mut()
-            .find(|(resource, _)| resource == endpoint)
+            .find(|import| import.resource == endpoint)
         {
-            Some(entry) => entry.1 += rows,
-            None => self.imports.push((endpoint.to_owned(), rows)),
+            Some(import) => import.rows += rows,
+            None => self.imports.push(ImportedRows {
+                resource: endpoint.to_owned(),
+                rows,
+            }),
         }
     }
 
@@ -217,10 +221,10 @@ impl RecorderState {
 }
 
 /// One import, as the snapshot lists it.
-#[derive(Serialize)]
-struct ImportView<'a> {
+#[derive(Debug, Serialize)]
+struct ImportedRows {
     /// The resource that was read.
-    resource: &'a str,
+    resource: String,
     /// The number of rows that it contributed.
     rows: u64,
 }
@@ -265,7 +269,7 @@ struct RecorderStateView<'a> {
     /// Derived rows dropped because added facts invalidated them.
     invalidated: u64,
     /// The imports.
-    imports: Vec<ImportView<'a>>,
+    imports: &'a [ImportedRows],
     /// The number of active rules of each stratum.
     strata: &'a [usize],
     /// The rules' aggregates.
@@ -298,14 +302,7 @@ impl Serialize for RecorderState {
             total: self.total,
             memory: self.memory,
             invalidated: self.invalidated,
-            imports: self
-                .imports
-                .iter()
-                .map(|(resource, rows)| ImportView {
-                    resource,
-                    rows: *rows,
-                })
-                .collect(),
+            imports: &self.imports,
             strata: &self.strata,
             rules: self
                 .rules

@@ -88,28 +88,35 @@ impl<'a, 'b> RuleCompiler<'a, 'b> {
     }
 }
 
+/// The post program of one head expression around an aggregate, as the head is compiled:
+/// its inputs are still rule columns.
+struct RawPost {
+    /// The index of the expression's aggregate among the head's aggregate functions.
+    aggregate: usize,
+    /// The inputs as rule columns, or [AGGREGATE_RESULT] for the aggregate's result.
+    inputs: Vec<usize>,
+    /// The program.
+    program: StackProgram,
+}
+
 /// Returns the post programs of an aggregate head,
 /// with their inputs mapped to positions in a row of the aggregation's output.
 ///
 /// Such a row has the group columns followed by the aggregates' results.
 /// An input that is a rule column is mapped to its position in the group,
 /// and [AGGREGATE_RESULT] to the position of the result of the expression's own aggregate.
-/// `raw_posts` contains, per post program, the index of its aggregate,
-/// its inputs as rule columns, and the program.
-fn post_columns(
-    raw_posts: Vec<(usize, Vec<usize>, StackProgram)>,
-    group: &[usize],
-) -> Vec<ComputedColumn> {
+fn post_columns(raw_posts: Vec<RawPost>, group: &[usize]) -> Vec<ComputedColumn> {
     raw_posts
         .into_iter()
-        .map(|(result, inputs, program)| ComputedColumn {
-            inputs: inputs
+        .map(|post| ComputedColumn {
+            inputs: post
+                .inputs
                 .into_iter()
                 .map(|id| {
                     if id == AGGREGATE_RESULT {
                         // The placeholder stands for the result of this expression's own
                         // aggregate.
-                        group.len() + result
+                        group.len() + post.aggregate
                     } else {
                         group
                             .iter()
@@ -118,7 +125,7 @@ fn post_columns(
                     }
                 })
                 .collect(),
-            program,
+            program: post.program,
         })
         .collect()
 }
@@ -462,7 +469,7 @@ impl RuleCompiler<'_, '_> {
         let mut positions: Vec<usize> = Vec::new();
         let mut columns: Vec<AggregateColumn> = Vec::new();
         let mut functions: Vec<CompiledAggregateFunction> = Vec::new();
-        let mut raw_posts: Vec<(usize, Vec<usize>, StackProgram)> = Vec::new();
+        let mut raw_posts: Vec<RawPost> = Vec::new();
 
         for term in &atom.terms {
             let mut found = Vec::new();
@@ -495,7 +502,11 @@ impl RuleCompiler<'_, '_> {
                     functions.push(self.aggregate_parts(found[0])?);
                     let (inputs, program) =
                         self.compile_term(term, VariableScope::AggregateHead(&self.names))?;
-                    raw_posts.push((functions.len() - 1, inputs, program));
+                    raw_posts.push(RawPost {
+                        aggregate: functions.len() - 1,
+                        inputs,
+                        program,
+                    });
                     AggregateColumn::Post(raw_posts.len() - 1)
                 }
                 _ => {
@@ -506,8 +517,8 @@ impl RuleCompiler<'_, '_> {
         }
 
         // Variables combined with an aggregate result join the group.
-        for (_, inputs, _) in &raw_posts {
-            for &id in inputs {
+        for post in &raw_posts {
+            for &id in &post.inputs {
                 if id != AGGREGATE_RESULT && !group.contains(&id) {
                     group.push(id);
                 }

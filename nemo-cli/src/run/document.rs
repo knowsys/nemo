@@ -9,7 +9,7 @@ use std::{sync::Arc, time::Duration};
 
 use nemo::{
     engine::Engine,
-    telemetry::{ErrorCount, PredicateSize, ProgramText, Recorder, ReportDocument, RunFacts},
+    telemetry::{ErrorCount, PredicateSize, Recorder, ReportDocument, RunFacts},
 };
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -79,14 +79,7 @@ impl Run<'_> {
             timings: engine.timings(),
             errors,
             predicates,
-            programs: engine
-                .revisions()
-                .into_iter()
-                .map(|(stage, text)| ProgramText {
-                    stage: stage.to_owned(),
-                    text,
-                })
-                .collect(),
+            programs: engine.revisions(),
         }
     }
 

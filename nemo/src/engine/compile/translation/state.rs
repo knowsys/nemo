@@ -9,7 +9,7 @@ use nemo_physical::{
 
 use crate::{
     engine::compile::{import_plan::ImportPlan, translation::resolve_identifier, types},
-    model::{Atom, Identifier, Span, Term, TypeExpression, Variable},
+    model::{Atom, Identifier, Term, TypeExpression, Variable},
 };
 
 /// The translation state that outlives one translation.
@@ -35,7 +35,7 @@ pub(crate) struct TranslationState {
     /// The declared column types, by resolved predicate name.
     pub(crate) declarations: HashMap<String, types::PredicateDeclaration>,
     /// The `@type` definitions, by resolved label.
-    pub(crate) type_definitions: HashMap<String, (TypeExpression, Option<Span>)>,
+    pub(crate) type_definitions: HashMap<String, TypeExpression>,
     /// The types that the `@type` definitions declare, by resolved label.
     pub(crate) label_types: LabelTypes,
     /// Per table, the initial column types from the facts and import formats.

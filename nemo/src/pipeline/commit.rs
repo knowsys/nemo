@@ -39,6 +39,15 @@ use crate::{
 
 use self::declare::PendingDeclaration;
 
+/// An import that a commit removed with [remove_import](Commit::remove_import).
+#[derive(Debug)]
+struct RemovedImport {
+    /// The import's statement.
+    import: StatementId,
+    /// The resolved name of its predicate.
+    predicate: String,
+}
+
 /// A commit in progress, which rewrites a base revision under the name of one stage.
 ///
 /// Keeping a statement is the default.
@@ -136,7 +145,7 @@ pub struct Commit<'a> {
     ///
     /// When the commit finishes, no statement other than a `@declare` directive may name these
     /// predicates.
-    removed_imports: Vec<(StatementId, String)>,
+    removed_imports: Vec<RemovedImport>,
     /// The resolved names of the predicates with rows given through
     /// [import_rows](crate::engine::Engine::import_rows), which no statement shows.
     imported: &'a [String],

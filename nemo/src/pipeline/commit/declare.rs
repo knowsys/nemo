@@ -13,6 +13,7 @@ use crate::{
     },
     pipeline::{
         Commit, LiteralPath, StatementId,
+        commit::RemovedImport,
         matching::CorrespondenceMatcher,
         provenance::{RewriteDeclaration, SubstitutionRecord},
     },
@@ -190,7 +191,10 @@ impl Commit<'_> {
                 panic!("`{}` does not resolve: {problem}", directive.predicate)
             });
         self.take_out(import);
-        self.removed_imports.push((import, name));
+        self.removed_imports.push(RemovedImport {
+            import,
+            predicate: name,
+        });
     }
 
     /// Panics, naming the stage, if a statement other than a `@declare` directive
@@ -212,7 +216,11 @@ impl Commit<'_> {
             })
             .collect();
         let named = self.names_of(&readers);
-        for (import, name) in &self.removed_imports {
+        for RemovedImport {
+            import,
+            predicate: name,
+        } in &self.removed_imports
+        {
             assert!(
                 !named.contains(name),
                 "the `{}` stage removed the import `{}`, but the program still names `{name}`",

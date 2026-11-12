@@ -6,7 +6,7 @@ mod run_facts;
 pub(super) mod tables;
 
 pub use self::{
-    run_facts::{ErrorCount, PredicateSize, ProgramText, RunFacts},
+    run_facts::{ErrorCount, PredicateSize, RunFacts},
     tables::{NamedCount, PhaseTable},
 };
 

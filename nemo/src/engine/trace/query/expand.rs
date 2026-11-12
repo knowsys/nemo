@@ -9,7 +9,7 @@ use crate::engine::{
     compile::compiled::CompiledRule,
     trace::query::{
         MAX_NODES, QueryEvaluation,
-        request::{NodeFacts, QueryArenas, QueryContext},
+        request::{NodeFacts, QueryArenas, QueryContext, WrittenHead},
         route::Realization,
     },
 };
@@ -54,7 +54,7 @@ impl QueryEvaluation<'_> {
         }
 
         let predicate = arenas.written[written].predicate.clone();
-        for &(statement, head) in context.writers(&predicate) {
+        for &WrittenHead { statement, head } in context.writers(&predicate) {
             let covers = match context.router.realize(statement) {
                 // An import that replaces the rule derives the whole set
                 // if nothing else writes the predicate.

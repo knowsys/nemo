@@ -23,7 +23,7 @@ use crate::{
         Engine,
         compile::{compiled::CompiledProgram, translation::TranslationState},
         registered::Registered,
-        trace::query::route::{Realization, Route, Router, view_columns},
+        trace::query::route::{Realization, Route, Router, StatementLiteral, view_columns},
         written::WrittenProgram,
     },
     model::{Atom, Directive, Fact, Identifier, Literal, Rule, Statement, Term},
@@ -49,6 +49,26 @@ fn page(entries: Option<&EntriesQuery>) -> Option<Pagination> {
 }
 
 /// One node of the query tree over the compiled program.
+/// How a node over the compiled program is expanded: by one head of a compiled rule.
+#[derive(Debug, Clone)]
+pub(super) struct Expansion {
+    /// The index of the compiled rule.
+    pub(super) rule: usize,
+    /// The index of the head that derives the node's facts.
+    pub(super) head: usize,
+    /// The child node of each body atom by position, or `None` for an unconstrained atom.
+    pub(super) children: Vec<Option<usize>>,
+}
+
+/// One head of a written statement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) struct WrittenHead {
+    /// The statement, a rule or a bound import.
+    pub(super) statement: StatementId,
+    /// The index of the head among the statement's heads.
+    pub(super) head: usize,
+}
+
 #[derive(Debug)]
 pub(super) struct CompiledNode {
     /// The table of the node's predicate.
@@ -57,9 +77,8 @@ pub(super) struct CompiledNode {
     pub(super) arity: usize,
     /// The requested selection, unresolved.
     pub(super) selectors: Vec<EntryQuery>,
-    /// The expansion, as the compiled rule, the head,
-    /// and the child node of each body atom by position, or `None` for an unconstrained atom.
-    pub(super) expansion: Option<(usize, usize, Vec<Option<usize>>)>,
+    /// How the node is expanded, or `None` for a leaf.
+    pub(super) expansion: Option<Expansion>,
     /// The fact set of the valid pass, as an intermediate table,
     /// or `None` for the whole predicate.
     pub(super) valid: Option<TableId>,
@@ -83,7 +102,7 @@ pub(super) struct WrittenNode {
     ///
     /// The request gives them for a shaped node, and the server chooses them for an expanded
     /// one.
-    pub(super) expanded: Option<(StatementId, usize)>,
+    pub(super) expanded: Option<WrittenHead>,
     /// The children, one per positive literal of the expanding statement,
     /// then one listing per negated literal.
     pub(super) children: Vec<usize>,
@@ -112,8 +131,8 @@ pub(super) enum NodeFacts {
 pub(super) struct Neighborhood {
     /// The written rules and bound imports that read it, positively or negated.
     pub(super) above: Vec<StatementId>,
-    /// The written rules and bound imports that write it, each with the head that does.
-    pub(super) below: Vec<(StatementId, usize)>,
+    /// The heads of the written rules and bound imports that write it.
+    pub(super) below: Vec<WrittenHead>,
 }
 
 /// What a query reads of its engine: the written program, and how the
@@ -135,7 +154,7 @@ pub(super) struct QueryContext<'a> {
     pub(super) neighborhoods: HashMap<String, Neighborhood>,
     /// For each predicate that a written rule negates, by resolved name,
     /// its table and arity, or the reason why the engine cannot list its facts.
-    pub(super) listings: &'a HashMap<String, Result<(TableId, usize), Diagnostic>>,
+    pub(super) listings: &'a HashMap<String, Result<Registered, Diagnostic>>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -147,7 +166,7 @@ impl<'a> QueryContext<'a> {
         program: &'a CompiledProgram,
         written: &'a WrittenProgram,
         revision: RevisionId,
-        listings: &'a HashMap<String, Result<(TableId, usize), Diagnostic>>,
+        listings: &'a HashMap<String, Result<Registered, Diagnostic>>,
     ) -> Self {
         let mut context = Self {
             pipeline,
@@ -176,7 +195,7 @@ impl<'a> QueryContext<'a> {
                     // The import's own predicate is written by its fetch.
                     let neighborhood = self.neighborhood_of(&import.predicate);
                     if let Some(neighborhood) = neighborhood {
-                        neighborhood.below.push((statement, 0));
+                        neighborhood.below.push(WrittenHead { statement, head: 0 });
                     }
 
                     (Vec::new(), import.bindings.iter().collect())
@@ -185,7 +204,7 @@ impl<'a> QueryContext<'a> {
             };
             for (head, atom) in heads.into_iter().enumerate() {
                 if let Some(neighborhood) = self.neighborhood_of(&atom.predicate) {
-                    neighborhood.below.push((statement, head));
+                    neighborhood.below.push(WrittenHead { statement, head });
                 }
             }
 
@@ -207,8 +226,8 @@ impl<'a> QueryContext<'a> {
         Some(self.neighborhoods.entry(name).or_default())
     }
 
-    /// Returns the written rules that write a predicate, with their heads.
-    pub(super) fn writers(&self, predicate: &str) -> &[(StatementId, usize)] {
+    /// Returns the heads of the written rules that write a predicate.
+    pub(super) fn writers(&self, predicate: &str) -> &[WrittenHead] {
         self.neighborhoods
             .get(predicate)
             .map_or(&[], |neighborhood| &neighborhood.below)
@@ -221,7 +240,7 @@ impl<'a> QueryContext<'a> {
 
     /// Returns the table and arity of a negated predicate, by resolved name,
     /// or the reason why the engine cannot list its facts.
-    fn listing(&self, predicate: &str) -> Result<(TableId, usize), Diagnostic> {
+    fn listing(&self, predicate: &str) -> Result<Registered, Diagnostic> {
         self.listings
             .get(predicate)
             .expect("every negated predicate of the written program is looked up")
@@ -398,7 +417,7 @@ impl QueryArenas {
         // Every error that a server-side expansion can meet happens before the arenas change,
         // so that the expansion can try the next rule. The error for a selection on a remote
         // literal comes later, but a server-side expansion gives no selections.
-        let negated: Vec<(String, (TableId, usize))> = negated_literals(rule)
+        let negated: Vec<(String, Registered)> = negated_literals(rule)
             .into_iter()
             .map(|atom| {
                 let predicate = context.name(atom);
@@ -408,8 +427,11 @@ impl QueryArenas {
         if let Realization::Rule(rule_index) = realization {
             check_rule(context, rule_index)?;
             if self.compiled[compiled].expansion.is_none() {
-                self.compiled[compiled].expansion =
-                    Some((rule_index, head, vec![None; context.atoms(rule_index)]));
+                self.compiled[compiled].expansion = Some(Expansion {
+                    rule: rule_index,
+                    head,
+                    children: vec![None; context.atoms(rule_index)],
+                });
             }
         }
 
@@ -425,7 +447,10 @@ impl QueryArenas {
             let facts = self.literal_facts(
                 context,
                 realization,
-                (statement, position),
+                StatementLiteral {
+                    statement,
+                    literal: position,
+                },
                 atom,
                 compiled,
                 selection(entries),
@@ -441,7 +466,7 @@ impl QueryArenas {
         }
 
         let mut listings = Vec::new();
-        for (offset, (predicate, (table, arity))) in negated.into_iter().enumerate() {
+        for (offset, (predicate, Registered { table, arity })) in negated.into_iter().enumerate() {
             let ordinal = positives.len() + offset;
             let entries = request(ordinal).table_entries.as_ref();
             let listed = self.compiled_node(table, arity, selection(entries));
@@ -458,7 +483,7 @@ impl QueryArenas {
             listings.push(listing);
         }
 
-        self.written[written].expanded = Some((statement, head));
+        self.written[written].expanded = Some(WrittenHead { statement, head });
         self.written[written].children = children.iter().copied().chain(listings).collect();
         Ok(children)
     }
@@ -479,7 +504,7 @@ impl QueryArenas {
         &mut self,
         context: &QueryContext<'_>,
         realization: Realization,
-        (statement, position): (StatementId, usize),
+        literal: StatementLiteral,
         atom: &Atom,
         compiled: usize,
         selection: Vec<EntryQuery>,
@@ -496,7 +521,7 @@ impl QueryArenas {
                 }
             }
             Realization::Rule(_) => {
-                let route = context.router.route(statement, &[position]);
+                let route = context.router.route(literal.statement, &[literal.literal]);
                 let target = self.route_target(context, compiled, &route, selection);
                 if !route.remote {
                     return NodeFacts::Compiled(target);
@@ -528,19 +553,21 @@ impl QueryArenas {
         selectors: Vec<EntryQuery>,
     ) -> usize {
         let mut current = compiled;
-        for (index, &(statement, literal)) in route.hops.iter().enumerate() {
-            current = self.child_at(context, current, statement, literal, Vec::new());
+        for (index, &hop) in route.hops.iter().enumerate() {
+            current = self.child_at(context, current, hop, Vec::new());
             if self.compiled[current].expansion.is_none() {
-                let next = route.hops.get(index + 1).map_or(route.last.0, |hop| hop.0);
+                let next = route.hops.get(index + 1).unwrap_or(&route.last).statement;
                 let rule_index = context.router.compiled(next);
-                self.compiled[current].expansion =
-                    Some((rule_index, 0, vec![None; context.atoms(rule_index)]));
+                self.compiled[current].expansion = Some(Expansion {
+                    rule: rule_index,
+                    head: 0,
+                    children: vec![None; context.atoms(rule_index)],
+                });
             }
         }
 
-        let (statement, literal) = route.last;
         let selectors = if route.remote { Vec::new() } else { selectors };
-        self.child_at(context, current, statement, literal, selectors)
+        self.child_at(context, current, route.last, selectors)
     }
 
     /// Returns the child of a node over the compiled program at a literal of the statement
@@ -549,16 +576,16 @@ impl QueryArenas {
         &mut self,
         context: &QueryContext<'_>,
         parent: usize,
-        statement: StatementId,
-        literal: usize,
+        at: StatementLiteral,
         selectors: Vec<EntryQuery>,
     ) -> usize {
+        let StatementLiteral { statement, literal } = at;
         let atom = context.router.atom_of(statement, literal);
-        let (_, _, children) = self.compiled[parent]
+        let expansion = self.compiled[parent]
             .expansion
             .as_ref()
             .expect("a node expands before its children exist");
-        if let Some(child) = children[atom] {
+        if let Some(child) = expansion.children[atom] {
             return child;
         }
 
@@ -571,11 +598,11 @@ impl QueryArenas {
             .get(&predicate)
             .expect("a literal of the compiled program reads a registered predicate");
         let child = self.compiled_node(table, arity, selectors);
-        let Some((_, _, children)) = &mut self.compiled[parent].expansion else {
+        let Some(expansion) = &mut self.compiled[parent].expansion else {
             unreachable!("the expansion was just read")
         };
 
-        children[atom] = Some(child);
+        expansion.children[atom] = Some(child);
         child
     }
 }

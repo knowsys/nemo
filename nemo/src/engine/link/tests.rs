@@ -1069,7 +1069,7 @@ fn an_unregistered_program_shares_no_file_id_with_its_modules() {
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     engine.link(parsed).expect("the modules link");
 
-    let names: Vec<&str> = engine.sources().map(|(_, name, _)| name).collect();
+    let names: Vec<&str> = engine.sources().map(|source| source.name).collect();
     assert!(names.contains(&"sub/a.rls"), "{names:?}");
     assert!(names.contains(&"sub/b.rls"), "{names:?}");
     assert_eq!(engine.file_name(FileId::new(0)), None);

@@ -2,9 +2,12 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::telemetry::{
-    EngineTimings,
-    report::tables::{NamedCounts, PhaseTable, WorkTable},
+use crate::{
+    pipeline::RevisionText,
+    telemetry::{
+        EngineTimings,
+        report::tables::{NamedCounts, PhaseTable, WorkTable},
+    },
 };
 
 /// The facts about a run of a program that exist only once it is over.
@@ -47,7 +50,7 @@ pub struct RunFacts {
     /// The stored predicates.
     pub predicates: Vec<PredicateSize>,
     /// The program as loaded, and after every pipeline stage that rewrote it, in order.
-    pub programs: Vec<ProgramText>,
+    pub programs: Vec<RevisionText>,
 }
 
 /// The evaluation errors of one kind.
@@ -68,15 +71,6 @@ pub struct PredicateSize {
     pub columns: usize,
     /// Its number of rows.
     pub rows: u64,
-}
-
-/// The program after one pipeline stage.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ProgramText {
-    /// The stage's name, or `"loaded"` for the program as loaded.
-    pub stage: String,
-    /// The program's text.
-    pub text: String,
 }
 
 /// The wall times of the parts of a run, as the document nests them.
@@ -119,7 +113,7 @@ struct FactsView<'a> {
     /// The stored predicates.
     predicates: &'a [PredicateSize],
     /// The program as loaded, and after every pipeline stage that rewrote it.
-    programs: &'a [ProgramText],
+    programs: &'a [RevisionText],
 }
 
 impl Serialize for RunFacts {
@@ -174,9 +168,9 @@ mod tests {
     }
 
     /// Returns a program text.
-    fn text(stage: &str, text: &str) -> ProgramText {
-        ProgramText {
-            stage: stage.to_owned(),
+    fn text(stage: &'static str, text: &str) -> RevisionText {
+        RevisionText {
+            stage,
             text: text.to_owned(),
         }
     }

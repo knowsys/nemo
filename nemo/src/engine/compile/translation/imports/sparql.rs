@@ -29,7 +29,7 @@ use crate::{
     engine::compile::{
         layout::ColumnLayout,
         translation::{
-            Translator,
+            FetchRule, Translator,
             imports::{ImportFailure, PendingImport},
             options::{iri_or_string, on_error, option_name, term_columns},
         },
@@ -149,7 +149,11 @@ impl<'a> Translator<'a> {
         // so nothing is read at load, whatever the translation's purpose.
         if !import.bindings.is_empty() {
             let (rule, names) = self.bound_sparql_import(import, &spec, table, selection)?;
-            self.fetch_rules.push((import.rule_index, rule, names));
+            self.fetch_rules.push(FetchRule {
+                index: import.rule_index,
+                rule,
+                names,
+            });
             return Ok(());
         }
         if self.options_only(import) {

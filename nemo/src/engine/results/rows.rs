@@ -9,7 +9,7 @@ use nemo_physical::{
 
 use crate::{
     diagnostics::EngineError,
-    engine::{Engine, PredicateCursor, RowChunk},
+    engine::{Engine, PredicateCursor, RowChunk, registered::Registered},
 };
 
 impl Engine {
@@ -20,7 +20,7 @@ impl Engine {
         &self,
         predicate: &str,
     ) -> Result<PredicateCursor, Diagnostic> {
-        let (table, arity) = self.whole_predicate(predicate)?;
+        let Registered { table, arity } = self.whole_predicate(predicate)?;
         let range = Revision(0)..Revision(self.step.max(1));
         let rows = self.manager.row_count(table, range.clone());
         let blocks = self.manager.blocks(table);

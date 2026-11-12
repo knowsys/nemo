@@ -90,7 +90,7 @@ use crate::{
         remote::{Client, ClientSlot, PendingRequest, Progress, RequestId, Response, Suspension},
     },
     model::{Directive, Fact, FileId, Identifier, Program, Statement, Term},
-    pipeline::{Pipeline, RevisionId, Stages, StatementId},
+    pipeline::{Pipeline, RegisteredSource, RevisionId, RevisionText, Stages, StatementId},
     telemetry::{EngineEvent, EngineTimings, EventSink, SinkSlot},
     trace::{
         TracePart, TraceResponse, TracedFact, WrittenRule,
@@ -330,9 +330,9 @@ impl Engine {
         self.pipeline.file_name(file)
     }
 
-    /// Returns every registered source as its file id, name and text,
+    /// Returns every registered source,
     /// including the module files that [link](Self::link) read.
-    pub fn sources(&self) -> impl Iterator<Item = (FileId, &str, &str)> {
+    pub fn sources(&self) -> impl Iterator<Item = RegisteredSource<'_>> {
         self.pipeline.sources()
     }
 
@@ -1057,7 +1057,7 @@ impl Engine {
     /// and for a predicate the engine does not store whole.
     /// [TypeSyntax](crate::values::TypeSyntax) writes a type in declaration syntax.
     pub fn column_types(&self, predicate: &str) -> Option<&[Type]> {
-        let (table, _) = self.whole_predicate(predicate).ok()?;
+        let table = self.whole_predicate(predicate).ok()?.table;
 
         self.program
             .as_ref()?
@@ -1070,13 +1070,13 @@ impl Engine {
     /// the rows of its facts and imports, and the rows added through
     /// [import_rows](Self::import_rows).
     pub fn loaded_facts(&self) -> usize {
-        self.fact_counts().0
+        self.fact_counts().loaded
     }
 
     /// Returns the number of facts that reasoning stored in the program's predicates,
     /// including the rows that bound imports fetched.
     pub fn derived_facts(&self) -> usize {
-        self.fact_counts().1
+        self.fact_counts().derived
     }
 
     /// Returns the stored rows of a predicate, decoded into values.
@@ -1155,7 +1155,7 @@ impl Engine {
     ///
     /// Returns what [cursor](Self::cursor) returns.
     pub fn count(&self, predicate: &str) -> Result<usize, Diagnostic> {
-        let (table, _) = self.whole_predicate(predicate)?;
+        let table = self.whole_predicate(predicate)?.table;
 
         Ok(self
             .manager
@@ -1445,12 +1445,11 @@ impl Engine {
         self.manager.memory_bytes() + self.dictionary.memory().total()
     }
 
-    /// Returns the written program, and the program after every pipeline stage that rewrote it.
+    /// Returns the written program, and the program after every pipeline stage that rewrote it,
+    /// each as text.
     ///
-    /// Each program comes with the name of its stage, or `"loaded"` for the written program,
-    /// and with its text, which parses back to the same program.
     /// Returns none before [load](Self::load).
-    pub fn revisions(&self) -> Vec<(&'static str, String)> {
+    pub fn revisions(&self) -> Vec<RevisionText> {
         let Some(revision) = self.revision else {
             return Vec::new();
         };
@@ -1466,10 +1465,10 @@ impl Engine {
             }
 
             previous = Some(statements);
-            revisions.push((
-                self.pipeline.stage(revision).unwrap_or("loaded"),
-                self.pipeline.program(revision).to_string(),
-            ));
+            revisions.push(RevisionText {
+                stage: self.pipeline.stage(revision).unwrap_or("loaded"),
+                text: self.pipeline.program(revision).to_string(),
+            });
         }
 
         revisions

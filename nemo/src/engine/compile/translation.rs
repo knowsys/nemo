@@ -265,6 +265,16 @@ impl CompiledRules {
     }
 }
 
+/// The fetch rule of an import with atoms in its `where` clause.
+struct FetchRule {
+    /// The rule index reserved for the rule.
+    index: usize,
+    /// The rule.
+    rule: CompiledRule,
+    /// The written name of each rule column, or `None` for a column without one.
+    names: Vec<Option<String>>,
+}
+
 /// The translator of a program's statements, which resolves names, registers tables,
 /// loads facts and imports, and compiles rules.
 pub(crate) struct Translator<'a> {
@@ -311,7 +321,7 @@ pub(crate) struct Translator<'a> {
     /// The declared column types, by resolved predicate name.
     declarations: HashMap<String, types::PredicateDeclaration>,
     /// The `@type` definitions, by resolved label.
-    type_definitions: HashMap<String, (TypeExpression, Option<Span>)>,
+    type_definitions: HashMap<String, TypeExpression>,
     /// The types that the `@type` definitions declare, by resolved label.
     ///
     /// They are known once every definition is recorded.
@@ -346,10 +356,8 @@ pub(crate) struct Translator<'a> {
     /// the scratch table of its fetches.
     scratch: HashMap<String, TableId>,
     /// The fetch rules of the imports with atoms in their `where` clauses,
-    /// each with the rule index reserved for it and the names of its rule columns.
-    ///
-    /// They are compiled when the imports are executed.
-    fetch_rules: Vec<(usize, CompiledRule, Vec<Option<String>>)>,
+    /// which are compiled when the imports are executed.
+    fetch_rules: Vec<FetchRule>,
     /// The slot of the installed telemetry sink, which receives a report of each import's load.
     telemetry: &'a SinkSlot,
     /// The remote resources fetched for the imports,
@@ -839,9 +847,9 @@ impl<'a> Translator<'a> {
         // The fetch rules take their reserved indices before the strata are computed,
         // since an import whose `where` clause reads a derived predicate
         // depends on that predicate's rules, like any rule that reads it.
-        for (index, rule, names) in std::mem::take(&mut self.fetch_rules) {
-            compiled.rules[index] = rule;
-            compiled.names[index] = names;
+        for fetch in std::mem::take(&mut self.fetch_rules) {
+            compiled.rules[fetch.index] = fetch.rule;
+            compiled.names[fetch.index] = fetch.names;
         }
         let strata = match strata::stratify(&compiled.rules, &compiled.spans) {
             Ok(strata) => strata,

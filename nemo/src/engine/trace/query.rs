@@ -46,6 +46,7 @@ use crate::{
     engine::{
         Engine,
         compile::compiled::CompiledProgram,
+        registered::Registered,
         trace::query::{
             request::{QueryArenas, QueryContext, negated_literals},
             response::ResponseAssembly,
@@ -214,7 +215,7 @@ fn run<T>(
 
 /// Returns, for every predicate that a written rule negates,
 /// its table and arity if the engine stores it whole, and the error otherwise.
-fn listings(engine: &Engine) -> HashMap<String, Result<(TableId, usize), Diagnostic>> {
+fn listings(engine: &Engine) -> HashMap<String, Result<Registered, Diagnostic>> {
     let written = engine
         .written
         .as_ref()
@@ -244,7 +245,7 @@ fn listings(engine: &Engine) -> HashMap<String, Result<(TableId, usize), Diagnos
 /// Returns what a query reads of a loaded engine.
 fn context<'a>(
     engine: &'a Engine,
-    listings: &'a HashMap<String, Result<(TableId, usize), Diagnostic>>,
+    listings: &'a HashMap<String, Result<Registered, Diagnostic>>,
 ) -> QueryContext<'a> {
     QueryContext::new(
         &engine.pipeline,

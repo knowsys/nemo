@@ -372,7 +372,7 @@ impl<'a> Translator<'a> {
             TypeExpression::Base(BaseType::Map) => Type::of(ValueDomain::Map),
             TypeExpression::Named(identifier) => {
                 let name = self.resolve(identifier, span)?;
-                let Some((definition, _)) = self.type_definitions.get(&name) else {
+                let Some(definition) = self.type_definitions.get(&name) else {
                     return Err(TranslationError::UnknownType {
                         name: identifier.to_string(),
                     }
@@ -532,14 +532,14 @@ impl<'a> Translator<'a> {
         match self.type_definitions.get(&name) {
             // Every instance of a module declares the module's types again,
             // with the same definitions.
-            Some((definition, _)) if *definition == directive.definition => Ok(()),
+            Some(definition) if *definition == directive.definition => Ok(()),
             Some(_) => Err(TranslationError::DuplicateType {
                 name: identifier.to_string(),
             }
             .at(directive.span)),
             None => {
                 self.type_definitions
-                    .insert(name, (directive.definition.clone(), directive.span));
+                    .insert(name, directive.definition.clone());
                 Ok(())
             }
         }

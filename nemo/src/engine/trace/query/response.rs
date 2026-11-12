@@ -18,14 +18,14 @@ use crate::{
         Engine,
         trace::{
             proof::Responder,
-            query::request::{Neighborhood, NodeFacts, QueryArenas, WrittenNode},
+            query::request::{Neighborhood, NodeFacts, QueryArenas, WrittenHead, WrittenNode},
         },
     },
     model::{Atom, Directive, Identifier, Literal, Statement, Term},
     pipeline::StatementId,
     trace::query::{
-        MetaInformation, NodeResponse, PageInfo, PredicateWithParameters, QueryRule, TableEntries,
-        TableEntry, TreeChildren, TreeForTableResponse,
+        MetaInformation, NodeResponse, PageInfo, Pagination, PredicateWithParameters, QueryRule,
+        TableEntries, TableEntry, TreeChildren, TreeForTableResponse,
     },
 };
 
@@ -119,14 +119,16 @@ impl<'a> ResponseAssembly<'a> {
             meta_information: answer.meta_information,
             possible_rules_above: answer.possible_rules_above,
             possible_rules_below: answer.possible_rules_below,
-            child_information: node.expanded.map(|(statement, head)| TreeChildren {
-                rule: self.rule(statement, head),
-                children: node
-                    .children
-                    .iter()
-                    .map(|&child| self.tree(child))
-                    .collect(),
-            }),
+            child_information: node
+                .expanded
+                .map(|WrittenHead { statement, head }| TreeChildren {
+                    rule: self.rule(statement, head),
+                    children: node
+                        .children
+                        .iter()
+                        .map(|&child| self.tree(child))
+                        .collect(),
+                }),
         }
     }
 
@@ -135,15 +137,15 @@ impl<'a> ResponseAssembly<'a> {
     ///
     /// A listing has no rules around it, since no rule reads or writes it as a premise.
     fn answer(&self, node: &WrittenNode) -> NodeAnswer {
-        let (start, count) = match node.pagination {
-            Some(page) => (page.start, page.count),
-            None => (0, usize::MAX),
-        };
+        // Without a requested slice, the answer has every fact.
+        let page = node.pagination.unwrap_or(Pagination {
+            start: 0,
+            count: usize::MAX,
+        });
+        let start = page.start;
         let (entries, total) = match &node.facts {
-            NodeFacts::Compiled(compiled) => self.stored_entries(*compiled, (start, count)),
-            NodeFacts::Remote { leaf, columns } => {
-                self.remote_entries(*leaf, columns, (start, count))
-            }
+            NodeFacts::Compiled(compiled) => self.stored_entries(*compiled, page),
+            NodeFacts::Remote { leaf, columns } => self.remote_entries(*leaf, columns, page),
         };
         let (above, below, nanos) = match self.neighborhoods.get(&node.predicate) {
             Some(neighborhood) if !node.listing => (
@@ -189,13 +191,13 @@ impl<'a> ResponseAssembly<'a> {
     }
 
     /// Returns the rules that write a predicate, once with each head atom that writes it.
-    fn rules_below(&self, writers: &[(StatementId, usize)]) -> Vec<QueryRule> {
+    fn rules_below(&self, writers: &[WrittenHead]) -> Vec<QueryRule> {
         let mut seen = HashSet::new();
 
         writers
             .iter()
             .filter(|&&writer| seen.insert(writer))
-            .map(|&(statement, head)| self.rule(statement, head))
+            .map(|&WrittenHead { statement, head }| self.rule(statement, head))
             .collect()
     }
 
@@ -282,13 +284,10 @@ impl<'a> ResponseAssembly<'a> {
         }
     }
 
-    /// Returns the facts of a node over the compiled program in the slice given by `start`
-    /// and `count`, with their entry ids, and the total number of the node's facts.
-    fn stored_entries(
-        &self,
-        compiled: usize,
-        (start, count): (usize, usize),
-    ) -> (Vec<TableEntry>, usize) {
+    /// Returns the facts of a node over the compiled program in the slice `page`,
+    /// with their entry ids, and the total number of the node's facts.
+    fn stored_entries(&self, compiled: usize, page: Pagination) -> (Vec<TableEntry>, usize) {
+        let Pagination { start, count } = page;
         let node = &self.arenas.compiled[compiled];
         let now = Revision(self.engine.step.max(1));
         let identity = ColumnOrder::identity(node.arity);
@@ -309,7 +308,7 @@ impl<'a> ResponseAssembly<'a> {
         (entries, total)
     }
 
-    /// Returns the facts of a remote literal in the slice given by `start` and `count`,
+    /// Returns the facts of a remote literal in the slice `page`,
     /// and the total number of its facts.
     ///
     /// The facts are the leaf's rows instantiated at the written literal, each once.
@@ -318,8 +317,9 @@ impl<'a> ResponseAssembly<'a> {
         &self,
         leaf: usize,
         columns: &[Result<usize, Term>],
-        (start, count): (usize, usize),
+        page: Pagination,
     ) -> (Vec<TableEntry>, usize) {
+        let Pagination { start, count } = page;
         let identity = ColumnOrder::identity(self.arenas.compiled[leaf].arity);
         let (set, range) = self.fact_set(leaf);
         let mut seen = HashSet::new();

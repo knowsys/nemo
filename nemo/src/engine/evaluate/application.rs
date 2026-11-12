@@ -101,7 +101,24 @@ pub(crate) enum RangeRole {
 }
 
 /// A load node of a skeleton, with its table and its range role.
-type LoadNode = (NodeId, TableId, RangeRole);
+#[derive(Debug, Clone, Copy)]
+struct LoadNode {
+    /// The plan node.
+    node: NodeId,
+    /// The table that the node reads.
+    table: TableId,
+    /// How the node's revision range follows from the rule's delta window.
+    role: RangeRole,
+}
+
+/// Where the new rows of one head arrive: the head's table, and the plan output with the rows.
+#[derive(Debug, Clone, Copy)]
+struct HeadTarget {
+    /// The head's table.
+    table: TableId,
+    /// The index of the plan output.
+    output: usize,
+}
 
 /// The plan skeletons of a program's rules, by rule index,
 /// each built on the rule's first application.
@@ -150,8 +167,8 @@ pub(crate) struct PlanSkeleton {
     variants: Vec<VariantLoads>,
     /// The scratch memory its joins build in, reused across applications.
     arena: JoinArena,
-    /// Per head, its table and plan output index.
-    targets: Vec<(TableId, usize)>,
+    /// The target of each head.
+    targets: Vec<HeadTarget>,
     /// The plan output of the unsatisfied frontier tuples,
     /// if the rule has existential variables.
     probe: Option<usize>,
@@ -250,7 +267,7 @@ impl PlanSkeleton {
         manager: &mut TableManager,
     ) -> Vec<Range<Revision>> {
         let mut ranges = Vec::with_capacity(self.loads.len());
-        for &(_, table, role) in &self.loads {
+        for &LoadNode { table, role, .. } in &self.loads {
             let start = if snapping {
                 manager.aligned_floor(table, last)
             } else {
@@ -267,7 +284,7 @@ impl PlanSkeleton {
             for variant in &self.variants {
                 let mut empty = false;
                 for load in variant.loads.clone() {
-                    let (_, table, _) = self.loads[load];
+                    let table = self.loads[load].table;
                     if manager.row_count(table, ranges[load].clone()) == 0 {
                         empty = true;
                         break;
@@ -283,8 +300,8 @@ impl PlanSkeleton {
             }
         }
 
-        for (&(node, _, _), range) in self.loads.iter().zip(&ranges) {
-            self.plan.set_load_range(node, range.clone());
+        for (load, range) in self.loads.iter().zip(&ranges) {
+            self.plan.set_load_range(load.node, range.clone());
         }
 
         ranges
@@ -298,7 +315,7 @@ impl PlanSkeleton {
         manager: &TableManager,
     ) -> Vec<VariantObservation> {
         let rows = |load: usize| {
-            let (_, table, _) = self.loads[load];
+            let table = self.loads[load].table;
             manager.row_count(table, ranges[load].clone()) as u64
         };
         let mut observations = Vec::with_capacity(self.variants.len());
@@ -386,7 +403,7 @@ struct PlanSkeletonBuilder<'r> {
     /// The loads recorded so far.
     loads: Vec<LoadNode>,
     /// The head targets recorded so far.
-    targets: Vec<(TableId, usize)>,
+    targets: Vec<HeadTarget>,
 }
 
 impl<'r> PlanSkeletonBuilder<'r> {
@@ -424,11 +441,12 @@ impl<'r> PlanSkeletonBuilder<'r> {
         let (derived, negated_loads) =
             self.space
                 .subtract_negations(&mut self.plan, body, unpatched());
-        self.loads.extend(
-            negated_loads
-                .into_iter()
-                .map(|(node, table)| (node, table, RangeRole::Full)),
-        );
+        self.loads
+            .extend(negated_loads.into_iter().map(|load| LoadNode {
+                node: load.node,
+                table: load.table,
+                role: RangeRole::Full,
+            }));
         self.heads(derived);
         self.aggregate_head(derived);
         let probe = self.existential_probe(derived);
@@ -481,7 +499,11 @@ impl<'r> PlanSkeletonBuilder<'r> {
                     leading.push(self.loads.len());
                 }
 
-                self.loads.push((node, atom.table, role));
+                self.loads.push(LoadNode {
+                    node,
+                    table: atom.table,
+                    role,
+                });
                 inputs.push(node);
             }
 
@@ -500,10 +522,17 @@ impl<'r> PlanSkeletonBuilder<'r> {
     /// the head's order, without the rows that the head table stores.
     fn target(&mut self, node: NodeId, table: TableId, head_markers: Vec<Marker>) {
         let existing = self.plan.load(table, unpatched(), head_markers.clone());
-        self.loads.push((existing, table, RangeRole::Full));
+        self.loads.push(LoadNode {
+            node: existing,
+            table,
+            role: RangeRole::Full,
+        });
         let projected = self.plan.project(node, head_markers);
         let fresh = self.plan.subtract(projected, existing);
-        self.targets.push((table, self.plan.output(fresh)));
+        self.targets.push(HeadTarget {
+            table,
+            output: self.plan.output(fresh),
+        });
     }
 
     /// Adds the ordinary heads, one target each.
@@ -608,7 +637,11 @@ impl<'r> PlanSkeletonBuilder<'r> {
         if direct {
             let atom = &rule.body[0];
             let node = self.plan.load(atom.table, unpatched(), list);
-            self.loads.push((node, atom.table, RangeRole::Full));
+            self.loads.push(LoadNode {
+                node,
+                table: atom.table,
+                role: RangeRole::Full,
+            });
             node
         } else {
             self.plan.project(derived, list)
@@ -741,7 +774,11 @@ impl<'r> PlanSkeletonBuilder<'r> {
         }
 
         let node = self.plan.load(atom.table, unpatched(), column_markers);
-        self.loads.push((node, atom.table, RangeRole::Full));
+        self.loads.push(LoadNode {
+            node,
+            table: atom.table,
+            role: RangeRole::Full,
+        });
         node
     }
 }
@@ -756,7 +793,7 @@ fn deliver(
 ) -> Applied {
     let mut outputs = results.outputs;
     let mut delivered = Vec::with_capacity(skeleton.targets.len());
-    for &(table, output) in &skeleton.targets {
+    for &HeadTarget { table, output } in &skeleton.targets {
         delivered.push((table, std::mem::take(&mut outputs[output])));
     }
 
