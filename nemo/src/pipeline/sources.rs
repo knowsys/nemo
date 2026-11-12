@@ -1,15 +1,20 @@
 //! The source texts that a pipeline registers: the texts that programs were read from,
 //! and the module instances made of them.
+//!
+//! A source is either *kept* or *transient*.
+//! A kept source stays registered.
+//! A transient source was registered for one call,
+//! and [sweep_sources](Pipeline::sweep_sources) drops it once nothing points into it.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, HashSet},
     sync::{Arc, OnceLock},
 };
 
 use nemo_physical::diagnostics::{Diagnostic, Location};
 
 use crate::{
-    model::{FileId, Program, Span, UseDirective},
+    model::{FileId, Program, Span, Statement, UseDirective},
     pipeline::Pipeline,
 };
 
@@ -29,9 +34,12 @@ pub struct RegisteredSource<'a> {
 pub(super) struct Sources {
     /// The registered source texts, by file id.
     files: BTreeMap<FileId, SourceFile>,
-    /// The file ids that the spans of loaded statements use although no source is registered
-    /// under them (see [reserve_files](Pipeline::reserve_files)).
-    reserved: BTreeSet<FileId>,
+    /// The file id that the next registered source gets.
+    ///
+    /// It is larger than every file id given before, also to a source that was dropped since,
+    /// and than the file id of every loaded statement
+    /// (see [reserve_files](Pipeline::reserve_files)).
+    next: u32,
 }
 
 /// One registered source text, with the name that diagnostics show for it.
@@ -47,6 +55,9 @@ struct SourceFile {
     /// The `@use` directive that made a module instance,
     /// or `None` for a text added with [Pipeline::add_source].
     instance: Option<UseDirective>,
+    /// Whether the source was registered for one call,
+    /// and is dropped once nothing points into it.
+    transient: bool,
 }
 
 impl SourceFile {
@@ -62,6 +73,11 @@ impl SourceFile {
     }
 }
 
+/// Returns the file id after the one with the given index.
+fn after(index: u32) -> u32 {
+    index.checked_add(1).expect("file counts stay below u32")
+}
+
 impl Pipeline {
     /// Registers a source text under a name, and returns the file id for its spans.
     ///
@@ -70,14 +86,30 @@ impl Pipeline {
     /// so the spans of an earlier version of a file that is read again stay valid.
     /// Neither is an id assigned that [load](Self::load) reserved,
     /// for the spans of a program whose text is not registered.
+    /// The source stays registered.
     pub fn add_source(&mut self, name: impl Into<String>, text: impl Into<String>) -> FileId {
-        let (name, text): (String, String) = (name.into(), text.into());
+        self.register(name.into(), text.into(), false)
+    }
 
+    /// Registers a source text for one call, as [add_source](Self::add_source) does,
+    /// except that [sweep_sources](Self::sweep_sources) drops the source once nothing points
+    /// into it.
+    pub(crate) fn add_transient_source(
+        &mut self,
+        name: impl Into<String>,
+        text: impl Into<String>,
+    ) -> FileId {
+        self.register(name.into(), text.into(), true)
+    }
+
+    /// Registers a source text under a name, and returns the file id for its spans.
+    fn register(&mut self, name: String, text: String, transient: bool) -> FileId {
         self.push_source(SourceFile {
             name: Arc::from(name),
             text: Arc::from(text),
             lines: Arc::default(),
             instance: None,
+            transient,
         })
     }
 
@@ -85,6 +117,7 @@ impl Pipeline {
     /// made by the `@use` directive `directive`.
     ///
     /// The instance has the file's name and text, under a file id of its own.
+    /// It is transient.
     ///
     /// # Panics
     ///
@@ -102,6 +135,7 @@ impl Pipeline {
             text,
             lines,
             instance: Some(directive),
+            transient: true,
         })
     }
 
@@ -122,7 +156,7 @@ impl Pipeline {
         chain
     }
 
-    /// Reserves the file ids of a program's statements that no source is registered under,
+    /// Reserves the file ids of a program's statements,
     /// so that no source registered later gets one of them.
     ///
     /// The text of a program need not be registered.
@@ -130,29 +164,49 @@ impl Pipeline {
     /// and a source registered under their file id would be taken for the program's text.
     pub(crate) fn reserve_files(&mut self, program: &Program) {
         for statement in &program.statements {
-            if let Some(span) = statement.span()
-                && !self.sources.files.contains_key(&span.file)
-            {
-                self.sources.reserved.insert(span.file);
+            if let Some(span) = statement.span() {
+                self.sources.next = self.sources.next.max(after(span.file.index()));
             }
         }
     }
 
-    /// Adds a source under the next file id that is not reserved, and returns the id.
+    /// Adds a source under the next file id, and returns the id.
     fn push_source(&mut self, source: SourceFile) -> FileId {
-        let after = |index: u32| index.checked_add(1).expect("file counts stay below u32");
-        let mut index = self
-            .sources
-            .files
-            .last_key_value()
-            .map_or(0, |(last, _)| after(last.index()));
-        while self.sources.reserved.contains(&FileId::new(index)) {
-            index = after(index);
-        }
-
-        let id = FileId::new(index);
+        let id = FileId::new(self.sources.next);
+        self.sources.next = after(self.sources.next);
         self.sources.files.insert(id, source);
         id
+    }
+
+    /// Drops every transient source that nothing in the pipeline points into.
+    ///
+    /// A statement version in the arena points into the file of its span,
+    /// and a report into the files of its labels.
+    /// A module instance points into the file of the `@use` directive that made it.
+    pub(crate) fn sweep_sources(&mut self) {
+        let statements = self.arena.statements().filter_map(Statement::span);
+        let labels = self
+            .reports
+            .iter()
+            .flat_map(|report| report.labels().iter().map(|label| label.span));
+        let mut used: HashSet<FileId> = statements.chain(labels).map(|span| span.file).collect();
+
+        // An instance's file leads to the files of the instances around it.
+        let mut pending: Vec<FileId> = used.iter().copied().collect();
+        while let Some(file) = pending.pop() {
+            let directive = self
+                .source(file)
+                .and_then(|source| source.instance.as_ref());
+            if let Some(span) = directive.and_then(|directive| directive.span)
+                && used.insert(span.file)
+            {
+                pending.push(span.file);
+            }
+        }
+
+        self.sources
+            .files
+            .retain(|file, source| !source.transient || used.contains(file));
     }
 
     /// Returns the name of a source file, or `None` if the file is not registered.

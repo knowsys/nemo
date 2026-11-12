@@ -39,7 +39,7 @@ impl Engine {
         name: impl Into<String>,
         text: impl Into<String>,
     ) -> CheckReport {
-        let file = match self.add_source(name, text) {
+        let file = match self.add_transient_source(name, text) {
             Ok(file) => file,
             Err(refused) => return CheckReport::new(vec![refused], None),
         };
@@ -78,6 +78,10 @@ impl Engine {
 
         tracing::debug!(statements = program.statements.len(), "checking a program");
         let staged = self.stage(program, &[])?;
+
+        // The sources that only earlier calls needed go, now that this call's program is staged.
+        self.pipeline.sweep_sources();
+
         let (compiled, tables) = self.translate_written(
             staged.written,
             TranslationState::default(),

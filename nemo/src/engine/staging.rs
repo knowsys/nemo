@@ -152,6 +152,9 @@ impl Engine {
             }
         };
 
+        // The sources that only earlier calls needed go, now that this call's program is staged.
+        self.pipeline.sweep_sources();
+
         let load = SuspendedLoad::new(kind, staged, reports, statements);
         self.continue_loading(load, reports)
     }
@@ -470,7 +473,7 @@ impl Engine {
         call: impl FnOnce(&mut Engine, Program) -> Result<(), Diagnostic>,
     ) -> Result<(), Vec<Diagnostic>> {
         let file = self
-            .add_source(name, text)
+            .add_transient_source(name, text)
             .map_err(|refused| vec![refused])?;
         let (program, diagnostics) = self.parse_source(file);
         if diagnostics

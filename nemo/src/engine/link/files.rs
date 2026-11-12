@@ -145,7 +145,7 @@ impl Linker<'_> {
                 .with_resource(name));
         }
 
-        let file = self.pipeline.add_source(name.clone(), text);
+        let file = self.pipeline.add_transient_source(name.clone(), text);
         self.files.insert(name, file);
         Ok(file)
     }

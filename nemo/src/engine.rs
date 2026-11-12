@@ -168,6 +168,7 @@ impl Engine {
     /// points into the registered text.
     /// The id differs from the file id of every program that the engine was given before,
     /// also of a program whose text is not registered.
+    /// The source stays registered for the engine's lifetime.
     ///
     /// # Errors
     ///
@@ -177,14 +178,33 @@ impl Engine {
         name: impl Into<String>,
         text: impl Into<String>,
     ) -> Result<FileId, Diagnostic> {
-        let (name, text) = (name.into(), text.into());
+        let (name, text) = Self::source_within_limit(name.into(), text.into())?;
+        Ok(self.pipeline.add_source(name, text))
+    }
+
+    /// Registers a source text for one call, as [add_source](Self::add_source) does,
+    /// except that the source is dropped once the engine holds nothing that points into it
+    /// (see [sources](Self::sources)).
+    pub(in crate::engine) fn add_transient_source(
+        &mut self,
+        name: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Result<FileId, Diagnostic> {
+        let (name, text) = Self::source_within_limit(name.into(), text.into())?;
+        Ok(self.pipeline.add_transient_source(name, text))
+    }
+
+    /// Returns a source's name and text,
+    /// or [SOURCE_TOO_LARGE](crate::codes::SOURCE_TOO_LARGE) for a text of 4 GiB or more,
+    /// which the 32-bit offsets of a span cannot address.
+    fn source_within_limit(name: String, text: String) -> Result<(String, String), Diagnostic> {
         if u32::try_from(text.len()).is_err() {
             return Err(EngineError::SourceTooLarge { name: name.clone() }
                 .diagnostic()
                 .with_resource(name));
         }
 
-        Ok(self.pipeline.add_source(name, text))
+        Ok((name, text))
     }
 
     /// Reads a program file and registers it under its path.
@@ -214,7 +234,8 @@ impl Engine {
     ///
     /// # Panics
     ///
-    /// Panics for an id the engine did not hand out.
+    /// Panics for an id that [add_source](Self::add_source) or
+    /// [read_source](Self::read_source) did not return.
     pub fn parse_source(&self, file: FileId) -> (Program, Vec<Diagnostic>) {
         let text = self
             .source(file)
@@ -227,23 +248,33 @@ impl Engine {
         (program, diagnostics)
     }
 
-    /// Returns the text registered under a file id, or `None` for an id the engine did not
-    /// hand out.
-    ///
-    /// The registered texts include the module files that [link](Self::link) read,
-    /// so that a diagnostic can be rendered against the text its spans point into.
+    /// Returns the text registered under a file id, or `None` for an id under which no source
+    /// is registered (see [sources](Self::sources)).
     pub fn source(&self, file: FileId) -> Option<&str> {
         self.pipeline.text(file)
     }
 
-    /// Returns the name registered under a file id, or `None` for an id the engine did not
-    /// hand out.
+    /// Returns the name registered under a file id, or `None` for an id under which no source
+    /// is registered (see [sources](Self::sources)).
     pub fn file_name(&self, file: FileId) -> Option<&str> {
         self.pipeline.file_name(file)
     }
 
-    /// Returns every registered source,
-    /// including the module files that [link](Self::link) read.
+    /// Returns every registered source.
+    ///
+    /// Besides the sources registered with [add_source](Self::add_source) and
+    /// [read_source](Self::read_source), these are the sources that the engine registered
+    /// itself: the texts given to [with_source](Self::with_source),
+    /// [check_source](Self::check_source) and the methods built on them,
+    /// and the module files and module instances that [link](Self::link) read.
+    /// So a diagnostic can be rendered against the text that its spans point into.
+    ///
+    /// The engine keeps a source that it registered itself while something that it holds
+    /// points into the source: a statement of the loaded program,
+    /// of a program whose loading method is suspended, or a [report](Self::reports).
+    /// When the next loading method or check begins, it drops the others.
+    /// The sources of a call are therefore registered until the next such call,
+    /// and their file ids are given to no other source.
     pub fn sources(&self) -> impl Iterator<Item = RegisteredSource<'_>> {
         self.pipeline.sources()
     }
@@ -400,6 +431,11 @@ impl Engine {
     /// or inside a [module root](Self::add_module_root).
     /// A text registered with [add_module](Self::add_module) is read instead of the module's file.
     /// Warnings are added to the [reports](Self::reports).
+    ///
+    /// The module files and the module instances are registered as [sources](Self::sources)
+    /// for the linked program.
+    /// The next loading method or check keeps them only if it is given that program,
+    /// so a linked program is loaded or checked before another program is.
     ///
     /// # Errors
     ///

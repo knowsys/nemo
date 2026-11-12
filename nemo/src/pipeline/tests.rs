@@ -425,6 +425,53 @@ fn an_instance_knows_the_uses_that_made_it() {
     assert!(pipeline.instances(inner).is_empty());
 }
 
+/// A sweep drops the transient sources that nothing points into.
+/// It keeps those that a statement or a report points into, with the files of the `@use`
+/// directives around an instance, and every source that is not transient.
+#[test]
+fn a_sweep_drops_the_transient_sources_that_nothing_points_into() {
+    let span = |file: FileId| Span {
+        file,
+        start: 0,
+        end: 1,
+    };
+    let using = |file: FileId| UseDirective {
+        module: ModuleName {
+            parents: 0,
+            segments: vec!["a".to_owned()],
+        },
+        bindings: Vec::new(),
+        values: Vec::new(),
+        alias: "one".to_owned(),
+        span: Some(span(file)),
+    };
+
+    let mut pipeline = Pipeline::new();
+    let kept = pipeline.add_source("kept.rls", "p(1) .");
+    let main = pipeline.add_transient_source("main.rls", "@use a as one .");
+    let module = pipeline.add_transient_source("a.rls", "p(1) .");
+    let instance = pipeline.add_instance(module, using(main));
+    let reported = pipeline.add_transient_source("reported.rls", "p(1) .");
+    let unused = pipeline.add_transient_source("unused.rls", "p(1) .");
+
+    let mut statement = fact("p", 1);
+    statement.set_span(Some(span(instance)));
+    pipeline.load(Program::new(vec![statement]));
+    pipeline
+        .report(Diagnostic::warning(Code::new(1), "a warning").with_label(span(reported), "here"));
+
+    pipeline.sweep_sources();
+    let registered: Vec<FileId> = pipeline.sources().map(|source| source.file).collect();
+    assert_eq!(registered, [kept, main, instance, reported]);
+    assert_eq!(pipeline.text(module), None);
+    assert_eq!(pipeline.text(unused), None);
+
+    // The instance has its text still, and the id of a dropped source is not given again.
+    assert_eq!(pipeline.text(instance), Some("p(1) ."));
+    let next = pipeline.add_source("next.rls", "p(2) .");
+    assert!(next.index() > unused.index());
+}
+
 /// A stage over a merged extension sees every statement, but rewrites only the extension's.
 #[test]
 fn stages_over_an_extension_keep_the_loaded_statements() {

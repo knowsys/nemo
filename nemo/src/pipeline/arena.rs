@@ -95,6 +95,11 @@ impl Arena {
         RevisionId::new(u32::try_from(id).expect("revision counts stay below u32"))
     }
 
+    /// Returns every statement version that the arena has.
+    pub(super) fn statements(&self) -> impl Iterator<Item = &Statement> {
+        self.statements.iter()
+    }
+
     /// Returns the number of statement versions that the arena has.
     #[cfg(test)]
     pub(super) fn statement_count(&self) -> usize {

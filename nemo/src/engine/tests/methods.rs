@@ -722,6 +722,64 @@ fn a_reload_leaves_no_statements_of_the_replaced_program_behind() {
     assert_eq!(rows(&mut engine, "s"), [["4"]]);
 }
 
+/// What an engine holds stays level over repeated checks, failed loads and reloads of
+/// programs of one size: its statements, its sources and its registered predicates.
+#[test]
+fn a_long_lived_engine_does_not_grow_with_its_calls() {
+    let program = |value: usize| format!("r({value}) . q(?x) :- r(?x) .\n");
+    let size = |engine: &Engine| {
+        (
+            engine.pipeline.statement_count(),
+            engine.sources().count(),
+            engine.stores.predicates.len(),
+        )
+    };
+
+    let mut engine = Engine::new();
+    engine
+        .load_source("main.rls", program(0))
+        .unwrap_or_else(|problems| panic!("{problems:?}"));
+    engine.reason().expect("reasoning reaches the fixpoint");
+
+    // The second round settles what the first call after a load still holds.
+    let mut settled = None;
+    for round in 1..6 {
+        engine
+            .reload_source("main.rls", program(round))
+            .unwrap_or_else(|problems| panic!("{problems:?}"));
+        engine.reason().expect("reasoning reaches the fixpoint");
+        engine
+            .reload_source("main.rls", "r(1, 2) . q(?x) :- r(?x) .\n")
+            .expect_err("`r` is used with two numbers of columns");
+        engine
+            .extend_source("more.rls", "r(1) . r(")
+            .expect_err("the text does not parse");
+
+        match settled {
+            None if round == 2 => settled = Some(size(&engine)),
+            None => {}
+            Some(settled) => assert_eq!(size(&engine), settled, "round {round}"),
+        }
+    }
+
+    assert_eq!(rows(&mut engine, "q"), [["5"]]);
+
+    // An engine without a program stays level over its checks.
+    let mut engine = Engine::new();
+    let mut settled = None;
+    for round in 0..4 {
+        let report = engine.check_source("main.rls", program(round));
+        assert!(report.diagnostics().is_empty(), "{report:?}");
+        let report = engine.check_source("main.rls", "q(?x, ?y) :- r(?x) .\n");
+        assert!(!report.diagnostics().is_empty());
+
+        match settled {
+            None => settled = Some(size(&engine)),
+            Some(settled) => assert_eq!(size(&engine), settled, "round {round}"),
+        }
+    }
+}
+
 /// A load that fails registers no predicate, so that a corrected program loads,
 /// even one that uses a predicate of the failed program with another number of columns.
 #[test]
