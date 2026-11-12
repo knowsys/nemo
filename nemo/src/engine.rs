@@ -1393,7 +1393,7 @@ impl Engine {
     /// so every IRI is written in angle brackets, which the program parses as the IRI they
     /// enclose.
     pub fn term_text(&self, value: ValueRef<'_>) -> String {
-        if self.translation.base_iri.is_some() {
+        if self.translation.scope.base().is_some() {
             value.bracketed().to_string()
         } else {
             value.to_string()
@@ -1405,7 +1405,7 @@ impl Engine {
     /// The name is written bare if it is read back unchanged,
     /// and in angle brackets otherwise or under a base IRI, as for [term_text](Self::term_text).
     pub fn predicate_text(&self, predicate: &str) -> String {
-        if self.translation.base_iri.is_some() {
+        if self.translation.scope.base().is_some() {
             IriRef::new(predicate).bracketed().to_string()
         } else {
             Identifier::bare(predicate).to_string()

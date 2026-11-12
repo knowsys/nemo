@@ -854,7 +854,7 @@ impl<'a> Translator<'a> {
                     .map_or_else(|| term.to_string(), str::to_owned),
                 _ => return None,
             };
-            (self.prefixes.contains_key(label) && NameKind::Local.admits(&local))
+            (self.scope.prefixes().contains_key(label) && NameKind::Local.admits(&local))
                 .then_some((label, local))
         });
         let Some((label, local)) = mistaken else {

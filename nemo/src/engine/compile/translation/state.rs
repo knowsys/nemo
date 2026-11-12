@@ -8,8 +8,9 @@ use nemo_physical::{
 };
 
 use crate::{
-    engine::compile::{import_plan::ImportPlan, translation::resolve_identifier, types},
+    engine::compile::{import_plan::ImportPlan, types},
     model::{Atom, Identifier, Term, TypeExpression, Variable},
+    pipeline::NameScope,
 };
 
 /// The translation state that outlives one translation.
@@ -26,10 +27,8 @@ use crate::{
 ///   again, so they persist.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct TranslationState {
-    /// The declared base IRI, against which bare names are resolved.
-    pub(crate) base_iri: Option<String>,
-    /// The declared prefixes.
-    pub(crate) prefixes: HashMap<String, String>,
+    /// The name scope of the program: its base IRI and its prefixes.
+    pub(crate) scope: NameScope,
     /// The values of the global parameters, by name.
     pub(crate) globals: HashMap<String, DataValue>,
     /// The declared column types, by resolved predicate name.
@@ -60,8 +59,7 @@ impl TranslationState {
     ///
     /// The next translation of the full list of statements rebuilds the emptied parts.
     pub(crate) fn clear_statement_state(&mut self) {
-        self.base_iri = None;
-        self.prefixes.clear();
+        self.scope = NameScope::default();
         self.globals.clear();
         self.declarations.clear();
         self.type_definitions.clear();
@@ -73,7 +71,7 @@ impl TranslationState {
     ///
     /// Returns `None` if the prefix is unknown or the identifier names a module.
     pub(crate) fn resolve(&self, identifier: &Identifier) -> Option<String> {
-        resolve_identifier(self.base_iri.as_deref(), &self.prefixes, identifier)
+        self.scope.lookup(identifier)
     }
 
     /// Returns the terms of an atom that was translated, in declaration order.

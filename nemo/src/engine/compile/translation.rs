@@ -182,27 +182,6 @@ fn unsupported(what: &str, span: Option<Span>) -> Diagnostic {
     .at(span)
 }
 
-/// Resolves an identifier against a base IRI and declared prefixes.
-///
-/// Returns `None` if the prefix is undeclared or the identifier names a module.
-fn resolve_identifier(
-    base_iri: Option<&str>,
-    prefixes: &HashMap<String, String>,
-    identifier: &Identifier,
-) -> Option<String> {
-    match identifier {
-        Identifier::Bare(name) => Some(match base_iri {
-            Some(base) => format!("{base}{name}"),
-            None => name.clone(),
-        }),
-        Identifier::Iri(iri) => Some(iri.clone()),
-        Identifier::Prefixed { prefix, name } => {
-            prefixes.get(prefix).map(|iri| format!("{iri}{name}"))
-        }
-        Identifier::Qualified { .. } => None,
-    }
-}
-
 /// Collects the variables of an import's condition that stand for delivered columns,
 /// each with its column's position as its variable id.
 ///
@@ -300,10 +279,8 @@ pub(crate) struct Translator<'a> {
     /// An import of a resource with one of these names reads its bytes from here
     /// instead of the file system.
     resources: &'a HashMap<String, Arc<[u8]>>,
-    /// The declared base IRI, against which bare names are resolved.
-    base_iri: Option<String>,
-    /// The declared prefixes.
-    prefixes: HashMap<String, String>,
+    /// The name scope of the program: its base IRI and its prefixes.
+    scope: NameScope,
     /// The values of the global parameters, by name.
     globals: HashMap<String, DataValue>,
     /// The rows of the facts per table, encoded by the dictionary.
@@ -413,8 +390,7 @@ impl<'a> Translator<'a> {
             errors: stores.errors,
             import_directory: setup.import_directory,
             resources: setup.resources,
-            base_iri: state.base_iri,
-            prefixes: state.prefixes,
+            scope: state.scope,
             globals: state.globals,
             facts: HashMap::new(),
             imports: Vec::new(),
@@ -634,22 +610,14 @@ impl<'a> Translator<'a> {
             self.report_or_fail(problem)?;
         }
 
-        let mut parameters = Vec::new();
-        for statement in statements {
-            match statement {
-                Statement::Directive(Directive::Prefix(prefix)) => {
-                    self.prefixes
-                        .insert(prefix.prefix.clone(), prefix.iri.clone());
-                }
-                Statement::Directive(Directive::Base(base)) => {
-                    self.base_iri.get_or_insert_with(|| base.iri.clone());
-                }
-                Statement::Directive(Directive::Parameter(parameter)) => {
-                    parameters.push(parameter);
-                }
-                _ => {}
-            }
-        }
+        self.scope = NameScope::of(statements);
+        let parameters: Vec<_> = statements
+            .iter()
+            .filter_map(|statement| match statement {
+                Statement::Directive(Directive::Parameter(parameter)) => Some(parameter),
+                _ => None,
+            })
+            .collect();
 
         // `@type` definitions come before anything typed or evaluated,
         // since parameters, declarations, and facts are all checked
@@ -931,8 +899,7 @@ impl<'a> Translator<'a> {
 
         (
             TranslationState {
-                base_iri: self.base_iri,
-                prefixes: self.prefixes,
+                scope: self.scope,
                 globals: self.globals,
                 declarations: self.declarations,
                 type_definitions: self.type_definitions,
@@ -1084,8 +1051,9 @@ impl<'a> Translator<'a> {
         identifier: &Identifier,
         span: Option<Span>,
     ) -> Result<String, Diagnostic> {
-        resolve_identifier(self.base_iri.as_deref(), &self.prefixes, identifier).ok_or_else(|| {
-            match identifier {
+        self.scope
+            .lookup(identifier)
+            .ok_or_else(|| match identifier {
                 Identifier::Prefixed { prefix, .. } => TranslationError::UndeclaredPrefix {
                     prefix: prefix.clone(),
                 }
@@ -1102,8 +1070,7 @@ impl<'a> Translator<'a> {
                 Identifier::Bare(_) | Identifier::Iri(_) => {
                     unreachable!("bare and absolute names always resolve")
                 }
-            }
-        })
+            })
     }
 
     /// Returns the table of a predicate, and registers it on first use,

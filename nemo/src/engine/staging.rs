@@ -719,14 +719,15 @@ impl Engine {
 
             let refusal = match directive {
                 Directive::Base(base)
-                    if self.translation.base_iri.as_deref() != Some(base.iri.as_str()) =>
+                    if self.translation.scope.base() != Some(base.iri.as_str()) =>
                 {
                     Some((EngineError::ExtensionDeclaresBase, directive.span()))
                 }
                 Directive::Prefix(prefix)
                     if self
                         .translation
-                        .prefixes
+                        .scope
+                        .prefixes()
                         .get(&prefix.prefix)
                         .is_some_and(|iri| iri != &prefix.iri) =>
                 {

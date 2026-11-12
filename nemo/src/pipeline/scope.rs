@@ -86,9 +86,27 @@ impl NameScope {
         &self.prefixes
     }
 
-    /// Returns the absolute name that an identifier stands for in this scope.
+    /// Returns the absolute name that an identifier stands for in this scope,
+    /// or `None` for a prefix that the scope does not declare and for a module-qualified name.
     ///
     /// A bare name is appended to the base IRI, if one is declared.
+    pub(crate) fn lookup(&self, identifier: &Identifier) -> Option<String> {
+        match identifier {
+            Identifier::Bare(name) => Some(match &self.base {
+                Some(base) => format!("{base}{name}"),
+                None => name.clone(),
+            }),
+            Identifier::Iri(iri) => Some(iri.clone()),
+            Identifier::Prefixed { prefix, name } => {
+                self.prefixes.get(prefix).map(|iri| format!("{iri}{name}"))
+            }
+            Identifier::Qualified { .. } => None,
+        }
+    }
+
+    /// Returns the absolute name that an identifier stands for in this scope,
+    /// as [lookup](Self::lookup) does.
+    ///
     /// Fails for a prefix that the scope does not declare, and for a module-qualified name,
     /// with a diagnostic at `span`.
     pub(crate) fn resolve(
@@ -96,24 +114,19 @@ impl NameScope {
         identifier: &Identifier,
         span: Option<Span>,
     ) -> Result<String, Diagnostic> {
-        match identifier {
-            Identifier::Bare(name) => Ok(match &self.base {
-                Some(base) => format!("{base}{name}"),
-                None => name.clone(),
-            }),
-            Identifier::Iri(iri) => Ok(iri.clone()),
-            Identifier::Prefixed { prefix, name } => match self.prefixes.get(prefix) {
-                Some(iri) => Ok(format!("{iri}{name}")),
-                None => Err(TranslationError::UndeclaredPrefix {
-                    prefix: prefix.clone(),
-                }
-                .at(span)),
-            },
-            Identifier::Qualified { module, name } => Err(ModuleError::QualifiedUnresolvable {
+        self.lookup(identifier).ok_or_else(|| match identifier {
+            Identifier::Prefixed { prefix, .. } => TranslationError::UndeclaredPrefix {
+                prefix: prefix.clone(),
+            }
+            .at(span),
+            Identifier::Qualified { module, name } => ModuleError::QualifiedUnresolvable {
                 module: module.clone(),
                 name: name.clone(),
             }
-            .at(span)),
-        }
+            .at(span),
+            Identifier::Bare(_) | Identifier::Iri(_) => {
+                unreachable!("bare and absolute names always resolve")
+            }
+        })
     }
 }

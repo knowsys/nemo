@@ -95,7 +95,8 @@ impl<'a> Translator<'a> {
                 // The program's own prefixes and base, so that the
                 // output abbreviates IRIs as the program does.
                 let mut prefixes: Vec<(String, String)> = self
-                    .prefixes
+                    .scope
+                    .prefixes()
                     .iter()
                     .map(|(name, iri)| (name.clone(), iri.clone()))
                     .collect();
@@ -105,7 +106,7 @@ impl<'a> Translator<'a> {
                     resource: shape.resource,
                     format: ExportFormat::Rdf {
                         variant,
-                        base: shape.base.or_else(|| self.base_iri.clone()),
+                        base: shape.base.or_else(|| self.scope.base().map(str::to_owned)),
                         prefixes,
                     },
                     compression: shape.compression,

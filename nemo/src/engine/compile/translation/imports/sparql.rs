@@ -202,8 +202,9 @@ impl<'a> Translator<'a> {
         let text = options.query.unwrap_or_else(|| String::from(DEFAULT_QUERY));
         let query = SparqlQuery::parse(
             &text,
-            options.base.as_deref().or(self.base_iri.as_deref()),
-            self.prefixes
+            options.base.as_deref().or(self.scope.base()),
+            self.scope
+                .prefixes()
                 .iter()
                 .map(|(name, iri)| (name.as_str(), iri.as_str())),
         )
@@ -233,7 +234,7 @@ impl<'a> Translator<'a> {
             options.formats_span.or(import.span),
         )?;
         let layout = self.plan.layout(&import.predicate, kept);
-        let written_query = match options.base.as_deref().or(self.base_iri.as_deref()) {
+        let written_query = match options.base.as_deref().or(self.scope.base()) {
             Some(base) => format!("BASE <{base}>\n{text}"),
             None => text,
         };
