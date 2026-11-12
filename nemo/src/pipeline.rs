@@ -44,6 +44,7 @@ pub use self::{
 };
 
 pub(crate) use self::{
+    arena::ArenaMark,
     construct::UnlinkedConstruct,
     matching::{Correspondence, grouped_paths},
     provenance::RewriteDeclaration,
@@ -314,6 +315,19 @@ impl Pipeline {
             pending: vec![statement],
             seen: HashSet::new(),
         }
+    }
+
+    /// Returns the sizes of the arena now, for a later [rewind](Self::rewind).
+    pub(crate) fn mark(&self) -> ArenaMark {
+        self.arena.mark()
+    }
+
+    /// Removes every statement version, provenance edge and revision added since `mark` was
+    /// taken, so that an abandoned program leaves nothing behind.
+    ///
+    /// The statement and revision ids given out since then are invalid afterwards.
+    pub(crate) fn rewind(&mut self, mark: ArenaMark) {
+        self.arena.rewind(mark);
     }
 
     /// Adds a statement version to the arena, and returns its id.

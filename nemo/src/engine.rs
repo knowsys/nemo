@@ -702,7 +702,10 @@ impl Engine {
     /// Otherwise, the report contains the error that [load](Self::load) would return.
     pub fn check(&mut self, program: Program) -> CheckReport {
         let mark = self.pipeline.mark_reports();
+        let statements = self.pipeline.mark();
         let checked = self.check_inner(program);
+        self.pipeline.rewind(statements);
+
         let (types, aborted) = match self.located(checked) {
             Ok(types) => (Some(types), None),
             Err(problem) => (None, Some(problem)),

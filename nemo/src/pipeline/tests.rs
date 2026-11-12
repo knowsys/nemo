@@ -67,6 +67,29 @@ fn loading_round_trips_the_program() {
     );
 }
 
+/// A rewind removes the statements, edges and revisions added since the mark,
+/// and keeps what was there before.
+#[test]
+fn rewinding_removes_what_was_added_since_the_mark() {
+    let (mut pipeline, revision) = loaded();
+    let ids = pipeline.revision_statements(revision).to_vec();
+    let mark = pipeline.mark();
+
+    let mut commit = pipeline.commit(revision, "rewrite");
+    commit.split(ids[1], vec![rule("reach", "link")]);
+    commit.finish();
+    pipeline.load(Program::new(vec![fact("other", 1)]));
+    assert_ne!(pipeline.mark(), mark);
+
+    pipeline.rewind(mark);
+    assert_eq!(pipeline.mark(), mark);
+    assert_eq!(pipeline.revision_statements(revision), ids);
+
+    // The ids given out after a rewind start where the removed ones did.
+    let again = pipeline.load(Program::new(vec![fact("other", 2)]));
+    assert_eq!(pipeline.program(again).to_string(), "other(2) .");
+}
+
 /// A commit without changes keeps every statement, and its revision counts as run by its stage.
 #[test]
 fn keeping_is_the_default() {
