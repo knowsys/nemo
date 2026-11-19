@@ -29,15 +29,3 @@ pub(crate) enum NegatedColumn {
     /// The column is private to the atom, so any value matches it.
     Private,
 }
-
-impl NegatedAtom {
-    /// Returns whether a column is shared.
-    ///
-    /// An atom without a shared column drops every body match if its table has a row
-    /// that satisfies the filters, and none otherwise.
-    pub(crate) fn shares_columns(&self) -> bool {
-        self.columns
-            .iter()
-            .any(|column| matches!(column, NegatedColumn::Shared(_)))
-    }
-}

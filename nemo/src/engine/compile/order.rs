@@ -8,13 +8,12 @@
 //!   product, so [connected] passes it over.
 //! - A column bound to an expression must come after the variables that the expression reads,
 //!   or the join cannot probe it, so [probing] delays it.
-//! - A self-recursive rule may be led by a head variable (see [head_leader]).
 //!
 //! Orders are chosen before the tables contain any data,
 //! so no ranking can distinguish a large relation from a small one,
 //! and deviating from the written order without a structural reason would be guesswork.
 
-use crate::engine::compile::compiled::{CompiledRule, NegatedAtom, NegatedColumn, VariableId};
+use crate::engine::compile::compiled::{CompiledRule, NegatedColumn, VariableId};
 
 /// Chooses the variable order of every rule, in place.
 ///
@@ -25,26 +24,11 @@ pub(crate) fn choose(rules: &mut [CompiledRule]) {
     }
 }
 
-/// Chooses one rule's variable order.
-fn choose_for(rule: &CompiledRule) -> Vec<VariableId> {
-    let order = ordered(rule, &[]);
-    match head_leader(rule, &order) {
-        Some(leader) => ordered(rule, &[leader]),
-        None => order,
-    }
-}
-
-/// Builds an order from the written one, starting with the `seeds`.
-///
-/// The variables after the seeds are chosen as without seeds:
+/// Chooses one rule's variable order, starting from the written one:
 /// each next variable is the first remaining one that [connected] and [probing] keep.
-fn ordered(rule: &CompiledRule, seeds: &[VariableId]) -> Vec<VariableId> {
+fn choose_for(rule: &CompiledRule) -> Vec<VariableId> {
     let mut order: Vec<VariableId> = Vec::with_capacity(rule.variables);
     let mut remaining: Vec<VariableId> = (0..rule.variables).collect();
-    for &seed in seeds {
-        order.push(seed);
-        remaining.retain(|&variable| variable != seed);
-    }
 
     while !remaining.is_empty() {
         let candidates = probing(connected(remaining.clone(), rule, &order), rule, &order);
@@ -57,55 +41,6 @@ fn ordered(rule: &CompiledRule, seeds: &[VariableId]) -> Vec<VariableId> {
     }
 
     order
-}
-
-/// Returns a head variable to lead the order with,
-/// if the chosen order of a self-recursive rule leads with a variable that is not in the head.
-///
-/// During the join, head rows are deduplicated within the groups of rows that share the
-/// order's leading variables.
-/// If the leading variable is not in the head, there are no such groups.
-/// Then, when the join's output is processed in parallel chunks,
-/// each chunk derives again the head rows that the other chunks also find.
-/// Leading with the head variable that the body mentions first restores the grouping.
-///
-/// Only self-recursive rules qualify,
-/// since their repeated applications produce the most duplicate head rows,
-/// and for a rule that is not recursive, the selectivity of the written order matters more.
-/// The rule must also have a single head atom, and no aggregate, existential variable,
-/// nondeterministic function, or negated atom that shares a column with the body.
-/// The new leading variable must occur in a body atom, and no binding may compute it.
-fn head_leader(rule: &CompiledRule, order: &[VariableId]) -> Option<VariableId> {
-    if rule.heads.len() != 1
-        || rule.aggregate.is_some()
-        || rule.existential.is_some()
-        || rule.nondeterministic
-        || rule.negated.iter().any(NegatedAtom::shares_columns)
-        || !rule
-            .body
-            .iter()
-            .any(|atom| rule.heads.iter().any(|head| head.table == atom.table))
-    {
-        return None;
-    }
-
-    let head = &rule.heads[0];
-    let first = *order.first()?;
-    if head.columns.contains(&first) {
-        return None;
-    }
-
-    head.columns
-        .iter()
-        .copied()
-        .filter(|&column| column < rule.variables)
-        .min()
-        .filter(|&leader| {
-            rule.body
-                .iter()
-                .any(|atom| atom.variables.contains(&leader))
-                && rule.bindings.iter().all(|binding| binding.target != leader)
-        })
 }
 
 /// Returns the candidates that share an atom with an ordered variable,
@@ -258,6 +193,21 @@ mod tests {
         ",
         );
         assert_eq!(order, vec![0, 1, 2], "the written order stands");
+    }
+
+    /// A rule that reads its own head predicate keeps the order in which it was written.
+    #[test]
+    fn a_recursive_rule_keeps_the_order_it_was_written_in() {
+        // The written order binds ?x first, through reach,
+        // so the variant whose delta is reach starts from the delta's rows
+        // and looks up their edges.
+        let order = order_of(
+            "
+            reach(1) . edge(1, 2) .
+            reach(?y) :- reach(?x), edge(?x, ?y) .
+        ",
+        );
+        assert_eq!(order, vec![0, 1], "the written order stands");
     }
 
     /// A column bound to an expression comes after the variables that the expression reads.
